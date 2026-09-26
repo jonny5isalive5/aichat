@@ -164,7 +164,15 @@ void AGolfHUD::DrawLobby(AGolfGameState* State, AGolfPlayerController* Controlle
 	{
 		TotalPar += Par;
 	}
-	Label(FString::Printf(TEXT("%d HOLES  ·  PAR %d"), State->Pars.Num(), TotalPar), Center - FVector2D(0.f, 22.f * U), 3.5f, Palette::Dim, true);
+	if (State->Pars.Num() == 0)
+	{
+		Label(TEXT("No course in this level. Run Scripts/build_blockout_course.py, then open Maps/Course."),
+			Center - FVector2D(0.f, 22.f * U), 2.8f, Palette::Red, true);
+	}
+	else
+	{
+		Label(FString::Printf(TEXT("%d HOLES  ·  PAR %d"), State->Pars.Num(), TotalPar), Center - FVector2D(0.f, 22.f * U), 3.5f, Palette::Dim, true);
+	}
 
 	// Room code, big, so it can be read out to friends.
 	if (!State->RoomCode.IsEmpty())
