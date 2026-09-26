@@ -15,9 +15,9 @@ void AGolfPlayerState::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& Out
 int32 AGolfPlayerState::GetTotalStrokes() const
 {
 	int32 Total = 0;
-	for (const int32 Score : HoleScores)
+	for (const int32 HoleScore : HoleScores)
 	{
-		Total += Score;
+		Total += HoleScore;
 	}
 	return Total;
 }

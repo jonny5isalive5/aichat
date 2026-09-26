@@ -473,9 +473,9 @@ void AGolfHUD::DrawGauge(AGolfPlayerController* Controller)
 	Box(FVector2D(X(-PC::ImpactWindow), Top), FVector2D(X(PC::ImpactWindow) - X(-PC::ImpactWindow), Height), FLinearColor(0.2f, 0.85f, 1.f, 0.25f));
 	Box(FVector2D(X(-PC::PerfectWindow), Top), FVector2D(X(PC::PerfectWindow) - X(-PC::PerfectWindow), Height), Palette::Gold);
 
-	for (const float Tick : { 0.25f, 0.5f, 0.75f, 1.f })
+	for (const float Notch : { 0.25f, 0.5f, 0.75f, 1.f })
 	{
-		Line(FVector2D(X(Tick), Top), FVector2D(X(Tick), Top + Height * 0.35f), Palette::Dim, 0.25f * U);
+		Line(FVector2D(X(Notch), Top), FVector2D(X(Notch), Top + Height * 0.35f), Palette::Dim, 0.25f * U);
 	}
 
 	const PC::EGauge Gauge = Controller->GetGaugeState();

@@ -55,8 +55,8 @@ AGolfGameState* AGolfPlayerController::GetGolfState() const
 
 AGolfBall* AGolfPlayerController::GetMyBall() const
 {
-	const AGolfPlayerState* Player = GetPlayerState<AGolfPlayerState>();
-	return Player ? Player->Ball.Get() : nullptr;
+	const AGolfPlayerState* GolfState = GetPlayerState<AGolfPlayerState>();
+	return GolfState ? GolfState->Ball.Get() : nullptr;
 }
 
 AGolfCharacter* AGolfPlayerController::GetMyGolfer() const

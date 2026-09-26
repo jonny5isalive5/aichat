@@ -73,7 +73,7 @@ public:
 
 protected:
 	UFUNCTION(NetMulticast, Reliable)
-	void MulticastLaunch(FVector Start, FVector Velocity, FVector SpinAxis, float SpinRate, FVector Wind, FVector CupLocation, float CupRadius);
+	void MulticastLaunch(FVector Start, FVector Velocity, FVector SpinAxis, float SpinRate, FVector Wind, FVector CupLocation, float InCupRadius);
 
 	UFUNCTION(NetMulticast, Reliable)
 	void MulticastSettle(FVector Location);
