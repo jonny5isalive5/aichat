@@ -5,6 +5,8 @@
 #include "GolfPlayerState.generated.h"
 
 class AGolfBall;
+class AGolfBuggy;
+class AGolfCharacter;
 
 UCLASS()
 class SKYLINKS_API AGolfPlayerState : public APlayerState
@@ -34,6 +36,12 @@ public:
 
 	UPROPERTY(Replicated, BlueprintReadOnly, Category = "Golf")
 	TObjectPtr<AGolfBall> Ball;
+
+	UPROPERTY(Replicated, BlueprintReadOnly, Category = "Golf")
+	TObjectPtr<AGolfCharacter> Golfer;
+
+	UPROPERTY(Replicated, BlueprintReadOnly, Category = "Golf")
+	TObjectPtr<AGolfBuggy> Buggy;
 
 	// Server-only bookkeeping.
 	bool bTeedOff = false;

@@ -7,6 +7,7 @@
 #include "GolfPlayerController.generated.h"
 
 class AGolfBall;
+class AGolfBuggy;
 class AGolfCharacter;
 class AGolfGameState;
 
@@ -17,8 +18,11 @@ class AGolfGameState;
  *    marker follows your finger); lift your finger to hit. Drifting left or right while swiping
  *    hooks or slices the shot.
  *  - Tap the club disc to change club, the spin button to cycle spin.
+ *  - Driving to your ball: drag on the left half to steer, hold GO / REV on the right.
+ *    PLAY SHOT appears once you are close; SKIP drives you there instantly.
  *  - Lobby: HOST gives you a room code; JOIN opens a keypad for a friend's code; INVITE lists friends.
- * Keyboard in the editor: hold Space to charge and release to hit, Q/E club, A/D aim, R spin.
+ * Keyboard in the editor: hold Space to charge and release to hit, Q/E club, A/D aim or steer,
+ * W/S drive, F play shot, R spin.
  */
 UCLASS()
 class SKYLINKS_API AGolfPlayerController : public APlayerController
@@ -37,6 +41,9 @@ public:
 	UFUNCTION(Server, Reliable)
 	void ServerRequestStart();
 
+	UFUNCTION(Server, Reliable)
+	void ServerFinishDriving(bool bSkip);
+
 	/** Console: host an online (LAN by default) game. */
 	UFUNCTION(Exec)
 	void HostGame();
@@ -47,6 +54,12 @@ public:
 
 	// Read by the HUD.
 	bool IsMyTurn() const;
+	bool IsDriving() const;
+	AGolfBuggy* GetMyBuggy() const;
+	float GetDriveSteer() const { return FMath::Clamp(TouchSteer + (IsDriving() ? AimInput : 0.f), -1.f, 1.f); }
+	/** Metres from my buggy to my ball, or -1. */
+	float GetDistanceToBall() const;
+	bool CanPlayShotFromBuggy() const;
 	AGolfBall* GetMyBall() const;
 	bool IsSwinging() const { return bSwiping || bKeyCharging; }
 	float GetSwingPower() const { return SwingPower; }
@@ -76,10 +89,18 @@ public:
 	static constexpr float StraightDeadzone = 0.15f;
 
 private:
+	enum class ETouchRole : uint8 { None, Aim, Swipe, Steer, Gas, Reverse };
+
 	void OnTouchPressed(ETouchIndex::Type FingerIndex, FVector Location);
 	void OnTouchMoved(ETouchIndex::Type FingerIndex, FVector Location);
 	void OnTouchReleased(ETouchIndex::Type FingerIndex, FVector Location);
-	bool HandleButton(const FVector2D& Screen);
+	bool HandleButton(const FVector2D& Screen, int32 Finger);
+
+	void OnThrottleForwardPressed() { KeyThrottle += 1.f; }
+	void OnThrottleForwardReleased() { KeyThrottle -= 1.f; }
+	void OnThrottleBackPressed() { KeyThrottle -= 1.f; }
+	void OnThrottleBackReleased() { KeyThrottle += 1.f; }
+	void OnPlayShotKey();
 
 	void OnSwingKeyPressed();
 	void OnSwingKeyReleased();
@@ -121,8 +142,16 @@ private:
 	float AimYaw = 0.f;
 	float AimInput = 0.f;
 	TArray<float> ClubCarry;
-	bool bAiming = false;
+	// Touch fingers: what each one is doing and where it went down.
+	ETouchRole TouchRoles[ETouchIndex::MAX_TOUCHES] = {};
+	FVector2D TouchStarts[ETouchIndex::MAX_TOUCHES];
 	float AimLastX = 0.f;
+
+	// Driving
+	float TouchSteer = 0.f;
+	float KeyThrottle = 0.f;
+	int32 GasFingers = 0;
+	int32 ReverseFingers = 0;
 
 	// Lobby
 	bool bKeypadOpen = false;

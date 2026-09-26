@@ -30,6 +30,10 @@ public:
 	UPROPERTY(Replicated, BlueprintReadOnly, Category = "Golf")
 	TObjectPtr<APlayerState> ActivePlayer;
 
+	/** The active player is driving their buggy to the ball rather than addressing it. */
+	UPROPERTY(Replicated, BlueprintReadOnly, Category = "Golf")
+	bool bActiveDriving = false;
+
 	/** cm/s. */
 	UPROPERTY(Replicated, BlueprintReadOnly, Category = "Golf")
 	FVector Wind = FVector::ZeroVector;

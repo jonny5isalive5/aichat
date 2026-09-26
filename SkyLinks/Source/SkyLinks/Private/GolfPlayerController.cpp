@@ -1,6 +1,7 @@
 #include "GolfPlayerController.h"
 #include "SkyLinks.h"
 #include "GolfBall.h"
+#include "GolfBuggy.h"
 #include "GolfCharacter.h"
 #include "GolfGameMode.h"
 #include "GolfGameState.h"
@@ -47,6 +48,11 @@ void AGolfPlayerController::SetupInputComponent()
 	InputComponent->BindKey(EKeys::A, IE_Released, this, &AGolfPlayerController::OnAimLeftReleased);
 	InputComponent->BindKey(EKeys::D, IE_Pressed, this, &AGolfPlayerController::OnAimRightPressed);
 	InputComponent->BindKey(EKeys::D, IE_Released, this, &AGolfPlayerController::OnAimRightReleased);
+	InputComponent->BindKey(EKeys::W, IE_Pressed, this, &AGolfPlayerController::OnThrottleForwardPressed);
+	InputComponent->BindKey(EKeys::W, IE_Released, this, &AGolfPlayerController::OnThrottleForwardReleased);
+	InputComponent->BindKey(EKeys::S, IE_Pressed, this, &AGolfPlayerController::OnThrottleBackPressed);
+	InputComponent->BindKey(EKeys::S, IE_Released, this, &AGolfPlayerController::OnThrottleBackReleased);
+	InputComponent->BindKey(EKeys::F, IE_Pressed, this, &AGolfPlayerController::OnPlayShotKey);
 }
 
 AGolfGameState* AGolfPlayerController::GetGolfState() const
@@ -62,7 +68,41 @@ AGolfBall* AGolfPlayerController::GetMyBall() const
 
 AGolfCharacter* AGolfPlayerController::GetMyGolfer() const
 {
-	return GetPawn<AGolfCharacter>();
+	const AGolfPlayerState* GolfState = GetPlayerState<AGolfPlayerState>();
+	return GolfState ? GolfState->Golfer.Get() : nullptr;
+}
+
+AGolfBuggy* AGolfPlayerController::GetMyBuggy() const
+{
+	const AGolfPlayerState* GolfState = GetPlayerState<AGolfPlayerState>();
+	return GolfState ? GolfState->Buggy.Get() : nullptr;
+}
+
+bool AGolfPlayerController::IsDriving() const
+{
+	const AGolfGameState* State = GetGolfState();
+	return State && State->bActiveDriving && State->ActivePlayer == PlayerState && GetPawn() && GetPawn() == GetMyBuggy();
+}
+
+float AGolfPlayerController::GetDistanceToBall() const
+{
+	const AGolfBuggy* Buggy = GetMyBuggy();
+	const AGolfBall* Ball = GetMyBall();
+	return Buggy && Ball ? FVector::Dist2D(Buggy->GetActorLocation(), Ball->GetRestLocation()) / 100.f : -1.f;
+}
+
+bool AGolfPlayerController::CanPlayShotFromBuggy() const
+{
+	const float Meters = GetDistanceToBall();
+	return IsDriving() && Meters >= 0.f && Meters * 100.f <= AGolfBuggy::ArriveDistance;
+}
+
+void AGolfPlayerController::OnPlayShotKey()
+{
+	if (CanPlayShotFromBuggy())
+	{
+		ServerFinishDriving(false);
+	}
 }
 
 float AGolfPlayerController::ViewportHeight() const
@@ -76,7 +116,8 @@ bool AGolfPlayerController::IsMyTurn() const
 {
 	const AGolfGameState* State = GetGolfState();
 	const AGolfBall* Ball = GetMyBall();
-	return State && Ball && State->Phase == EGolfMatchPhase::PlayingHole && State->ActivePlayer == PlayerState && Ball->IsAtRest();
+	return State && Ball && State->Phase == EGolfMatchPhase::PlayingHole && State->ActivePlayer == PlayerState
+		&& !State->bActiveDriving && Ball->IsAtRest();
 }
 
 bool AGolfPlayerController::IsPutting() const
@@ -96,6 +137,12 @@ void AGolfPlayerController::Tick(float DeltaSeconds)
 	if (!IsLocalController())
 	{
 		return;
+	}
+
+	if (IsDriving())
+	{
+		const float Pedals = (GasFingers > 0 ? 1.f : 0.f) - (ReverseFingers > 0 ? 1.f : 0.f) + KeyThrottle;
+		GetMyBuggy()->SetDriveInput(Pedals, GetDriveSteer());
 	}
 
 	const bool bMyTurn = IsMyTurn();
@@ -400,7 +447,7 @@ void AGolfPlayerController::RefreshGreenGrid()
 
 // ---------------------------------------------------------------- touch
 
-bool AGolfPlayerController::HandleButton(const FVector2D& Screen)
+bool AGolfPlayerController::HandleButton(const FVector2D& Screen, int32 Finger)
 {
 	const AGolfHUD* Hud = GetHUD<AGolfHUD>();
 	UGolfSessionSubsystem* Sessions = GetGameInstance()->GetSubsystem<UGolfSessionSubsystem>();
@@ -457,6 +504,26 @@ bool AGolfPlayerController::HandleButton(const FVector2D& Screen)
 			Sessions->DeclinePendingInvite();
 		}
 		return true;
+	case EGolfHudButton::Throttle:
+		TouchRoles[Finger] = ETouchRole::Gas;
+		++GasFingers;
+		return true;
+	case EGolfHudButton::Reverse:
+		TouchRoles[Finger] = ETouchRole::Reverse;
+		++ReverseFingers;
+		return true;
+	case EGolfHudButton::PlayShot:
+		if (CanPlayShotFromBuggy())
+		{
+			ServerFinishDriving(false);
+		}
+		return true;
+	case EGolfHudButton::SkipDrive:
+		if (IsDriving())
+		{
+			ServerFinishDriving(true);
+		}
+		return true;
 	case EGolfHudButton::Club: CycleClub(1); return true;
 	case EGolfHudButton::Spin: CycleSpin(); return true;
 	default:
@@ -466,59 +533,107 @@ bool AGolfPlayerController::HandleButton(const FVector2D& Screen)
 
 void AGolfPlayerController::OnTouchPressed(ETouchIndex::Type FingerIndex, FVector Location)
 {
-	if (FingerIndex != ETouchIndex::Touch1)
+	const int32 Finger = FingerIndex;
+	if (Finger < 0 || Finger >= ETouchIndex::MAX_TOUCHES)
 	{
 		return;
 	}
 	const FVector2D Screen(Location.X, Location.Y);
-	if (HandleButton(Screen) || !IsMyTurn() || IsSwinging())
+	TouchRoles[Finger] = ETouchRole::None;
+	TouchStarts[Finger] = Screen;
+	if (HandleButton(Screen, Finger))
 	{
 		return;
 	}
 
+	int32 SizeX = 0, SizeY = 0;
+	GetViewportSize(SizeX, SizeY);
+	if (IsDriving())
+	{
+		if (Screen.X < SizeX * 0.5f)
+		{
+			TouchRoles[Finger] = ETouchRole::Steer;
+		}
+		return;
+	}
+
+	if (!IsMyTurn())
+	{
+		return;
+	}
 	if (Screen.Y >= ViewportHeight() * SwipeZoneTop)
 	{
-		bSwiping = true;
-		SwipeStart = Screen;
-		SwingPower = 0.f;
-		SwingAccuracy = 0.f;
+		if (!IsSwinging())
+		{
+			TouchRoles[Finger] = ETouchRole::Swipe;
+			bSwiping = true;
+			SwipeStart = Screen;
+			SwingPower = 0.f;
+			SwingAccuracy = 0.f;
+		}
 	}
 	else
 	{
-		bAiming = true;
+		TouchRoles[Finger] = ETouchRole::Aim;
 		AimLastX = Screen.X;
 	}
 }
 
 void AGolfPlayerController::OnTouchMoved(ETouchIndex::Type FingerIndex, FVector Location)
 {
-	if (FingerIndex != ETouchIndex::Touch1)
+	const int32 Finger = FingerIndex;
+	if (Finger < 0 || Finger >= ETouchIndex::MAX_TOUCHES)
 	{
 		return;
 	}
-	if (bSwiping)
+	const FVector2D Screen(Location.X, Location.Y);
+	switch (TouchRoles[Finger])
 	{
-		UpdateSwipe(FVector2D(Location.X, Location.Y));
-	}
-	else if (bAiming && IsMyTurn())
-	{
-		SetAim(AimYaw + (Location.X - AimLastX) * AimDegreesPerPixel);
-		AimLastX = Location.X;
+	case ETouchRole::Swipe:
+		UpdateSwipe(Screen);
+		break;
+	case ETouchRole::Aim:
+		if (IsMyTurn())
+		{
+			SetAim(AimYaw + (Screen.X - AimLastX) * AimDegreesPerPixel);
+		}
+		AimLastX = Screen.X;
+		break;
+	case ETouchRole::Steer:
+		// Steering is relative to where the thumb went down.
+		TouchSteer = FMath::Clamp((Screen.X - TouchStarts[Finger].X) / (0.15f * ViewportHeight()), -1.f, 1.f);
+		break;
+	default:
+		break;
 	}
 }
 
 void AGolfPlayerController::OnTouchReleased(ETouchIndex::Type FingerIndex, FVector Location)
 {
-	if (FingerIndex != ETouchIndex::Touch1)
+	const int32 Finger = FingerIndex;
+	if (Finger < 0 || Finger >= ETouchIndex::MAX_TOUCHES)
 	{
 		return;
 	}
-	bAiming = false;
-	if (bSwiping)
+	switch (TouchRoles[Finger])
 	{
+	case ETouchRole::Swipe:
 		UpdateSwipe(FVector2D(Location.X, Location.Y));
 		ReleaseSwing();
+		break;
+	case ETouchRole::Steer:
+		TouchSteer = 0.f;
+		break;
+	case ETouchRole::Gas:
+		GasFingers = FMath::Max(0, GasFingers - 1);
+		break;
+	case ETouchRole::Reverse:
+		ReverseFingers = FMath::Max(0, ReverseFingers - 1);
+		break;
+	default:
+		break;
 	}
+	TouchRoles[Finger] = ETouchRole::None;
 }
 
 // ---------------------------------------------------------------- server and sessions
@@ -528,6 +643,14 @@ void AGolfPlayerController::ServerTakeShot_Implementation(const FGolfShotInput& 
 	if (AGolfGameMode* Mode = GetWorld()->GetAuthGameMode<AGolfGameMode>())
 	{
 		Mode->HandleShot(this, Input);
+	}
+}
+
+void AGolfPlayerController::ServerFinishDriving_Implementation(bool bSkip)
+{
+	if (AGolfGameMode* Mode = GetWorld()->GetAuthGameMode<AGolfGameMode>())
+	{
+		Mode->FinishDriving(this, bSkip);
 	}
 }
 

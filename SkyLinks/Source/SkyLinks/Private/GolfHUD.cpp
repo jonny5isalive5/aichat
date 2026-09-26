@@ -1,5 +1,6 @@
 #include "GolfHUD.h"
 #include "GolfBall.h"
+#include "GolfBuggy.h"
 #include "GolfGameState.h"
 #include "GolfHole.h"
 #include "GolfPhysics.h"
@@ -321,6 +322,64 @@ void AGolfHUD::DrawPlaying(AGolfGameState* State, AGolfPlayerController* Control
 	{
 		DrawClubDisc(Controller);
 		DrawPowerMeter(Controller);
+	}
+	if (Controller->IsDriving())
+	{
+		DrawDriving(Controller);
+	}
+}
+
+void AGolfHUD::DrawDriving(AGolfPlayerController* Controller)
+{
+	const AGolfBuggy* Buggy = Controller->GetMyBuggy();
+	const AGolfBall* Ball = Controller->GetMyBall();
+	if (!Buggy || !Ball)
+	{
+		return;
+	}
+
+	// Direction and distance to the ball, top centre. Screen-up is where the camera looks.
+	const FVector2D Compass(Canvas->ClipX * 0.5f, 9.f * U);
+	Disc(Compass, 6.f * U, Palette::Panel);
+	Ring(Compass, 6.f * U, Palette::Trim, 0.3f * U);
+	const FVector ToBall = Ball->GetRestLocation() - Buggy->GetActorLocation();
+	const float CameraYaw = PlayerOwner->PlayerCameraManager ? PlayerOwner->PlayerCameraManager->GetCameraRotation().Yaw : Buggy->GetActorRotation().Yaw;
+	const float Bearing = FMath::DegreesToRadians(ToBall.Rotation().Yaw - CameraYaw);
+	const FVector2D Dir(FMath::Sin(Bearing), -FMath::Cos(Bearing));
+	const FVector2D Side(-Dir.Y, Dir.X);
+	const FVector2D Tip = Compass + Dir * 4.5f * U;
+	Line(Compass - Dir * 3.f * U, Tip, Palette::Green, 0.6f * U);
+	Line(Tip, Tip - Dir * 1.8f * U + Side * 1.4f * U, Palette::Green, 0.6f * U);
+	Line(Tip, Tip - Dir * 1.8f * U - Side * 1.4f * U, Palette::Green, 0.6f * U);
+	Label(FString::Printf(TEXT("BALL  %.0f m"), Controller->GetDistanceToBall()), Compass + FVector2D(0.f, 9.f * U), 3.2f, Palette::White, true);
+
+	// Marker over the ball when it is in view.
+	FVector2D BallScreen;
+	if (ToScreen(Ball->GetRestLocation() + FVector(0.f, 0.f, 120.f), BallScreen))
+	{
+		Ring(BallScreen, 1.4f * U, Palette::Green, 0.4f * U);
+		Line(BallScreen + FVector2D(0.f, 1.4f * U), BallScreen + FVector2D(0.f, 4.f * U), Palette::Green, 0.3f * U);
+	}
+
+	// Steering pad on the left: the knob follows the thumb.
+	const FVector2D Pad(18.f * U, Canvas->ClipY - 18.f * U);
+	Box(Pad - FVector2D(12.f * U, 1.f * U), FVector2D(24.f * U, 2.f * U), Palette::Panel);
+	Disc(Pad + FVector2D(Controller->GetDriveSteer() * 11.f * U, 0.f), 3.2f * U, FLinearColor(1.f, 1.f, 1.f, 0.85f));
+	Label(TEXT("DRAG TO STEER"), Pad + FVector2D(0.f, 6.f * U), 2.4f, Palette::Dim, true);
+
+	// Pedals on the right.
+	RoundButton(EGolfHudButton::Throttle, FVector2D(Canvas->ClipX - 14.f * U, Canvas->ClipY - 16.f * U), 10.f * U, TEXT("GO"), FLinearColor(0.1f, 0.4f, 0.12f, 0.9f));
+	RoundButton(EGolfHudButton::Reverse, FVector2D(Canvas->ClipX - 33.f * U, Canvas->ClipY - 10.f * U), 6.f * U, TEXT("REV"), Palette::PanelSolid);
+	Label(FString::Printf(TEXT("%.0f km/h"), FMath::Abs(Buggy->GetSpeed()) * 0.036f), FVector2D(Canvas->ClipX - 14.f * U, Canvas->ClipY - 30.f * U), 3.f, Palette::White, true);
+
+	RoundButton(EGolfHudButton::SkipDrive, FVector2D(Canvas->ClipX - 12.f * U, 36.f * U), 4.5f * U, TEXT("SKIP"), Palette::PanelSolid);
+	if (Controller->CanPlayShotFromBuggy())
+	{
+		RoundButton(EGolfHudButton::PlayShot, FVector2D(Canvas->ClipX * 0.5f, Canvas->ClipY - 14.f * U), 9.f * U, TEXT("PLAY SHOT"), FLinearColor(0.1f, 0.45f, 0.15f, 0.95f));
+	}
+	else
+	{
+		Label(TEXT("Drive within 15 m of your ball"), FVector2D(Canvas->ClipX * 0.5f, Canvas->ClipY - 5.f * U), 2.6f, Palette::Dim, true);
 	}
 }
 

@@ -7,3 +7,5 @@ DerivedDataCache/
 *.sln
 *.suo
 *.xcworkspace
+*.blend1
+__pycache__/

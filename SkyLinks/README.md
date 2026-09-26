@@ -14,7 +14,9 @@ The target look is realistic: real turf and trees, natural light, a broadcast-st
 | Controls | `GolfPlayerController.*` | Drag the top half of the screen to aim. Swipe up from the bottom half to swing: swipe length sets the distance (the landing ring follows your finger), sideways drift hooks or slices, and lifting your finger hits. There's a club disc, backspin and topspin, and automatic club choice. When putting, an aim line follows the ground and a grid shows which way the green slopes. |
 | HUD | `GolfHUD.*` | Drawn straight to the screen, so no UI assets are needed. Hole card, player list, wind compass, club disc, swipe power meter, shot preview, green-reading grid, scorecard (birdies circled, bogeys boxed) and the lobby. |
 | Playing with friends | `GolfSessionSubsystem.*` | 4-digit **room codes** with an on-screen keypad, **friend invites** with a join pop-up, and direct IP. It works on the same Wi-Fi out of the box and anywhere once Epic Online Services is set up (see `Docs/MULTIPLAYER.md`). |
-| Course | `Scripts/build_blockout_course.py` | Builds all 18 holes (par 70) as a playable blockout with surface-tagged materials. |
+| Golf buggies | `GolfBuggy.*` | Every player has a buggy. It parks beside the tee at the start of each hole, and when your ball is more than 30 m away your turn starts with a drive to it. Drag on the left to steer, hold GO/REV, then tap PLAY SHOT within 15 m, or SKIP to go straight there. It follows slopes, stops at trees, buildings and water, and syncs smoothly for everyone watching. |
+| Course | `Scripts/build_blockout_course.py` | Builds all 18 holes (par 70) as a playable blockout with surface-tagged materials, imports the Blender models and places the clubhouse. |
+| 3D models | `Art/` | The clubhouse and golf buggy, built by Python scripts in Blender. The FBX exports are ready to import (see `Art/README.md`). |
 
 ## Getting it running
 
@@ -24,7 +26,7 @@ The target look is realistic: real turf and trees, natural light, a broadcast-st
    It creates `/Game/Maps/Course` with all 18 holes and saves it.
 4. Press **Play**. Choose **SOLO**, or **HOST** to get a room code friends can **JOIN** with. To test multiplayer on one PC, use **Play → Number of Players: 2** and **Net Mode: Play As Listen Server**. The host taps **TEE OFF**.
 
-Controls in the editor: the mouse acts as a finger. Keyboard: hold **Space** to charge and release to hit, **A/D** aim, **Q/E** change club, **R** changes spin.
+Controls in the editor: the mouse acts as a finger. Keyboard: hold **Space** to charge and release to hit, **A/D** aim (or steer), **W/S** drive, **F** play shot from the buggy, **Q/E** change club, **R** changes spin.
 
 ## Shipping to phones
 

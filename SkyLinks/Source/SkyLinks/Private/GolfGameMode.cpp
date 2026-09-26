@@ -1,6 +1,7 @@
 #include "GolfGameMode.h"
 #include "SkyLinks.h"
 #include "GolfBall.h"
+#include "GolfBuggy.h"
 #include "GolfCharacter.h"
 #include "GolfGameState.h"
 #include "GolfHole.h"
@@ -42,6 +43,7 @@ AGolfGameMode::AGolfGameMode()
 	GameStateClass = AGolfGameState::StaticClass();
 	HUDClass = AGolfHUD::StaticClass();
 	BallClass = AGolfBall::StaticClass();
+	BuggyClass = AGolfBuggy::StaticClass();
 }
 
 AGolfGameState* AGolfGameMode::GetGolfState() const
@@ -97,6 +99,19 @@ void AGolfGameMode::PostLogin(APlayerController* NewPlayer)
 	Player->Ball->SetActorHiddenInGame(true);
 	Player->Ball->OnStopped.AddUObject(this, &AGolfGameMode::OnBallStopped);
 	Player->HoleScores.Init(0, Holes.Num());
+	Player->Golfer = NewPlayer->GetPawn<AGolfCharacter>();
+
+	Player->Buggy = GetWorld()->SpawnActor<AGolfBuggy>(BuggyClass, FTransform(FVector(0.f, 0.f, -100000.f)), Params);
+	if (Player->Buggy && Holes.Num() > 0)
+	{
+		// Park in the row beside the first tee.
+		const AGolfHole* First = Holes[0];
+		const float Yaw = First->GetDefaultAimYaw(First->GetTeeLocation());
+		const FRotator Heading(0.f, Yaw, 0.f);
+		const int32 Slot = GameState->PlayerArray.Num() - 1;
+		Player->Buggy->ParkAt(First->GetTeeLocation() - Heading.Vector() * 1200.f
+			+ FRotationMatrix(Heading).GetUnitAxis(EAxis::Y) * (Slot * 350.f - 525.f), Yaw);
+	}
 
 	AGolfGameState* State = GetGolfState();
 	if (State->Phase == EGolfMatchPhase::Lobby || State->Phase == EGolfMatchPhase::RoundOver)
@@ -132,6 +147,16 @@ void AGolfGameMode::Logout(AController* Exiting)
 			Player->Ball->Destroy();
 			Player->Ball = nullptr;
 		}
+		// Whichever pawn is not possessed would be left behind.
+		for (APawn* Owned : { static_cast<APawn*>(Player->Buggy.Get()), static_cast<APawn*>(Player->Golfer.Get()) })
+		{
+			if (Owned && Owned != Exiting->GetPawn())
+			{
+				Owned->Destroy();
+			}
+		}
+		Player->Buggy = nullptr;
+		Player->Golfer = nullptr;
 		Player->bInRound = false;
 		TeeOrder.Remove(Player);
 
@@ -139,6 +164,7 @@ void AGolfGameMode::Logout(AController* Exiting)
 		if (State->ActivePlayer == Player && State->Phase == EGolfMatchPhase::PlayingHole)
 		{
 			bShotInFlight = false;
+			State->bActiveDriving = false;
 			State->ActivePlayer = nullptr;
 			GetWorldTimerManager().SetTimer(FlowTimer, this, &AGolfGameMode::NextTurn, TurnDelay, false);
 		}
@@ -162,7 +188,17 @@ TArray<AGolfPlayerState*> AGolfGameMode::GetRoundPlayers() const
 
 AGolfCharacter* AGolfGameMode::GetGolfer(AGolfPlayerState* Player) const
 {
-	return Player ? Player->GetPawn<AGolfCharacter>() : nullptr;
+	return Player ? Player->Golfer.Get() : nullptr;
+}
+
+void AGolfGameMode::PossessGolfer(AGolfPlayerState* Player)
+{
+	APlayerController* Controller = Player ? Player->GetPlayerController() : nullptr;
+	AGolfCharacter* Golfer = GetGolfer(Player);
+	if (Controller && Golfer && Controller->GetPawn() != Golfer)
+	{
+		Controller->Possess(Golfer);
+	}
 }
 
 AGolfPlayerState* AGolfGameMode::FindBallOwner(const AGolfBall* Ball) const
@@ -224,12 +260,23 @@ void AGolfGameMode::StartHole(int32 Index)
 	State->Wind = FRotator(0.f, FMath::FRandRange(0.f, 360.f), 0.f).Vector() * FMath::FRandRange(0.f, Hole->MaxWind);
 	bShotInFlight = false;
 
+	State->bActiveDriving = false;
+	const float TeeYaw = Hole->GetDefaultAimYaw(Hole->GetTeeLocation());
+	const FRotator TeeHeading(0.f, TeeYaw, 0.f);
+	const FVector TeeRight = FRotationMatrix(TeeHeading).GetUnitAxis(EAxis::Y);
+	int32 Slot = 0;
 	for (AGolfPlayerState* Player : GetRoundPlayers())
 	{
 		Player->Strokes = 0;
 		Player->bHoledOut = false;
 		Player->bTeedOff = false;
 		Player->Ball->SetActorHiddenInGame(true);
+		PossessGolfer(Player);
+		if (Player->Buggy)
+		{
+			Player->Buggy->ParkAt(Hole->GetTeeLocation() - TeeHeading.Vector() * 1200.f + TeeRight * (Slot * 350.f - 525.f), TeeYaw);
+		}
+		++Slot;
 	}
 
 	// Honors: lowest score on the previous hole tees off first. Stable sort keeps ties in order.
@@ -312,6 +359,68 @@ void AGolfGameMode::BeginTurn(AGolfPlayerState* Player)
 	Ball->SetActorHiddenInGame(false);
 	State->ActivePlayer = Player;
 
+	const bool bBuggyFar = Player->Buggy && FVector::Dist2D(Player->Buggy->GetActorLocation(), Ball->GetRestLocation()) > DriveDistance;
+	if (Player->bTeedOff && bBuggyFar && Player->GetPlayerController())
+	{
+		StartDriving(Player);
+	}
+	else
+	{
+		AddressBall(Player);
+	}
+}
+
+void AGolfGameMode::StartDriving(AGolfPlayerState* Player)
+{
+	AGolfGameState* State = GetGolfState();
+	State->bActiveDriving = true;
+
+	for (APlayerState* Base : GameState->PlayerArray)
+	{
+		if (AGolfCharacter* Golfer = GetGolfer(Cast<AGolfPlayerState>(Base)))
+		{
+			Golfer->SetActorHiddenInGame(true);
+		}
+	}
+	Player->GetPlayerController()->Possess(Player->Buggy);
+	ViewAll(Player->Buggy, 0.6f);
+
+	const float Meters = FVector::Dist2D(Player->Buggy->GetActorLocation(), Player->Ball->GetRestLocation()) / 100.f;
+	State->MulticastAnnounce(FString::Printf(TEXT("%s  ·  DRIVE TO YOUR BALL  ·  %.0f m"), *Player->GetPlayerName(), Meters));
+}
+
+void AGolfGameMode::FinishDriving(APlayerController* Driver, bool bSkip)
+{
+	AGolfGameState* State = GetGolfState();
+	AGolfPlayerState* Player = Driver ? Driver->GetPlayerState<AGolfPlayerState>() : nullptr;
+	if (!Player || !State->bActiveDriving || State->ActivePlayer != Player || !Player->Buggy)
+	{
+		return;
+	}
+
+	const FVector BallLocation = Player->Ball->GetRestLocation();
+	if (bSkip)
+	{
+		// Park a few metres back from the ball, off to the side of the line.
+		const float Yaw = State->CurrentHole->GetDefaultAimYaw(BallLocation);
+		const FRotator Heading(0.f, Yaw, 0.f);
+		Player->Buggy->ParkAt(BallLocation - Heading.Vector() * 600.f - FRotationMatrix(Heading).GetUnitAxis(EAxis::Y) * 400.f, Yaw);
+	}
+	else if (FVector::Dist2D(Player->Buggy->GetActorLocation(), BallLocation) > AGolfBuggy::ArriveDistance)
+	{
+		return;
+	}
+
+	State->bActiveDriving = false;
+	PossessGolfer(Player);
+	AddressBall(Player);
+}
+
+void AGolfGameMode::AddressBall(AGolfPlayerState* Player)
+{
+	AGolfGameState* State = GetGolfState();
+	AGolfHole* Hole = State->CurrentHole;
+
 	// Only the golfer whose turn it is stands on the course.
 	for (APlayerState* Base : GameState->PlayerArray)
 	{
@@ -323,7 +432,7 @@ void AGolfGameMode::BeginTurn(AGolfPlayerState* Player)
 
 	if (AGolfCharacter* Golfer = GetGolfer(Player))
 	{
-		const FVector BallLocation = Ball->GetRestLocation();
+		const FVector BallLocation = Player->Ball->GetRestLocation();
 		Golfer->SetAddress(BallLocation, Hole->GetDefaultAimYaw(BallLocation));
 		ViewAll(Golfer, 0.6f);
 	}
@@ -336,7 +445,7 @@ void AGolfGameMode::HandleShot(APlayerController* Shooter, const FGolfShotInput&
 	AGolfGameState* State = GetGolfState();
 	AGolfPlayerState* Player = Shooter ? Shooter->GetPlayerState<AGolfPlayerState>() : nullptr;
 	if (!Player || State->Phase != EGolfMatchPhase::PlayingHole || State->ActivePlayer != Player || bShotInFlight
-		|| !Player->Ball || !Player->Ball->IsAtRest())
+		|| State->bActiveDriving || !Player->Ball || !Player->Ball->IsAtRest())
 	{
 		return;
 	}

@@ -10,6 +10,7 @@ void AGolfGameState::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLi
 	DOREPLIFETIME(AGolfGameState, HoleIndex);
 	DOREPLIFETIME(AGolfGameState, CurrentHole);
 	DOREPLIFETIME(AGolfGameState, ActivePlayer);
+	DOREPLIFETIME(AGolfGameState, bActiveDriving);
 	DOREPLIFETIME(AGolfGameState, Wind);
 	DOREPLIFETIME(AGolfGameState, Pars);
 	DOREPLIFETIME(AGolfGameState, HoleNames);

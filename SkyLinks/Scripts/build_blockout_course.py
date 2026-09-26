@@ -5,6 +5,8 @@ Run inside the Unreal Editor (Tools > Execute Python Script, or `py path/to/this
 Output Log). The C++ module must be compiled first so `unreal.GolfHole` exists.
 
 It creates:
+  - The Blender models (Art/Exports: clubhouse, golf buggy), imported into /Game if not there yet
+  - The clubhouse beside the first tee
   - Physical materials with the surface types the ball physics reads (Fairway, Rough, ...)
   - Plain materials in natural turf, sand and water colours
   - 18 holes laid out in two rows (front nine, back nine), each with rough, fairway, green,
@@ -28,6 +30,17 @@ TREE_MESHES = [
 ]
 
 MAP_PATH = "/Game/Maps/Course"
+
+# Blender exports and where they go in the project. The buggy code looks for its meshes at these paths.
+ART_IMPORTS = [
+    ("SM_Buggy_Body.fbx", "/Game/Vehicles/Buggy"),
+    ("SM_Buggy_Wheel.fbx", "/Game/Vehicles/Buggy"),
+    ("SM_Clubhouse.fbx", "/Game/Course/Buildings"),
+]
+CLUBHOUSE_ASSET = "/Game/Course/Buildings/SM_Clubhouse"
+# Clubhouse spot relative to the first tee (metres), turned so the entrance faces the course.
+CLUBHOUSE_POSITION = (-110.0, -45.0)
+CLUBHOUSE_YAW = -90.0
 MAT_DIR = "/Game/Course/Materials"
 M = 100.0  # metres -> cm
 
@@ -261,6 +274,53 @@ def build_environment():
     sky.light_component.set_editor_property("real_time_capture", True)
 
 
+def import_art():
+    """Imports any Blender export that is not in the project yet."""
+    import os
+    exports = os.path.join(unreal.Paths.convert_relative_path_to_full(unreal.Paths.project_dir()), "Art", "Exports")
+    tasks = []
+    for filename, destination in ART_IMPORTS:
+        asset = f"{destination}/{os.path.splitext(filename)[0]}"
+        source = os.path.join(exports, filename)
+        if unreal.EditorAssetLibrary.does_asset_exist(asset):
+            continue
+        if not os.path.isfile(source):
+            unreal.log_warning(f"Sky Links: {source} not found. Run the Blender scripts in Art/Blender first.")
+            continue
+        task = unreal.AssetImportTask()
+        task.filename = source
+        task.destination_path = destination
+        task.automated = True
+        task.replace_existing = True
+        task.save = True
+        tasks.append(task)
+    if tasks:
+        asset_tools.import_asset_tasks(tasks)
+        for task in tasks:
+            unreal.log(f"Sky Links: imported {task.filename} -> {list(task.imported_object_paths)}")
+
+    body = unreal.load_asset("/Game/Vehicles/Buggy/SM_Buggy_Body")
+    if body:
+        length = body.get_bounds().box_extent.x * 2
+        if length < 100 or length > 1000:
+            unreal.log_warning(f"Sky Links: buggy body is {length:.0f} cm long (expected about 250). Check the FBX import scale.")
+
+
+def build_clubhouse(first_tee, mats):
+    folder = "Course/Clubhouse"
+    x = first_tee[0] + CLUBHOUSE_POSITION[0] * M
+    y = first_tee[1] + CLUBHOUSE_POSITION[1] * M
+    # Lawn around the building, joining the first hole's rough.
+    slab(first_tee, (-175, -35, -110, 20), TOP["rough"], mats["Rough"], folder, "ClubhouseLawn")
+    mesh = unreal.load_asset(CLUBHOUSE_ASSET) if unreal.EditorAssetLibrary.does_asset_exist(CLUBHOUSE_ASSET) else None
+    if not mesh:
+        unreal.log_warning("Sky Links: clubhouse mesh not found; skipping it.")
+        return
+    clubhouse = actors.spawn_actor_from_object(mesh, unreal.Vector(x, y, TOP["rough"]), unreal.Rotator(0, 0, CLUBHOUSE_YAW))
+    clubhouse.set_actor_label("Clubhouse")
+    clubhouse.set_folder_path(folder)
+
+
 def clear_course():
     for actor in actors.get_all_level_actors():
         if str(actor.get_folder_path()).startswith("Course"):
@@ -277,6 +337,7 @@ def main():
     else:
         levels.new_level(MAP_PATH)
 
+    import_art()
     mats = build_materials()
     rng = random.Random(18)
     first_tee = None
@@ -287,6 +348,7 @@ def main():
             origin = build_hole(number, hole, mats, rng)
             first_tee = first_tee or origin
 
+    build_clubhouse(first_tee, mats)
     start = actors.spawn_actor_from_class(unreal.PlayerStart, unreal.Vector(first_tee[0] - 500, first_tee[1], 120), unreal.Rotator(0, 0, 0))
     start.set_folder_path("Course/Environment")
     build_environment()

@@ -1,5 +1,7 @@
 #include "GolfPlayerState.h"
 #include "GolfBall.h"
+#include "GolfBuggy.h"
+#include "GolfCharacter.h"
 #include "Net/UnrealNetwork.h"
 
 void AGolfPlayerState::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifetimeProps) const
@@ -10,6 +12,8 @@ void AGolfPlayerState::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& Out
 	DOREPLIFETIME(AGolfPlayerState, bHoledOut);
 	DOREPLIFETIME(AGolfPlayerState, bInRound);
 	DOREPLIFETIME(AGolfPlayerState, Ball);
+	DOREPLIFETIME(AGolfPlayerState, Golfer);
+	DOREPLIFETIME(AGolfPlayerState, Buggy);
 }
 
 int32 AGolfPlayerState::GetTotalStrokes() const

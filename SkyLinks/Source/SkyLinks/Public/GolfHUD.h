@@ -24,7 +24,11 @@ enum class EGolfHudButton : uint8
 	Friends,
 	Friend,
 	AcceptInvite,
-	DeclineInvite
+	DeclineInvite,
+	Throttle,
+	Reverse,
+	PlayShot,
+	SkipDrive
 };
 
 /**
@@ -63,6 +67,7 @@ private:
 	void DrawHoleCard(AGolfGameState* State);
 	void DrawPlayers(AGolfGameState* State);
 	void DrawWind(AGolfGameState* State);
+	void DrawDriving(AGolfPlayerController* Controller);
 	void DrawGreenGrid(AGolfPlayerController* Controller);
 	void DrawPreview(AGolfPlayerController* Controller);
 	void DrawClubDisc(AGolfPlayerController* Controller);

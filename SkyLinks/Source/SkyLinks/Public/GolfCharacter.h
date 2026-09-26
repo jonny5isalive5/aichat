@@ -54,6 +54,7 @@ public:
 
 protected:
 	virtual void BeginPlay() override;
+	virtual void Restart() override;
 
 	UFUNCTION(Server, Unreliable)
 	void ServerSetAim(float InAimYaw);

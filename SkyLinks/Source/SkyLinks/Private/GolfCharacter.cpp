@@ -67,6 +67,14 @@ void AGolfCharacter::BeginPlay()
 	}
 }
 
+void AGolfCharacter::Restart()
+{
+	Super::Restart();
+	// Possession resets the movement mode; the golfer is placed by code, never walks.
+	GetCharacterMovement()->DisableMovement();
+	ApplyAddress();
+}
+
 void AGolfCharacter::SetAddress(const FVector& InBallLocation, float InAimYaw)
 {
 	BallLocation = InBallLocation;

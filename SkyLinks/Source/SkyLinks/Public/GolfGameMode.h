@@ -6,6 +6,7 @@
 #include "GolfGameMode.generated.h"
 
 class AGolfBall;
+class AGolfBuggy;
 class AGolfHole;
 class AGolfCharacter;
 class AGolfPlayerState;
@@ -16,6 +17,9 @@ class AGolfGameState;
  * Tee order follows honors (best score on the previous hole goes first); after that the player
  * farthest from the cup plays next. Water and out of bounds cost one stroke and replay from the
  * previous spot. A player picks up at double par.
+ *
+ * Each player has a buggy. Buggies park beside the tee at the start of a hole; when a player's
+ * ball is far from their buggy, their turn starts with a drive to the ball.
  */
 UCLASS()
 class SKYLINKS_API AGolfGameMode : public AGameModeBase
@@ -32,8 +36,18 @@ public:
 	void RequestStartRound(APlayerController* Requester);
 	void HandleShot(APlayerController* Shooter, const FGolfShotInput& Input);
 
+	/** The active player arrived at their ball (or chose to skip the drive). */
+	void FinishDriving(APlayerController* Driver, bool bSkip);
+
 	UPROPERTY(EditDefaultsOnly, Category = "Golf")
 	TSubclassOf<AGolfBall> BallClass;
+
+	UPROPERTY(EditDefaultsOnly, Category = "Golf")
+	TSubclassOf<AGolfBuggy> BuggyClass;
+
+	/** Turns start with a drive when the buggy is parked further than this from the ball (cm). */
+	UPROPERTY(EditDefaultsOnly, Category = "Golf")
+	float DriveDistance = 3000.f;
 
 	UPROPERTY(EditDefaultsOnly, Category = "Golf")
 	float TurnDelay = 1.8f;
@@ -49,6 +63,9 @@ protected:
 	void StartHole(int32 Index);
 	void NextTurn();
 	void BeginTurn(AGolfPlayerState* Player);
+	void StartDriving(AGolfPlayerState* Player);
+	void AddressBall(AGolfPlayerState* Player);
+	void PossessGolfer(AGolfPlayerState* Player);
 	void EndHole();
 	void OnBallStopped(AGolfBall* Ball, EGolfShotResult Result);
 
