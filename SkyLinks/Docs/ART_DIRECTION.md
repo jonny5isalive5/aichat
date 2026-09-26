@@ -1,57 +1,78 @@
-# Art direction: matching the reference
+# Art direction: realistic golf sim
 
-The reference is classic anime-style fantasy golf. The rules below get the blockout there.
+Sky Links aims for a realistic golf-sim look: real turf, real trees, natural light, and a broadcast-style HUD.
+The code is already set up for it: regulation cup and flag, a real-size ball, Lumen lighting and virtual shadows on PC, and fully dynamic lighting (so there's never a "lighting needs to be rebuilt" message).
+What's left is art, and that's editor work, which suits Aura.
 
-## The shot
+## Who does what
 
-- The camera is low, about 1 m above the ball and 4 m behind it, looking down the aim line. The golfer stands on the **left third** of the frame, facing right.
-  This is already set up in `AGolfCharacter` (`CameraArm`: length 380, socket offset Y 45 / Z 80, pitch −8°).
-- The horizon sits high, around 40% from the top, so the fairway fills the frame.
-- After impact the view cuts to the ball's chase camera (`AGolfBall::ChaseArm`). Tune `ChaseDistance`, `ChasePitch` and `ChaseTurnSpeed` on the ball Blueprint.
-- The tee pad is a round teal/blue platform with a crest in the middle. In the blockout it's the `M_TeePad` disc; replace it with a decal on a raised disc.
-
-## Palette
-
-| Role | Colour |
+| Job | Tool |
 |---|---|
-| Sky top / horizon | `#1E6BE0` / `#9FD8FF` |
-| Clouds | `#FFFFFF` with `#D6E9FF` shadow |
-| Fairway / rough / green | `#52C13A` / `#2E8B2E` / `#7EDC4A` (mow stripes ±6% value) |
-| Sand | `#F2DC97` |
-| Water | `#2E9BD6` |
-| Mushroom caps | `#E0483A` with `#F7E6C4` spots |
-| HUD navy / cyan / gold | `#08143D` / `#33D9FF` / `#FFD140` |
+| Rules, physics, controls, HUD, multiplayer | C++ in `Source/SkyLinks` (Claude) |
+| Terrain, turf and sand materials, trees, water, golfer model, lighting mood | Unreal Editor (you + Aura) |
+| Blockout layout of the 18 holes | `Scripts/build_blockout_course.py` |
 
-The colours are saturated and the shadows lean blue, never grey.
+## The one rule the art must keep
 
-## Rendering on mobile
+The ball reads the **surface type** from each surface's **physical material**. Fairway, rough, green, bunker and water each behave differently: how the ball bounces and rolls, the power penalty from rough and sand, and the water penalty.
+Whatever you replace, keep each surface's physical material:
 
-1. **Toon shading.** Use a post-process material that quantises lighting into two or three bands, with a soft outline from a depth/normal edge. On mobile, prefer an unlit material with lighting baked into a 2-tone ramp (Material Parameter Collection holding the sun direction). It's cheaper and reads better.
-2. **Sky.** Use a painted sky-dome texture with drifting cloud cards, not Volumetric Clouds (too costly on phones).
-3. **Grass.** Use stripe masks on the fairway material rather than grass meshes. Add a few cheap card-grass clumps only at the edges of the rough.
-4. **Lighting.** A single stationary sun with baked lightmaps for the course and dynamic shadows only for the golfer and ball. Turn auto-exposure off; it's already off in `DefaultEngine.ini`.
-5. **Scale.** Props are cartoonishly large: trees 12–16 m tall with round canopies, mushrooms 10 m tall. The blockout script already uses these sizes.
-
-## Assets to source or build
-
-| Asset | Approach |
+| Surface | Physical material (in `/Game/Course/Materials`) |
 |---|---|
-| Golfer (chibi, big head, oversized hat) | Model in Blender or VRoid Studio and import with VRM4U; retarget the UE5 Mannequin with IK Retargeter. |
-| Swing animation | Get a golf-swing animation (e.g. Mixamo "Golf Drive") and turn it into a montage. Assign it to `SwingMontage` on a Blueprint child of `GolfCharacter`. |
-| Trees, mushrooms, lighthouse, palm trees | Search Fab for "stylized nature" or "toon fantasy" packs, or model low-poly versions with vertex colour. |
-| Clubs | One stylised mesh per club family (wood, iron, wedge, putter), attached to a hand socket. |
-| HUD | Move to UMG when you reskin: circular club icon bottom-left, curved gauge, wind dial. `AGolfHUD` shows exactly which data each widget needs. |
+| Fairway, tee box | `PM_Fairway` |
+| Rough, trees, everything else | `PM_Rough` |
+| Green | `PM_Green` |
+| Bunker | `PM_Bunker` |
+| Water | `PM_Water` |
+| Out of bounds | `PM_OutOfBounds` |
 
-Swap the blockout pieces in place so the physical materials stay the same. Each surface's material has to keep its `PM_*` physical material, because the ball physics reads the surface type from it.
+On a Landscape, give each paint layer its physical material with a **Landscape Physical Material Output** node, and the ball will read the paint.
+
+## Steps, in order
+
+### 1. Real trees (quick win)
+1. Download free trees on Fab (search "Megascans trees", e.g. European Beech, Scots Pine, Black Alder) and add them to the project.
+2. Open `Scripts/build_blockout_course.py` and put their paths in `TREE_MESHES` at the top.
+3. Run the script again. Every tree position on all 18 holes gets a random real tree, rotation and size.
+
+### 2. Terrain
+The blockout is flat boxes. A real course needs a **Landscape** with gentle slopes: fairways that roll, greens with break.
+The ball physics already handles slopes, and the putting grid shows them (white is flat, amber is a few percent, red is steep).
+Sculpt the landscape under each hole, then paint Fairway, Rough, Green and Bunker layers following the blockout, then delete the blockout slabs.
+Keep greens between 0.5% and 3% slope; steeper greens become unputtable at real stimp speeds.
+
+### 3. Turf and sand
+Use a Landscape material with the Megascans grass surfaces (e.g. "Short Grass", "Lawn"). Add:
+- mowing stripes on fairways (a world-aligned stripe mask that changes value slightly),
+- a finer, lighter cut on greens and a fringe band around them,
+- raked sand with a lip for bunkers.
+
+### 4. Water
+Use the **Water** plugin (lakes and rivers) or a simple translucent material. Keep a collision surface with `PM_Water` at water level so the ball still finds the hazard.
+
+### 5. The golfer
+Add the **Third Person** content pack (**Add → Add Feature or Content Pack**) to get the Manny/Quinn mannequin. Then:
+1. Make a Blueprint child of `GolfCharacter`, set its mesh to `SKM_Manny` and its animation class to the mannequin's anim blueprint.
+2. Get a golf swing animation (Mixamo "Golf Drive", or a mocap pack from Fab), retarget it to Manny with IK Retargeter, and make an Anim Montage. Set it as `SwingMontage`.
+3. Set that Blueprint as the Default Pawn Class in a Blueprint child of `GolfGameMode`, and set that as the level's GameMode Override.
+The grey placeholder cylinder hides itself automatically once the mesh is set.
+
+### 6. Light and atmosphere
+The course script adds a sun, sky atmosphere, volumetric clouds, sky light and height fog. For a morning or late-afternoon look, lower the sun's pitch to −20° and warm its colour a little.
+Leave auto-exposure off (already off in `DefaultEngine.ini`).
+
+### Phones
+Lumen and virtual shadows only run on PC and consoles; phones use the mobile renderer. For phones, bake distant trees into impostors (Fab "Impostor Baker"), keep Nanite off for foliage, and test on a real device early.
 
 ## Aura prompts
 
-If you use the Aura assistant in the Unreal Editor, these prompts line up with this project's structure:
+Paste these into Aura in the Unreal Editor. Each one matches a step above.
 
-1. *"Create a Blueprint child of GolfCharacter called BP_Golfer, assign my imported skeletal mesh and the golf swing montage, and set it as the Default Pawn Class in a Blueprint child of GolfGameMode."*
-2. *"Create a mobile-friendly toon post-process material with 3 lighting bands and a 1-pixel dark outline from scene depth, and add it to an unbound post-process volume in the Course map."*
-3. *"In the Course map, replace every static mesh actor labelled TreeCanopy with a random pick from my stylized tree meshes, keeping location and scale."*
-4. *"Build a UMG widget WBP_GolfHUD that matches this layout: circular club selector bottom-left, horizontal power gauge bottom-centre with a gold impact zone near the left, wind dial top-right, hole number and par top-left."*
-5. *"Create a painted sky sphere material with a blue gradient and scrolling cloud textures, and use it in place of SkyAtmosphere in the Course map."*
+1. **Trees:** *"In the Course map, replace every actor whose label starts with TreeCanopy or TreeTrunk with a random mesh from /Game/Megascans/3D_Plants, keep the location, randomise yaw and scale between 0.85 and 1.25, and delete the originals."*
+2. **Terrain:** *"Create a Landscape under the actors in the outliner folder Course/Hole01, 600 by 150 metres, with gentle rolling height variation of about 2 metres, and flatten it where the GolfHole01 tee is."*
+3. **Layers:** *"Create a landscape material with layers Fairway, Rough, Green and Bunker using Megascans grass and sand textures, and add a Landscape Physical Material Output node mapping them to PM_Fairway, PM_Rough, PM_Green and PM_Bunker in /Game/Course/Materials."*
+4. **Stripes:** *"Add alternating mowing stripes, 6 metres wide, to the Fairway layer of the landscape material, varying brightness by 8 percent."*
+5. **Golfer:** *"Create a Blueprint child of GolfCharacter called BP_Golfer using SKM_Manny and ABP_Manny, retarget my golf swing animation to Manny, make it a montage and assign it to SwingMontage. Then make BP_GolfGameMode from GolfGameMode with BP_Golfer as Default Pawn Class and set it as the Course map's GameMode Override."*
+6. **Water:** *"Replace every actor labelled Water in the Course map with a Water Body Lake of the same size, and add a flat invisible box at water level using PM_Water so the ball detects it."*
 
-Check any Blueprint or material Aura generates against the class and property names in `Source/SkyLinks/Public`.
+Check anything Aura generates against the class and property names in `Source/SkyLinks/Public`, and keep the physical materials in the table above.

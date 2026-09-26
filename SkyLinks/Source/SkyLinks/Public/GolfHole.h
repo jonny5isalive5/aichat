@@ -51,9 +51,9 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Golf")
 	FString HoleName = TEXT("Unnamed");
 
-	/** Capture radius of the cup in cm. Regulation is 5.4; a little larger feels better on a phone. */
+	/** Capture radius of the cup in cm. 5.4 is regulation (108 mm hole). */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Golf")
-	float CupRadius = 8.f;
+	float CupRadius = 5.4f;
 
 	/** Strongest wind this hole can roll, cm/s. */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Golf")

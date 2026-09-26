@@ -29,9 +29,9 @@ AGolfHole::AGolfHole()
 		return Part;
 	};
 
-	CupMesh = MakePart(TEXT("CupMesh"), Cylinder.Object, FVector(0.f, 0.f, 0.2f), FVector(0.22f, 0.22f, 0.004f));
-	FlagPole = MakePart(TEXT("FlagPole"), Cylinder.Object, FVector(0.f, 0.f, 120.f), FVector(0.03f, 0.03f, 2.4f));
-	Flag = MakePart(TEXT("Flag"), Cube.Object, FVector(0.f, 32.f, 215.f), FVector(0.02f, 0.6f, 0.4f));
+	CupMesh = MakePart(TEXT("CupMesh"), Cylinder.Object, FVector(0.f, 0.f, 0.2f), FVector(0.108f, 0.108f, 0.004f));
+	FlagPole = MakePart(TEXT("FlagPole"), Cylinder.Object, FVector(0.f, 0.f, 107.f), FVector(0.013f, 0.013f, 2.13f));
+	Flag = MakePart(TEXT("Flag"), Cube.Object, FVector(0.f, 25.f, 190.f), FVector(0.005f, 0.5f, 0.35f));
 	CupMesh->SetCastShadow(false);
 }
 
@@ -61,7 +61,7 @@ void AGolfHole::ApplyColors()
 	};
 	Tint(CupMesh, FLinearColor(0.01f, 0.01f, 0.01f));
 	Tint(FlagPole, FLinearColor(0.95f, 0.95f, 0.9f));
-	Tint(Flag, FLinearColor(0.95f, 0.15f, 0.1f));
+	Tint(Flag, FLinearColor(0.9f, 0.75f, 0.05f));
 }
 
 FVector AGolfHole::GetTeeLocation() const

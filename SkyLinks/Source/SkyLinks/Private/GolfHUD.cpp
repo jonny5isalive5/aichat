@@ -16,15 +16,15 @@
 
 namespace Palette
 {
-	// Bright arcade look from the reference: deep navy panels, cyan trim, gold numbers.
-	const FLinearColor Panel(0.02f, 0.05f, 0.16f, 0.78f);
-	const FLinearColor PanelSolid(0.03f, 0.08f, 0.24f, 1.f);
-	const FLinearColor Trim(0.2f, 0.85f, 1.f, 1.f);
-	const FLinearColor Gold(1.f, 0.82f, 0.25f, 1.f);
+	// Broadcast-style golf sim: dark glass panels, white type, a single green accent.
+	const FLinearColor Panel(0.f, 0.f, 0.f, 0.5f);
+	const FLinearColor PanelSolid(0.02f, 0.02f, 0.02f, 0.8f);
+	const FLinearColor Trim(1.f, 1.f, 1.f, 0.85f);
+	const FLinearColor Gold(0.95f, 0.9f, 0.75f, 1.f);
 	const FLinearColor White(1.f, 1.f, 1.f, 1.f);
-	const FLinearColor Dim(0.7f, 0.78f, 0.9f, 1.f);
-	const FLinearColor Red(1.f, 0.28f, 0.2f, 1.f);
-	const FLinearColor Green(0.35f, 1.f, 0.45f, 1.f);
+	const FLinearColor Dim(0.72f, 0.74f, 0.72f, 1.f);
+	const FLinearColor Red(0.9f, 0.22f, 0.18f, 1.f);
+	const FLinearColor Green(0.45f, 0.85f, 0.3f, 1.f);
 }
 
 // ---------------------------------------------------------------- drawing helpers
@@ -304,6 +304,7 @@ void AGolfHUD::DrawPlaying(AGolfGameState* State, AGolfPlayerController* Control
 {
 	if (Controller->IsMyTurn())
 	{
+		DrawGreenGrid(Controller);
 		DrawPreview(Controller);
 	}
 	DrawHoleCard(State);
@@ -319,8 +320,7 @@ void AGolfHUD::DrawPlaying(AGolfGameState* State, AGolfPlayerController* Control
 	if (Controller->IsMyTurn())
 	{
 		DrawClubDisc(Controller);
-		DrawGauge(Controller);
-		DrawSwingButton(Controller);
+		DrawPowerMeter(Controller);
 	}
 }
 
@@ -389,57 +389,96 @@ void AGolfHUD::DrawWind(AGolfGameState* State)
 	Label(FString::Printf(TEXT("%.1fm"), Speed), Center + FVector2D(0.f, Radius + 2.5f * U), 3.f, Palette::White, true);
 }
 
+void AGolfHUD::DrawGreenGrid(AGolfPlayerController* Controller)
+{
+	// Slope arrows point downhill. White is nearly flat, amber is a few percent, red is steep.
+	const TArray<FVector>& Points = Controller->GetGreenGridPoints();
+	const TArray<FVector>& Slopes = Controller->GetGreenGridSlopes();
+	for (int32 Index = 0; Index < Points.Num() && Index < Slopes.Num(); ++Index)
+	{
+		const float Percent = Slopes[Index].Size() * 100.f;
+		const FLinearColor Color = Percent < 1.f ? FLinearColor(1.f, 1.f, 1.f, 0.45f)
+			: Percent < 3.f ? FLinearColor(1.f, 0.8f, 0.3f, 0.8f) : FLinearColor(1.f, 0.3f, 0.2f, 0.9f);
+
+		FVector2D From;
+		if (!ToScreen(Points[Index] + FVector(0.f, 0.f, 1.f), From))
+		{
+			continue;
+		}
+		Disc(From, 0.25f * U, Color);
+		if (Percent >= 0.3f)
+		{
+			const FVector Tip = Points[Index] + Slopes[Index].GetSafeNormal() * FMath::Clamp(Percent * 8.f, 12.f, 45.f) + FVector(0.f, 0.f, 1.f);
+			FVector2D To;
+			if (ToScreen(Tip, To))
+			{
+				Line(From, To, Color, 0.25f * U);
+			}
+		}
+	}
+}
+
 void AGolfHUD::DrawPreview(AGolfPlayerController* Controller)
 {
 	if (!Controller->HasPreview())
 	{
 		return;
 	}
-
-	// Flight arc as dots.
 	const TArray<FVector>& Path = Controller->GetPreviewPath();
-	for (const FVector& Point : Path)
+	const FVector Landing = Controller->GetPreviewLanding();
+	const bool bPutt = Controller->IsPutting();
+
+	if (bPutt)
 	{
-		FVector2D Screen;
-		if (ToScreen(Point, Screen))
+		// Solid aim line laid over the green, so you can line up the putt.
+		FVector2D Previous;
+		bool bHavePrevious = false;
+		for (const FVector& Point : Path)
 		{
-			Disc(Screen, 0.45f * U, FLinearColor(1.f, 1.f, 1.f, 0.8f));
+			FVector2D Screen;
+			const bool bOnScreen = ToScreen(Point + FVector(0.f, 0.f, 0.5f), Screen);
+			if (bOnScreen && bHavePrevious)
+			{
+				Line(Previous, Screen, FLinearColor(1.f, 1.f, 1.f, 0.9f), 0.35f * U);
+			}
+			Previous = Screen;
+			bHavePrevious = bOnScreen;
+		}
+	}
+	else
+	{
+		for (const FVector& Point : Path)
+		{
+			FVector2D Screen;
+			if (ToScreen(Point, Screen))
+			{
+				Disc(Screen, 0.35f * U, FLinearColor(1.f, 1.f, 1.f, 0.7f));
+			}
 		}
 	}
 
-	// Landing ring on the ground at full power, plus a marker scaled to the power being charged.
-	const FVector Landing = Controller->GetPreviewLanding();
-	const float RingRadius = 250.f;
+	// Target ring on the ground where the ball lands (or stops, for a putt).
+	const float RingRadius = bPutt ? 30.f : 250.f;
 	FVector2D Previous;
 	bool bHavePrevious = false;
 	for (int32 Index = 0; Index <= 32; ++Index)
 	{
 		const float Angle = 2.f * PI * Index / 32.f;
 		FVector2D Screen;
-		const bool bOnScreen = ToScreen(Landing + FVector(FMath::Cos(Angle), FMath::Sin(Angle), 0.f) * RingRadius, Screen);
+		const bool bOnScreen = ToScreen(Landing + FVector(FMath::Cos(Angle), FMath::Sin(Angle), 0.f) * RingRadius + FVector(0.f, 0.f, 1.f), Screen);
 		if (bOnScreen && bHavePrevious)
 		{
-			Line(Previous, Screen, Palette::Gold, 0.45f * U);
+			Line(Previous, Screen, Controller->IsSwinging() ? Palette::Green : Palette::White, 0.4f * U);
 		}
 		Previous = Screen;
 		bHavePrevious = bOnScreen;
 	}
 
-	if (Controller->GetGaugeState() != AGolfPlayerController::EGauge::Idle && Path.Num() > 0)
-	{
-		const float Power = Controller->GetGaugeState() == AGolfPlayerController::EGauge::Rising ? Controller->GetGaugePosition() : Controller->GetGaugePower();
-		FVector2D Screen;
-		if (ToScreen(FMath::Lerp(Path[0], Landing, FMath::Clamp(Power, 0.f, 1.1f)), Screen))
-		{
-			Ring(Screen, 1.6f * U, Palette::Trim, 0.5f * U);
-		}
-	}
-
 	const float Meters = FVector::Dist2D(Path.Num() > 0 ? Path[0] : Landing, Landing) / 100.f;
 	FVector2D LabelPos;
-	if (ToScreen(Landing + FVector(0.f, 0.f, 300.f), LabelPos))
+	if (ToScreen(Landing + FVector(0.f, 0.f, bPutt ? 40.f : 300.f), LabelPos))
 	{
-		Label(FString::Printf(TEXT("%.0f m"), Meters), LabelPos, 3.f, Palette::Gold, true);
+		Label(bPutt ? FString::Printf(TEXT("%.1f m"), Meters) : FString::Printf(TEXT("%.0f m"), Meters), LabelPos, 3.f, Palette::White, true);
 	}
 }
 
@@ -463,55 +502,48 @@ void AGolfHUD::DrawClubDisc(AGolfPlayerController* Controller)
 	RoundButton(EGolfHudButton::Spin, FVector2D(34.f * U, Canvas->ClipY - 8.f * U), 6.f * U, Controller->GetSpinLabel(), Palette::PanelSolid);
 }
 
-void AGolfHUD::DrawGauge(AGolfPlayerController* Controller)
+void AGolfHUD::DrawPowerMeter(AGolfPlayerController* Controller)
 {
 	using PC = AGolfPlayerController;
-	const float Left = Canvas->ClipX * 0.27f;
-	const float Width = Canvas->ClipX * 0.46f;
-	const float Top = Canvas->ClipY - 13.f * U;
-	const float Height = 5.f * U;
-	auto X = [&](float Pos) { return Left + (Pos - PC::GaugeMin) / (PC::GaugeMax - PC::GaugeMin) * Width; };
 
-	Box(FVector2D(Left - U, Top - U), FVector2D(Width + 2.f * U, Height + 2.f * U), Palette::PanelSolid);
-	Box(FVector2D(Left, Top), FVector2D(Width, Height), FLinearColor(0.08f, 0.14f, 0.3f, 1.f));
+	// Swipe track on the right: fills as the finger travels up. The swipe itself can start anywhere low on screen.
+	const float Bottom = Canvas->ClipY - 8.f * U;
+	const float Length = PC::FullPowerSwipe * Canvas->ClipY;
+	const float CenterX = Canvas->ClipX - 9.f * U;
+	const float Width = 2.4f * U;
+	const float Power = Controller->GetSwingPower();
 
-	// Overdrive zone past 100%.
-	Box(FVector2D(X(1.f), Top), FVector2D(X(PC::GaugeMax) - X(1.f), Height), FLinearColor(0.8f, 0.15f, 0.1f, 0.7f));
-	// Impact window and the perfect sliver at the impact point.
-	Box(FVector2D(X(-PC::ImpactWindow), Top), FVector2D(X(PC::ImpactWindow) - X(-PC::ImpactWindow), Height), FLinearColor(0.2f, 0.85f, 1.f, 0.25f));
-	Box(FVector2D(X(-PC::PerfectWindow), Top), FVector2D(X(PC::PerfectWindow) - X(-PC::PerfectWindow), Height), Palette::Gold);
-
+	Box(FVector2D(CenterX - Width * 0.5f, Bottom - Length), FVector2D(Width, Length), Palette::Panel);
 	for (const float Notch : { 0.25f, 0.5f, 0.75f, 1.f })
 	{
-		Line(FVector2D(X(Notch), Top), FVector2D(X(Notch), Top + Height * 0.35f), Palette::Dim, 0.25f * U);
+		const float Y = Bottom - Length * Notch;
+		Line(FVector2D(CenterX - Width, Y), FVector2D(CenterX + Width, Y), Palette::Dim, 0.2f * U);
 	}
-
-	const PC::EGauge Gauge = Controller->GetGaugeState();
-	if (Gauge == PC::EGauge::Returning)
+	if (Power > 0.f)
 	{
-		Box(FVector2D(X(0.f), Top), FVector2D(X(Controller->GetGaugePower()) - X(0.f), Height), FLinearColor(1.f, 0.82f, 0.25f, 0.45f));
-		Line(FVector2D(X(Controller->GetGaugePower()), Top - U), FVector2D(X(Controller->GetGaugePower()), Top + Height + U), Palette::White, 0.5f * U);
+		Box(FVector2D(CenterX - Width * 0.5f, Bottom - Length * Power), FVector2D(Width, Length * Power), FLinearColor(0.45f, 0.85f, 0.3f, 0.85f));
 	}
-	if (Gauge != PC::EGauge::Idle)
+
+	// Straightness: the marker slides left or right as the swipe drifts.
+	const float Accuracy = Controller->GetSwingAccuracy();
+	const FVector2D Straight(CenterX, Bottom + 3.f * U);
+	Line(Straight - FVector2D(4.f * U, 0.f), Straight + FVector2D(4.f * U, 0.f), Palette::Dim, 0.2f * U);
+	if (Controller->IsSwinging())
 	{
-		const float MarkerX = X(Controller->GetGaugePosition());
-		Line(FVector2D(MarkerX, Top - 1.5f * U), FVector2D(MarkerX, Top + Height + 1.5f * U), Palette::Trim, 0.8f * U);
+		Disc(Straight + FVector2D(Accuracy * 4.f * U, 0.f), 0.8f * U, FMath::IsNearlyZero(Accuracy) ? Palette::Green : Palette::Red);
 	}
 
-	const float PowerShown = Gauge == PC::EGauge::Rising ? Controller->GetGaugePosition() : Gauge == PC::EGauge::Returning ? Controller->GetGaugePower() : 0.f;
-	Label(FString::Printf(TEXT("%d%%"), FMath::RoundToInt(PowerShown * 100.f)), FVector2D(Left + Width * 0.5f, Top - 3.5f * U), 3.2f, Palette::White, true);
+	const FString Text = Controller->IsSwinging() ? FString::Printf(TEXT("%d%%"), FMath::RoundToInt(Power * 100.f)) : TEXT("SWIPE UP");
+	Label(Text, FVector2D(CenterX, Bottom - Length - 3.f * U), 2.8f, Palette::White, true);
 
+	if (!Controller->IsSwinging())
+	{
+		Label(TEXT("Swipe up from the bottom to swing  ·  drag the top to aim"), FVector2D(Canvas->ClipX * 0.5f, Canvas->ClipY - 4.f * U), 2.6f, Palette::Dim, true);
+	}
 	if (GetWorld()->GetTimeSeconds() - Controller->GetPerfectFlashTime() < 1.2f)
 	{
-		Label(TEXT("PERFECT!"), FVector2D(Canvas->ClipX * 0.5f, Canvas->ClipY * 0.42f), 9.f, Palette::Gold, true);
+		Label(TEXT("PURE STRIKE"), FVector2D(Canvas->ClipX * 0.5f, Canvas->ClipY * 0.42f), 6.f, Palette::White, true);
 	}
-}
-
-void AGolfHUD::DrawSwingButton(AGolfPlayerController* Controller)
-{
-	const bool bRunning = Controller->GetGaugeState() != AGolfPlayerController::EGauge::Idle;
-	RoundButton(EGolfHudButton::Swing, FVector2D(Canvas->ClipX - 15.f * U, Canvas->ClipY - 16.f * U), 12.f * U,
-		bRunning ? TEXT("TAP!") : TEXT("SWING"), bRunning ? FLinearColor(0.75f, 0.2f, 0.1f, 1.f) : Palette::PanelSolid);
 }
 
 void AGolfHUD::DrawScorecard(AGolfGameState* State)

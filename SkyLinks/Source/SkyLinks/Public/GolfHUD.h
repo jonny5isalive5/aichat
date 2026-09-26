@@ -30,7 +30,7 @@ enum class EGolfHudButton : uint8
 /**
  * Landscape HUD drawn straight to the canvas so the game runs with no UI assets.
  * Layout: hole card top-left, players under it, wind top-right, club disc bottom-left,
- * power gauge bottom-centre, swing button bottom-right, shot preview on the course.
+ * swipe power meter bottom-right, shot preview and green-reading grid on the course.
  * All sizes are in units of 1% of screen height, so it scales across phones.
  */
 UCLASS()
@@ -63,10 +63,10 @@ private:
 	void DrawHoleCard(AGolfGameState* State);
 	void DrawPlayers(AGolfGameState* State);
 	void DrawWind(AGolfGameState* State);
+	void DrawGreenGrid(AGolfPlayerController* Controller);
 	void DrawPreview(AGolfPlayerController* Controller);
 	void DrawClubDisc(AGolfPlayerController* Controller);
-	void DrawGauge(AGolfPlayerController* Controller);
-	void DrawSwingButton(AGolfPlayerController* Controller);
+	void DrawPowerMeter(AGolfPlayerController* Controller);
 	void DrawScorecard(AGolfGameState* State);
 	void DrawAnnouncement(AGolfGameState* State);
 

@@ -15,10 +15,10 @@
 
 namespace
 {
-	constexpr float RiseSeconds = 1.0f;       // 0 -> 100% power
-	constexpr float ReturnSeconds = 0.7f;     // 100% -> impact point
 	constexpr float AimDegreesPerPixel = 0.08f;
 	constexpr float KeyAimDegreesPerSecond = 40.f;
+	constexpr float KeyChargeSeconds = 1.2f;
+	constexpr float MinShotPower = 0.03f;
 
 	const FVector2D SpinPresets[] = { { 0.f, 0.f }, { 0.f, -1.f }, { 0.f, 1.f } };
 	const TCHAR* SpinLabels[] = { TEXT("SPIN"), TEXT("BACK"), TEXT("TOP") };
@@ -38,7 +38,8 @@ void AGolfPlayerController::SetupInputComponent()
 	InputComponent->BindTouch(IE_Repeat, this, &AGolfPlayerController::OnTouchMoved);
 	InputComponent->BindTouch(IE_Released, this, &AGolfPlayerController::OnTouchReleased);
 
-	InputComponent->BindKey(EKeys::SpaceBar, IE_Pressed, this, &AGolfPlayerController::OnSwingKey);
+	InputComponent->BindKey(EKeys::SpaceBar, IE_Pressed, this, &AGolfPlayerController::OnSwingKeyPressed);
+	InputComponent->BindKey(EKeys::SpaceBar, IE_Released, this, &AGolfPlayerController::OnSwingKeyReleased);
 	InputComponent->BindKey(EKeys::E, IE_Pressed, this, &AGolfPlayerController::OnNextClub);
 	InputComponent->BindKey(EKeys::Q, IE_Pressed, this, &AGolfPlayerController::OnPrevClub);
 	InputComponent->BindKey(EKeys::R, IE_Pressed, this, &AGolfPlayerController::OnSpinKey);
@@ -64,11 +65,24 @@ AGolfCharacter* AGolfPlayerController::GetMyGolfer() const
 	return GetPawn<AGolfCharacter>();
 }
 
+float AGolfPlayerController::ViewportHeight() const
+{
+	int32 SizeX = 0, SizeY = 0;
+	GetViewportSize(SizeX, SizeY);
+	return FMath::Max(1, SizeY);
+}
+
 bool AGolfPlayerController::IsMyTurn() const
 {
 	const AGolfGameState* State = GetGolfState();
 	const AGolfBall* Ball = GetMyBall();
 	return State && Ball && State->Phase == EGolfMatchPhase::PlayingHole && State->ActivePlayer == PlayerState && Ball->IsAtRest();
+}
+
+bool AGolfPlayerController::IsPutting() const
+{
+	const TArray<FGolfClub>& Bag = GolfPhysics::GetClubBag();
+	return Bag.IsValidIndex(ClubIndex) && Bag[ClubIndex].bIsPutter;
 }
 
 FString AGolfPlayerController::GetSpinLabel() const
@@ -96,10 +110,12 @@ void AGolfPlayerController::Tick(float DeltaSeconds)
 			OnTurnStarted();
 		}
 	}
-	else
+	else if (bWasMyTurn)
 	{
-		Gauge = EGauge::Idle;
+		CancelSwing();
 		bHasPreview = false;
+		GridPoints.Reset();
+		GridSlopes.Reset();
 	}
 	bWasMyTurn = bMyTurn;
 	if (!bMyTurn)
@@ -107,50 +123,49 @@ void AGolfPlayerController::Tick(float DeltaSeconds)
 		return;
 	}
 
-	if (AimInput != 0.f && Gauge == EGauge::Idle)
+	if (AimInput != 0.f && !IsSwinging())
 	{
 		SetAim(AimYaw + AimInput * KeyAimDegreesPerSecond * DeltaSeconds);
 	}
 
-	switch (Gauge)
+	if (bKeyCharging)
 	{
-	case EGauge::Rising:
-		GaugePos += GaugeDirection * DeltaSeconds / RiseSeconds;
-		if (GaugePos >= GaugeMax)
+		SwingPower += KeyChargeDirection * DeltaSeconds / KeyChargeSeconds;
+		if (SwingPower >= 1.f)
 		{
-			GaugePos = GaugeMax;
-			GaugeDirection = -1.f;
+			SwingPower = 1.f;
+			KeyChargeDirection = -1.f;
 		}
-		else if (GaugePos <= 0.f && GaugeDirection < 0.f)
+		else if (SwingPower <= 0.f)
 		{
-			Gauge = EGauge::Idle; // Never set the power: cancel.
-			GaugePos = 0.f;
+			SwingPower = 0.f;
+			KeyChargeDirection = 1.f;
 		}
-		break;
+	}
 
-	case EGauge::Returning:
-		GaugePos -= DeltaSeconds / ReturnSeconds;
-		if (GaugePos <= GaugeMin)
-		{
-			Fire(-1.f); // Missed the impact tap: a full hook.
-		}
-		break;
-
-	default:
-		break;
+	// The preview follows the power being swiped; at rest it shows a full-power shot.
+	const float WantedPower = IsSwinging() ? FMath::Max(SwingPower, MinShotPower) : 1.f;
+	if (FMath::Abs(WantedPower - PreviewPower) > 0.01f)
+	{
+		PreviewPower = WantedPower;
+		bPreviewDirty = true;
 	}
 
 	PreviewCooldown -= DeltaSeconds;
+	GridCooldown -= DeltaSeconds;
 	if (bPreviewDirty && PreviewCooldown <= 0.f)
 	{
 		RefreshPreview();
+	}
+	if (bGridDirty && GridCooldown <= 0.f)
+	{
+		RefreshGreenGrid();
 	}
 }
 
 void AGolfPlayerController::OnTurnStarted()
 {
-	Gauge = EGauge::Idle;
-	GaugePos = 0.f;
+	CancelSwing();
 
 	const AGolfBall* Ball = GetMyBall();
 	const AGolfGameState* State = GetGolfState();
@@ -188,6 +203,7 @@ void AGolfPlayerController::OnTurnStarted()
 		}
 	}
 	bPreviewDirty = true;
+	bGridDirty = true;
 }
 
 void AGolfPlayerController::SetAim(float Yaw)
@@ -198,22 +214,24 @@ void AGolfPlayerController::SetAim(float Yaw)
 		Golfer->SetLocalAim(AimYaw);
 	}
 	bPreviewDirty = true;
+	bGridDirty = true;
 }
 
 void AGolfPlayerController::CycleClub(int32 Direction)
 {
-	if (!IsMyTurn() || Gauge != EGauge::Idle)
+	if (!IsMyTurn() || IsSwinging())
 	{
 		return;
 	}
 	const int32 Count = GolfPhysics::GetClubBag().Num();
 	ClubIndex = (ClubIndex + Direction + Count) % Count;
 	bPreviewDirty = true;
+	bGridDirty = true;
 }
 
 void AGolfPlayerController::CycleSpin()
 {
-	if (!IsMyTurn() || Gauge != EGauge::Idle)
+	if (!IsMyTurn() || IsSwinging())
 	{
 		return;
 	}
@@ -222,59 +240,82 @@ void AGolfPlayerController::CycleSpin()
 	bPreviewDirty = true;
 }
 
-void AGolfPlayerController::GaugeTap()
+// ---------------------------------------------------------------- swinging
+
+void AGolfPlayerController::UpdateSwipe(const FVector2D& Screen)
 {
-	if (!IsMyTurn())
-	{
-		return;
-	}
-	switch (Gauge)
-	{
-	case EGauge::Idle:
-		Gauge = EGauge::Rising;
-		GaugePos = 0.f;
-		GaugeDirection = 1.f;
-		break;
+	const float Height = ViewportHeight();
+	SwingPower = FMath::Clamp((SwipeStart.Y - Screen.Y) / (FullPowerSwipe * Height), 0.f, 1.f);
 
-	case EGauge::Rising:
-		GaugePower = FMath::Max(GaugePos, 0.02f);
-		Gauge = EGauge::Returning;
-		break;
-
-	case EGauge::Returning:
-		if (FMath::Abs(GaugePos) <= PerfectWindow)
-		{
-			PerfectFlashTime = GetWorld()->GetTimeSeconds();
-			Fire(0.f);
-		}
-		else
-		{
-			// Early (still right of the impact point) pushes and slices; late hooks.
-			Fire(FMath::Clamp(GaugePos / ImpactWindow, -1.f, 1.f));
-		}
-		break;
-	}
+	// Straight up is straight. Drift right slices (positive), drift left hooks.
+	const float Drift = (Screen.X - SwipeStart.X) / (FullErrorDrift * Height);
+	const float Magnitude = FMath::Clamp((FMath::Abs(Drift) - StraightDeadzone) / (1.f - StraightDeadzone), 0.f, 1.f);
+	SwingAccuracy = FMath::Sign(Drift) * Magnitude;
 }
 
-void AGolfPlayerController::Fire(float Accuracy)
+void AGolfPlayerController::ReleaseSwing()
+{
+	const float Power = SwingPower;
+	const float Accuracy = SwingAccuracy;
+	CancelSwing();
+	if (Power < MinShotPower || !IsMyTurn())
+	{
+		return; // Too short to count: treat it as a cancelled swipe.
+	}
+	if (Accuracy == 0.f)
+	{
+		PerfectFlashTime = GetWorld()->GetTimeSeconds();
+	}
+	Fire(Power, Accuracy);
+}
+
+void AGolfPlayerController::CancelSwing()
+{
+	bSwiping = false;
+	bKeyCharging = false;
+	SwingPower = 0.f;
+	SwingAccuracy = 0.f;
+}
+
+void AGolfPlayerController::Fire(float Power, float Accuracy)
 {
 	FGolfShotInput Input;
 	Input.AimYaw = AimYaw;
-	Input.Power = GaugePower;
+	Input.Power = Power;
 	Input.Accuracy = Accuracy;
 	Input.ClubIndex = ClubIndex;
 	Input.Spin = Spin;
 	ServerTakeShot(Input);
-
-	Gauge = EGauge::Idle;
-	GaugePos = 0.f;
 	bHasPreview = false;
+	GridPoints.Reset();
+	GridSlopes.Reset();
 }
+
+void AGolfPlayerController::OnSwingKeyPressed()
+{
+	if (IsMyTurn() && !IsSwinging())
+	{
+		bKeyCharging = true;
+		KeyChargeDirection = 1.f;
+		SwingPower = 0.f;
+		SwingAccuracy = 0.f;
+	}
+}
+
+void AGolfPlayerController::OnSwingKeyReleased()
+{
+	if (bKeyCharging)
+	{
+		ReleaseSwing();
+	}
+}
+
+// ---------------------------------------------------------------- previews
 
 void AGolfPlayerController::RefreshPreview()
 {
 	bPreviewDirty = false;
-	PreviewCooldown = 0.1f;
+	PreviewCooldown = 0.05f;
 
 	AGolfBall* Ball = GetMyBall();
 	const TArray<FGolfClub>& Bag = GolfPhysics::GetClubBag();
@@ -288,20 +329,139 @@ void AGolfPlayerController::RefreshPreview()
 	const FVector Start = Ball->GetRestLocation() + FVector(0.f, 0.f, 0.5f);
 	if (Club.bIsPutter)
 	{
+		// Aim line laid over the ground, as long as the putt would roll on a flat green.
 		const FVector Direction = FRotator(0.f, AimYaw, 0.f).Vector();
-		PreviewLanding = Start + Direction * GolfPhysics::PuttDistance(Club.LaunchSpeed);
-		PreviewPath = { Start, PreviewLanding };
+		const float Distance = GolfPhysics::PuttDistance(Club.LaunchSpeed * PreviewPower);
+		const int32 Steps = FMath::Clamp(FMath::CeilToInt(Distance / 20.f), 2, 400);
+		PreviewPath.Reset();
+		for (int32 Step = 0; Step <= Steps; ++Step)
+		{
+			FVector Point = Start + Direction * (Distance * Step / Steps);
+			FHitResult Hit;
+			if (GolfPhysics::SweepBall(GetWorld(), Point + FVector(0.f, 0.f, 100.f), Point - FVector(0.f, 0.f, 300.f), Hit, Ball))
+			{
+				Point = Hit.Location;
+			}
+			PreviewPath.Add(Point);
+		}
+		PreviewLanding = PreviewPath.Last();
 	}
 	else
 	{
 		FGolfShotInput Input;
 		Input.AimYaw = AimYaw;
-		Input.Power = 1.f;
+		Input.Power = PreviewPower;
 		Input.ClubIndex = ClubIndex;
 		Input.Spin = Spin;
 		GolfPhysics::PredictCarry(GetWorld(), GolfPhysics::MakeLaunch(Club, Input, Ball->GetLie(), Start), Ball, PreviewPath, PreviewLanding);
 	}
 	bHasPreview = true;
+}
+
+void AGolfPlayerController::RefreshGreenGrid()
+{
+	bGridDirty = false;
+	GridCooldown = 0.15f;
+	GridPoints.Reset();
+	GridSlopes.Reset();
+
+	AGolfBall* Ball = GetMyBall();
+	if (!Ball || !IsPutting())
+	{
+		return;
+	}
+
+	// Sample the green in a band along the aim line, out past the longest putt.
+	const float Reach = GolfPhysics::PuttDistance(GolfPhysics::GetClubBag()[ClubIndex].LaunchSpeed) + 300.f;
+	const FRotator Aim(0.f, AimYaw, 0.f);
+	const FVector Forward = Aim.Vector();
+	const FVector Right = FRotationMatrix(Aim).GetUnitAxis(EAxis::Y);
+	const FVector Origin = Ball->GetRestLocation();
+	constexpr float Spacing = 75.f;
+	constexpr float HalfWidth = 375.f;
+
+	for (float Along = -150.f; Along <= Reach; Along += Spacing)
+	{
+		for (float Side = -HalfWidth; Side <= HalfWidth; Side += Spacing)
+		{
+			const FVector Sample = Origin + Forward * Along + Right * Side;
+			FHitResult Hit;
+			if (!GolfPhysics::SweepBall(GetWorld(), Sample + FVector(0.f, 0.f, 150.f), Sample - FVector(0.f, 0.f, 400.f), Hit, Ball)
+				|| GolfPhysics::LieFromHit(Hit) != EGolfLie::Green)
+			{
+				continue;
+			}
+			GridPoints.Add(Hit.Location);
+			// Gravity along the surface: points downhill, length is the sine of the slope.
+			GridSlopes.Add(FVector::VectorPlaneProject(FVector(0.f, 0.f, -1.f), Hit.ImpactNormal));
+		}
+	}
+}
+
+// ---------------------------------------------------------------- touch
+
+bool AGolfPlayerController::HandleButton(const FVector2D& Screen)
+{
+	const AGolfHUD* Hud = GetHUD<AGolfHUD>();
+	UGolfSessionSubsystem* Sessions = GetGameInstance()->GetSubsystem<UGolfSessionSubsystem>();
+	int32 Payload = 0;
+	switch (Hud ? Hud->HitTest(Screen, Payload) : EGolfHudButton::None)
+	{
+	case EGolfHudButton::Start: ServerRequestStart(); return true;
+	case EGolfHudButton::Host:  HostGame(); return true;
+	case EGolfHudButton::Join:
+		bKeypadOpen = true;
+		EnteredCode.Reset();
+		return true;
+	case EGolfHudButton::KeypadDigit:
+		if (EnteredCode.Len() < 4)
+		{
+			EnteredCode.AppendInt(Payload);
+		}
+		return true;
+	case EGolfHudButton::KeypadDelete:
+		EnteredCode.LeftChopInline(1);
+		return true;
+	case EGolfHudButton::KeypadGo:
+		if (EnteredCode.Len() == 4)
+		{
+			bKeypadOpen = false;
+			JoinGame(EnteredCode);
+		}
+		return true;
+	case EGolfHudButton::KeypadCancel:
+		bKeypadOpen = false;
+		return true;
+	case EGolfHudButton::Friends:
+		bFriendsOpen = !bFriendsOpen;
+		if (bFriendsOpen && Sessions)
+		{
+			Sessions->RefreshFriends();
+		}
+		return true;
+	case EGolfHudButton::Friend:
+		if (Sessions)
+		{
+			Sessions->InviteFriend(Payload);
+		}
+		return true;
+	case EGolfHudButton::AcceptInvite:
+		if (Sessions)
+		{
+			Sessions->AcceptPendingInvite();
+		}
+		return true;
+	case EGolfHudButton::DeclineInvite:
+		if (Sessions)
+		{
+			Sessions->DeclinePendingInvite();
+		}
+		return true;
+	case EGolfHudButton::Club: CycleClub(1); return true;
+	case EGolfHudButton::Spin: CycleSpin(); return true;
+	default:
+		return false;
+	}
 }
 
 void AGolfPlayerController::OnTouchPressed(ETouchIndex::Type FingerIndex, FVector Location)
@@ -311,96 +471,57 @@ void AGolfPlayerController::OnTouchPressed(ETouchIndex::Type FingerIndex, FVecto
 		return;
 	}
 	const FVector2D Screen(Location.X, Location.Y);
-	const AGolfHUD* Hud = GetHUD<AGolfHUD>();
-	UGolfSessionSubsystem* Sessions = GetGameInstance()->GetSubsystem<UGolfSessionSubsystem>();
-	int32 Payload = 0;
-	switch (Hud ? Hud->HitTest(Screen, Payload) : EGolfHudButton::None)
+	if (HandleButton(Screen) || !IsMyTurn() || IsSwinging())
 	{
-	case EGolfHudButton::Start: ServerRequestStart(); return;
-	case EGolfHudButton::Host:  HostGame(); return;
-	case EGolfHudButton::Join:
-		bKeypadOpen = true;
-		EnteredCode.Reset();
 		return;
-	case EGolfHudButton::KeypadDigit:
-		if (EnteredCode.Len() < 4)
-		{
-			EnteredCode.AppendInt(Payload);
-		}
-		return;
-	case EGolfHudButton::KeypadDelete:
-		EnteredCode.LeftChopInline(1);
-		return;
-	case EGolfHudButton::KeypadGo:
-		if (EnteredCode.Len() == 4)
-		{
-			bKeypadOpen = false;
-			JoinGame(EnteredCode);
-		}
-		return;
-	case EGolfHudButton::KeypadCancel:
-		bKeypadOpen = false;
-		return;
-	case EGolfHudButton::Friends:
-		bFriendsOpen = !bFriendsOpen;
-		if (bFriendsOpen && Sessions)
-		{
-			Sessions->RefreshFriends();
-		}
-		return;
-	case EGolfHudButton::Friend:
-		if (Sessions)
-		{
-			Sessions->InviteFriend(Payload);
-		}
-		return;
-	case EGolfHudButton::AcceptInvite:
-		if (Sessions)
-		{
-			Sessions->AcceptPendingInvite();
-		}
-		return;
-	case EGolfHudButton::DeclineInvite:
-		if (Sessions)
-		{
-			Sessions->DeclinePendingInvite();
-		}
-		return;
-	case EGolfHudButton::Club:  CycleClub(1); return;
-	case EGolfHudButton::Spin:  CycleSpin(); return;
-	case EGolfHudButton::Swing: GaugeTap(); return;
-	default: break;
 	}
 
-	if (Gauge != EGauge::Idle)
+	if (Screen.Y >= ViewportHeight() * SwipeZoneTop)
 	{
-		GaugeTap();
-		return;
+		bSwiping = true;
+		SwipeStart = Screen;
+		SwingPower = 0.f;
+		SwingAccuracy = 0.f;
 	}
-	bDragging = true;
-	DragLastX = Screen.X;
+	else
+	{
+		bAiming = true;
+		AimLastX = Screen.X;
+	}
 }
 
 void AGolfPlayerController::OnTouchMoved(ETouchIndex::Type FingerIndex, FVector Location)
 {
-	if (FingerIndex != ETouchIndex::Touch1 || !bDragging)
+	if (FingerIndex != ETouchIndex::Touch1)
 	{
 		return;
 	}
-	if (IsMyTurn() && Gauge == EGauge::Idle)
+	if (bSwiping)
 	{
-		SetAim(AimYaw + (Location.X - DragLastX) * AimDegreesPerPixel);
+		UpdateSwipe(FVector2D(Location.X, Location.Y));
 	}
-	DragLastX = Location.X;
+	else if (bAiming && IsMyTurn())
+	{
+		SetAim(AimYaw + (Location.X - AimLastX) * AimDegreesPerPixel);
+		AimLastX = Location.X;
+	}
 }
 
 void AGolfPlayerController::OnTouchReleased(ETouchIndex::Type FingerIndex, FVector Location)
 {
-	if (FingerIndex == ETouchIndex::Touch1)
+	if (FingerIndex != ETouchIndex::Touch1)
 	{
-		bDragging = false;
+		return;
+	}
+	bAiming = false;
+	if (bSwiping)
+	{
+		UpdateSwipe(FVector2D(Location.X, Location.Y));
+		ReleaseSwing();
 	}
 }
+
+// ---------------------------------------------------------------- server and sessions
 
 void AGolfPlayerController::ServerTakeShot_Implementation(const FGolfShotInput& Input)
 {
