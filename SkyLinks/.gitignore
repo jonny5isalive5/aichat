@@ -5,6 +5,7 @@ DerivedDataCache/
 .vs/
 .idea/
 *.sln
+*.slnx
 *.suo
 *.xcworkspace
 *.blend1
