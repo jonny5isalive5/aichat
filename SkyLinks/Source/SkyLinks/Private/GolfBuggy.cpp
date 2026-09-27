@@ -253,8 +253,8 @@ void AGolfBuggy::Drive(float DeltaSeconds)
 	}
 	Speed = FMath::Clamp(Speed, -MaxReverseSpeed, MaxSpeed);
 
-	// Less steering lock at speed keeps it stable.
-	const float SpeedFactor = 1.f - 0.5f * FMath::Clamp(FMath::Abs(Speed) / MaxSpeed, 0.f, 1.f);
+	// Much less steering lock at speed keeps it stable (full lock only when slow).
+	const float SpeedFactor = 1.f - 0.8f * FMath::Clamp(FMath::Abs(Speed) / MaxSpeed, 0.f, 1.f);
 	SteerAngle = FMath::FInterpTo(SteerAngle, SteerInput * MaxSteerAngle * SpeedFactor, DeltaSeconds, 6.f);
 
 	// Bicycle model: yaw rate from speed, wheelbase and steering angle.

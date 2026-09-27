@@ -93,21 +93,21 @@ public:
 	UPROPERTY(EditAnywhere, Category = "Buggy|Meshes")
 	float BodyYawOffset = 0.f;
 
-	/** cm/s. 670 is about 24 km/h, a typical cart. */
+	/** cm/s. 2680 is about 96 km/h: four times a real cart, so trips between shots stay short. */
 	UPROPERTY(EditAnywhere, Category = "Buggy|Handling")
-	float MaxSpeed = 670.f;
+	float MaxSpeed = 2680.f;
 
 	UPROPERTY(EditAnywhere, Category = "Buggy|Handling")
-	float MaxReverseSpeed = 280.f;
+	float MaxReverseSpeed = 1120.f;
 
 	UPROPERTY(EditAnywhere, Category = "Buggy|Handling")
-	float Acceleration = 320.f;
+	float Acceleration = 1280.f;
 
 	UPROPERTY(EditAnywhere, Category = "Buggy|Handling")
-	float BrakeDeceleration = 900.f;
+	float BrakeDeceleration = 3600.f;
 
 	UPROPERTY(EditAnywhere, Category = "Buggy|Handling")
-	float CoastDeceleration = 180.f;
+	float CoastDeceleration = 720.f;
 
 	UPROPERTY(EditAnywhere, Category = "Buggy|Handling")
 	float MaxSteerAngle = 32.f;
