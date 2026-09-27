@@ -1,0 +1,30 @@
+{
+ "heightmap_path": "C:\\projects\\aichat-claude-admiring-volta-8o59gg\\SkyLinks\\Saved\\terrain\\hole02\\hole02_heightmap.png",
+ "landscape_name": "Terrain_Hole02",
+ "location": {
+  "x": -3500.0,
+  "y": 27300.0,
+  "z": -0.4296875
+ },
+ "scale": {
+  "x": 24.13,
+  "y": 24.13,
+  "z": 0.4296875
+ },
+ "component_count_x": 17,
+ "component_count_y": 10,
+ "quads_per_section": 63,
+ "sections_per_component": 1,
+ "blur_radius": 10,
+ "res_x": 1072,
+ "res_y": 631,
+ "cm_per_unit": 0.86273193359375,
+ "world_min": [
+  -3500.0,
+  27300.0
+ ],
+ "world_span": [
+  1071,
+  630
+ ]
+}

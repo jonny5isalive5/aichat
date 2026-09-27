@@ -1,0 +1,28 @@
+{
+ "heightmap_path": "C:/projects/aichat-claude-admiring-volta-8o59gg/SkyLinks/Saved/terrain/hole06/hole06_height.png",
+ "landscape_name": "Terrain_Hole06",
+ "location": {
+  "x": -3500.0,
+  "y": 168500.0,
+  "z": -0.4296875
+ },
+ "scale": {
+  "x": 29.761904761904763,
+  "y": 29.478458049886623,
+  "z": 0.4296875
+ },
+ "component_count_x": 24,
+ "component_count_y": 7,
+ "quads_per_section": 63,
+ "sections_per_component": 1,
+ "blur_radius": 10,
+ "res_x": 1513,
+ "res_y": 442,
+ "cm_per_unit": 0.86273193359375,
+ "folders": {
+  "fairway": "C:/projects/aichat-claude-admiring-volta-8o59gg/SkyLinks/Saved/terrain/hole06/hole06_fairway.png",
+  "rough": "C:/projects/aichat-claude-admiring-volta-8o59gg/SkyLinks/Saved/terrain/hole06/hole06_rough.png",
+  "green": "C:/projects/aichat-claude-admiring-volta-8o59gg/SkyLinks/Saved/terrain/hole06/hole06_green.png",
+  "bunker": "C:/projects/aichat-claude-admiring-volta-8o59gg/SkyLinks/Saved/terrain/hole06/hole06_bunker.png"
+ }
+}
