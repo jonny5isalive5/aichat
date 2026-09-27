@@ -82,4 +82,5 @@ protected:
 	bool bShotInFlight = false;
 	FTimerHandle FlowTimer;
 	FTimerHandle CameraTimer;
+	FTimerHandle StrikeTimer;
 };

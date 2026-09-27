@@ -47,4 +47,5 @@ public:
 	bool bTeedOff = false;
 	FVector LastShotLocation = FVector::ZeroVector;
 	bool bLastShotFromTee = true;
+	bool bLastShotWasPutt = false;
 };

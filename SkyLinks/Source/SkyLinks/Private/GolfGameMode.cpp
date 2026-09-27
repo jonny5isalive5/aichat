@@ -433,7 +433,7 @@ void AGolfGameMode::AddressBall(AGolfPlayerState* Player)
 	if (AGolfCharacter* Golfer = GetGolfer(Player))
 	{
 		const FVector BallLocation = Player->Ball->GetRestLocation();
-		Golfer->SetAddress(BallLocation, Hole->GetDefaultAimYaw(BallLocation));
+		Golfer->SetAddress(BallLocation, Hole->GetDefaultAimYaw(BallLocation), Player->Ball->GetLie() == EGolfLie::Green);
 		ViewAll(Golfer, 0.6f);
 	}
 
@@ -471,28 +471,50 @@ void AGolfGameMode::HandleShot(APlayerController* Shooter, const FGolfShotInput&
 
 	Player->LastShotLocation = Ball->GetRestLocation();
 	Player->bLastShotFromTee = Lie == EGolfLie::Tee;
+	Player->bLastShotWasPutt = Club.bIsPutter;
 	Player->Strokes++;
 	Player->bTeedOff = true;
 	bShotInFlight = true;
 
+	// The golfer swings first; the ball leaves when the club reaches it.
+	const EGolferSwing Swing = Club.bIsPutter ? EGolferSwing::Putt : Club.LaunchAngle >= 28.f ? EGolferSwing::Chip : EGolferSwing::Drive;
+	float ImpactDelay = 0.f;
 	if (AGolfCharacter* Golfer = GetGolfer(Player))
 	{
-		Golfer->SetAddress(Ball->GetRestLocation(), Clean.AimYaw);
-		Golfer->MulticastPlaySwing();
+		Golfer->SetAddress(Ball->GetRestLocation(), Clean.AimYaw, Club.bIsPutter);
+		Golfer->MulticastPlaySwing(Swing);
+		ImpactDelay = Golfer->GetImpactDelay(Swing);
 	}
 
+	const FGolfBallState LaunchState = GolfPhysics::MakeLaunch(Club, Clean, Lie, Start);
 	const FVector Wind = Club.bIsPutter ? FVector::ZeroVector : State->Wind;
-	Ball->Launch(GolfPhysics::MakeLaunch(Club, Clean, Lie, Start), Wind, State->CurrentHole->GetCupLocation(), State->CurrentHole->CupRadius);
-
-	// Cut everyone to the chase camera behind the ball.
+	const FVector Cup = State->CurrentHole->GetCupLocation();
+	const float CupRadius = State->CurrentHole->CupRadius;
 	TWeakObjectPtr<AGolfBall> WeakBall = Ball;
-	GetWorldTimerManager().SetTimer(CameraTimer, FTimerDelegate::CreateWeakLambda(this, [this, WeakBall]()
+	auto Strike = [this, WeakBall, LaunchState, Wind, Cup, CupRadius]()
 	{
-		if (WeakBall.IsValid())
+		if (!WeakBall.IsValid())
 		{
-			ViewAll(WeakBall.Get(), 0.35f);
+			return;
 		}
-	}), ChaseCameraDelay, false);
+		WeakBall->Launch(LaunchState, Wind, Cup, CupRadius);
+		// Cut everyone to the chase camera behind the ball.
+		GetWorldTimerManager().SetTimer(CameraTimer, FTimerDelegate::CreateWeakLambda(this, [this, WeakBall]()
+		{
+			if (WeakBall.IsValid())
+			{
+				ViewAll(WeakBall.Get(), 0.35f);
+			}
+		}), ChaseCameraDelay, false);
+	};
+	if (ImpactDelay > 0.f)
+	{
+		GetWorldTimerManager().SetTimer(StrikeTimer, FTimerDelegate::CreateWeakLambda(this, Strike), ImpactDelay, false);
+	}
+	else
+	{
+		Strike();
+	}
 }
 
 void AGolfGameMode::OnBallStopped(AGolfBall* Ball, EGolfShotResult Result)
@@ -540,7 +562,38 @@ void AGolfGameMode::OnBallStopped(AGolfBall* Ball, EGolfShotResult Result)
 		Ball->SetActorHiddenInGame(true);
 	}
 
-	GetWorldTimerManager().SetTimer(FlowTimer, this, &AGolfGameMode::NextTurn, TurnDelay, false);
+	// Let the golfer react, and give everyone time to watch it.
+	EGolferReaction Reaction = EGolferReaction::None;
+	switch (Result)
+	{
+	case EGolfShotResult::Holed:
+		Reaction = Player->Strokes == 1 ? EGolferReaction::HoleInOne
+			: Player->bLastShotWasPutt ? EGolferReaction::PuttVictory : EGolferReaction::Celebrate;
+		break;
+	case EGolfShotResult::Water:
+	case EGolfShotResult::OutOfBounds:
+		Reaction = EGolferReaction::BadShot;
+		break;
+	default:
+		if (Player->bLastShotWasPutt && FVector::Dist2D(Ball->GetRestLocation(), State->CurrentHole->GetCupLocation()) < 300.f)
+		{
+			Reaction = EGolferReaction::PuttMiss;
+		}
+		break;
+	}
+	float Delay = TurnDelay;
+	if (AGolfCharacter* Golfer = GetGolfer(Player); Golfer && Reaction != EGolferReaction::None)
+	{
+		const float Duration = Golfer->GetReactionDuration(Reaction);
+		if (Duration > 0.f)
+		{
+			Golfer->SetActorHiddenInGame(false);
+			Golfer->MulticastPlayReaction(Reaction);
+			ViewAll(Golfer, 0.5f);
+			Delay = FMath::Max(Delay, Duration);
+		}
+	}
+	GetWorldTimerManager().SetTimer(FlowTimer, this, &AGolfGameMode::NextTurn, Delay, false);
 }
 
 void AGolfGameMode::EndHole()

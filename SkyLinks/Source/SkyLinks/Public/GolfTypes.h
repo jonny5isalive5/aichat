@@ -33,6 +33,27 @@ enum class EGolfMatchPhase : uint8
 	RoundOver
 };
 
+/** Which golfer animation a shot uses. */
+UENUM(BlueprintType)
+enum class EGolferSwing : uint8
+{
+	Drive,
+	Chip,
+	Putt
+};
+
+/** Golfer animations played after a shot finishes. */
+UENUM(BlueprintType)
+enum class EGolferReaction : uint8
+{
+	None,
+	HoleInOne,
+	Celebrate,
+	PuttVictory,
+	PuttMiss,
+	BadShot
+};
+
 USTRUCT(BlueprintType)
 struct FGolfClub
 {
