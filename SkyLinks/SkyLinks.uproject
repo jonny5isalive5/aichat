@@ -1,59 +1,59 @@
-{
-	"FileVersion": 3,
-	"EngineAssociation": "5.5",
-	"Category": "",
-	"Description": "Sky Links: 18-hole multiplayer arcade golf for mobile.",
-	"Modules": [
-		{
-			"Name": "SkyLinks",
-			"Type": "Runtime",
-			"LoadingPhase": "Default",
-			"AdditionalDependencies": [
-				"Engine",
-				"CoreUObject"
-			]
-		}
-	],
-	"Plugins": [
-		{
-			"Name": "EnhancedInput",
-			"Enabled": true
-		},
-		{
-			"Name": "OnlineSubsystem",
-			"Enabled": true
-		},
-		{
-			"Name": "OnlineSubsystemNull",
-			"Enabled": true
-		},
-		{
-			"Name": "OnlineSubsystemEOS",
-			"Enabled": true
-		},
-		{
-			"Name": "EOSShared",
-			"Enabled": true
-		},
-		{
-			"Name": "OnlineSubsystemUtils",
-			"Enabled": true
-		},
-		{
-			"Name": "PythonScriptPlugin",
-			"Enabled": true
-		},
-		{
-			"Name": "EditorScriptingUtilities",
-			"Enabled": true
-		},
-		{
-			"Name": "Aura",
-			"Enabled": true,
-			"SupportedTargetPlatforms": [
-				"Win64",
-				"Mac"
-			]
-		}
-	]
+﻿{
+    "FileVersion":  3,
+    "EngineAssociation":  "5.8",
+    "Category":  "",
+    "Description":  "Sky Links: 18-hole multiplayer arcade golf for mobile.",
+    "Modules":  [
+                    {
+                        "Name":  "SkyLinks",
+                        "Type":  "Runtime",
+                        "LoadingPhase":  "Default",
+                        "AdditionalDependencies":  [
+                                                       "Engine",
+                                                       "CoreUObject"
+                                                   ]
+                    }
+                ],
+    "Plugins":  [
+                    {
+                        "Name":  "EnhancedInput",
+                        "Enabled":  true
+                    },
+                    {
+                        "Name":  "OnlineSubsystem",
+                        "Enabled":  true
+                    },
+                    {
+                        "Name":  "OnlineSubsystemNull",
+                        "Enabled":  true
+                    },
+                    {
+                        "Name":  "OnlineSubsystemEOS",
+                        "Enabled":  true
+                    },
+                    {
+                        "Name":  "EOSShared",
+                        "Enabled":  true
+                    },
+                    {
+                        "Name":  "OnlineSubsystemUtils",
+                        "Enabled":  true
+                    },
+                    {
+                        "Name":  "PythonScriptPlugin",
+                        "Enabled":  true
+                    },
+                    {
+                        "Name":  "EditorScriptingUtilities",
+                        "Enabled":  true
+                    },
+                    {
+                        "Name":  "Aura",
+                        "Enabled":  true,
+                        "SupportedTargetPlatforms":  [
+                                                         "Win64",
+                                                         "Mac"
+                                                     ]
+                    }
+                ]
 }
