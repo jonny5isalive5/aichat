@@ -1,0 +1,668 @@
+[
+  {
+    "hole": 1,
+    "kind": "green",
+    "x": 36000,
+    "y": 0,
+    "expected_z": 30.000532663412955,
+    "landscape_z": 30.000532663412955,
+    "pm": "PM_Green"
+  },
+  {
+    "hole": 1,
+    "kind": "green",
+    "x": 36500,
+    "y": 0,
+    "expected_z": 36.00030439597886,
+    "landscape_z": 36.00030439597886,
+    "pm": "PM_Green"
+  },
+  {
+    "hole": 1,
+    "kind": "green",
+    "x": 35500,
+    "y": 0,
+    "expected_z": 24.000230800534364,
+    "landscape_z": 24.000230800534364,
+    "pm": "PM_Green"
+  },
+  {
+    "hole": 1,
+    "kind": "green",
+    "x": 36000,
+    "y": 500,
+    "expected_z": 34.49952085762744,
+    "landscape_z": 34.49952085762744,
+    "pm": "PM_Green"
+  },
+  {
+    "hole": 1,
+    "kind": "green",
+    "x": 36000,
+    "y": -500,
+    "expected_z": 25.50093807934549,
+    "landscape_z": 25.50093807934549,
+    "pm": "PM_Green"
+  },
+  {
+    "hole": 1,
+    "kind": "tee",
+    "x": 0,
+    "y": 0,
+    "expected_z": 0.0,
+    "landscape_z": 0.0,
+    "pm": "PM_Fairway"
+  },
+  {
+    "hole": 1,
+    "kind": "tee",
+    "x": -300,
+    "y": -300,
+    "expected_z": 0.0,
+    "landscape_z": 0.0,
+    "pm": "PM_Fairway"
+  },
+  {
+    "hole": 1,
+    "kind": "tee",
+    "x": 300,
+    "y": 300,
+    "expected_z": 0.0,
+    "landscape_z": 0.0,
+    "pm": "PM_Fairway"
+  },
+  {
+    "hole": 1,
+    "kind": "fairway",
+    "x": 17500.0,
+    "y": 0.0,
+    "expected_z": 17.349791041545128,
+    "landscape_z": 17.349791041545128,
+    "pm": "PM_Fairway"
+  },
+  {
+    "hole": 1,
+    "kind": "rough",
+    "x": 1000,
+    "y": -4500,
+    "expected_z": 18.763853589595524,
+    "landscape_z": 18.763853589595524,
+    "pm": "PM_Rough"
+  },
+  {
+    "hole": 1,
+    "kind": "bunker",
+    "x": 33500,
+    "y": -2200,
+    "expected_z": 20.307562281251865,
+    "landscape_z": 20.307562281251865,
+    "pm": "PM_Bunker"
+  },
+  {
+    "hole": 1,
+    "kind": "bunker",
+    "x": 24500,
+    "y": 2400,
+    "expected_z": -2.4901889403704636,
+    "landscape_z": -2.4901889403704636,
+    "pm": "PM_Bunker"
+  },
+  {
+    "hole": 2,
+    "kind": "green",
+    "x": 17000,
+    "y": 35400,
+    "expected_z": 30.00033957603508,
+    "landscape_z": 30.00033957603508,
+    "pm": "PM_Green"
+  },
+  {
+    "hole": 2,
+    "kind": "green",
+    "x": 17500,
+    "y": 35400,
+    "expected_z": 22.99980584092028,
+    "landscape_z": 22.99980584092028,
+    "pm": "PM_Green"
+  },
+  {
+    "hole": 2,
+    "kind": "green",
+    "x": 16500,
+    "y": 35400,
+    "expected_z": 37.00027094113014,
+    "landscape_z": 37.00027094113014,
+    "pm": "PM_Green"
+  },
+  {
+    "hole": 2,
+    "kind": "green",
+    "x": 17000,
+    "y": 35900,
+    "expected_z": 32.99956567150105,
+    "landscape_z": 32.99956567150105,
+    "pm": "PM_Green"
+  },
+  {
+    "hole": 2,
+    "kind": "green",
+    "x": 17000,
+    "y": 34900,
+    "expected_z": 27.00062052943286,
+    "landscape_z": 27.00062052943286,
+    "pm": "PM_Green"
+  },
+  {
+    "hole": 2,
+    "kind": "tee",
+    "x": 0,
+    "y": 35000,
+    "expected_z": 0.0,
+    "landscape_z": 0.0,
+    "pm": "PM_Fairway"
+  },
+  {
+    "hole": 2,
+    "kind": "tee",
+    "x": -300,
+    "y": 34700,
+    "expected_z": 0.0,
+    "landscape_z": 0.0,
+    "pm": "PM_Fairway"
+  },
+  {
+    "hole": 2,
+    "kind": "tee",
+    "x": 300,
+    "y": 35300,
+    "expected_z": 0.0,
+    "landscape_z": 0.0,
+    "pm": "PM_Fairway"
+  },
+  {
+    "hole": 2,
+    "kind": "fairway",
+    "x": 13750.0,
+    "y": 35000.0,
+    "expected_z": 13.417598091583736,
+    "landscape_z": 13.417598091583736,
+    "pm": "PM_Fairway"
+  },
+  {
+    "hole": 2,
+    "kind": "rough",
+    "x": 1000,
+    "y": 30500,
+    "expected_z": 23.110997831974604,
+    "landscape_z": 23.110997831974604,
+    "pm": "PM_Rough"
+  },
+  {
+    "hole": 2,
+    "kind": "bunker",
+    "x": 16000,
+    "y": 33000,
+    "expected_z": -12.928884694632062,
+    "landscape_z": -12.928884694632062,
+    "pm": "PM_Bunker"
+  },
+  {
+    "hole": 2,
+    "kind": "bunker",
+    "x": 18200,
+    "y": 36900,
+    "expected_z": -8.623705062201063,
+    "landscape_z": -8.623705062201063,
+    "pm": "PM_Bunker"
+  },
+  {
+    "hole": 2,
+    "kind": "water",
+    "x": 8500.0,
+    "y": 39000.0,
+    "expected_z": 0.4,
+    "landscape_z": -59.99847412109375,
+    "pm": "PM_Water"
+  },
+  {
+    "hole": 3,
+    "kind": "green",
+    "x": 24000,
+    "y": 86500,
+    "expected_z": 29.999014095795633,
+    "landscape_z": 29.999014095795633,
+    "pm": "PM_Green"
+  },
+  {
+    "hole": 3,
+    "kind": "green",
+    "x": 24500,
+    "y": 86500,
+    "expected_z": 34.500531169154115,
+    "landscape_z": 34.500531169154115,
+    "pm": "PM_Green"
+  },
+  {
+    "hole": 3,
+    "kind": "green",
+    "x": 23500,
+    "y": 86500,
+    "expected_z": 25.500544785028964,
+    "landscape_z": 25.500544785028964,
+    "pm": "PM_Green"
+  },
+  {
+    "hole": 3,
+    "kind": "green",
+    "x": 24000,
+    "y": 87000,
+    "expected_z": 23.99993603690887,
+    "landscape_z": 23.99993603690887,
+    "pm": "PM_Green"
+  },
+  {
+    "hole": 3,
+    "kind": "green",
+    "x": 24000,
+    "y": 86000,
+    "expected_z": 36.00029047649251,
+    "landscape_z": 36.00029047649251,
+    "pm": "PM_Green"
+  },
+  {
+    "hole": 3,
+    "kind": "tee",
+    "x": 0,
+    "y": 70000,
+    "expected_z": 0.0,
+    "landscape_z": 0.0,
+    "pm": "PM_Fairway"
+  },
+  {
+    "hole": 3,
+    "kind": "tee",
+    "x": -300,
+    "y": 69700,
+    "expected_z": 0.0,
+    "landscape_z": 0.0,
+    "pm": "PM_Fairway"
+  },
+  {
+    "hole": 3,
+    "kind": "tee",
+    "x": 300,
+    "y": 70300,
+    "expected_z": 0.0,
+    "landscape_z": 0.0,
+    "pm": "PM_Fairway"
+  },
+  {
+    "hole": 3,
+    "kind": "fairway",
+    "x": 13500.0,
+    "y": 70000.0,
+    "expected_z": 5.6893484881286405,
+    "landscape_z": 5.6893484881286405,
+    "pm": "PM_Fairway"
+  },
+  {
+    "hole": 3,
+    "kind": "rough",
+    "x": 1000,
+    "y": 65500,
+    "expected_z": 24.615086890229946,
+    "landscape_z": 24.615086890229946,
+    "pm": "PM_Rough"
+  },
+  {
+    "hole": 3,
+    "kind": "bunker",
+    "x": 26200,
+    "y": 84000,
+    "expected_z": -15.481445692472532,
+    "landscape_z": -15.481445692472532,
+    "pm": "PM_Bunker"
+  },
+  {
+    "hole": 3,
+    "kind": "bunker",
+    "x": 21500,
+    "y": 79500,
+    "expected_z": -8.757079962684989,
+    "landscape_z": -8.757079962684989,
+    "pm": "PM_Bunker"
+  },
+  {
+    "hole": 4,
+    "kind": "green",
+    "x": 50000,
+    "y": 104500,
+    "expected_z": 30.00092123184818,
+    "landscape_z": 30.00092123184818,
+    "pm": "PM_Green"
+  },
+  {
+    "hole": 4,
+    "kind": "green",
+    "x": 50500,
+    "y": 104500,
+    "expected_z": 23.998724046870098,
+    "landscape_z": 23.998724046870098,
+    "pm": "PM_Green"
+  },
+  {
+    "hole": 4,
+    "kind": "green",
+    "x": 49500,
+    "y": 104500,
+    "expected_z": 35.99976151819821,
+    "landscape_z": 35.99976151819821,
+    "pm": "PM_Green"
+  },
+  {
+    "hole": 4,
+    "kind": "green",
+    "x": 50000,
+    "y": 105000,
+    "expected_z": 25.499273320979004,
+    "landscape_z": 25.499273320979004,
+    "pm": "PM_Green"
+  },
+  {
+    "hole": 4,
+    "kind": "green",
+    "x": 50000,
+    "y": 104000,
+    "expected_z": 34.50005146000484,
+    "landscape_z": 34.50005146000484,
+    "pm": "PM_Green"
+  },
+  {
+    "hole": 4,
+    "kind": "tee",
+    "x": 0,
+    "y": 105000,
+    "expected_z": 0.0,
+    "landscape_z": 0.0,
+    "pm": "PM_Fairway"
+  },
+  {
+    "hole": 4,
+    "kind": "tee",
+    "x": -300,
+    "y": 104700,
+    "expected_z": 0.0,
+    "landscape_z": 0.0,
+    "pm": "PM_Fairway"
+  },
+  {
+    "hole": 4,
+    "kind": "tee",
+    "x": 300,
+    "y": 105300,
+    "expected_z": 0.0,
+    "landscape_z": 0.0,
+    "pm": "PM_Fairway"
+  },
+  {
+    "hole": 4,
+    "kind": "fairway",
+    "x": 12000.0,
+    "y": 105000.0,
+    "expected_z": 4.194488857847896,
+    "landscape_z": 4.194488857847896,
+    "pm": "PM_Fairway"
+  },
+  {
+    "hole": 4,
+    "kind": "rough",
+    "x": 1000,
+    "y": 100500,
+    "expected_z": 22.612304638999024,
+    "landscape_z": 22.612304638999024,
+    "pm": "PM_Rough"
+  },
+  {
+    "hole": 4,
+    "kind": "bunker",
+    "x": 47000,
+    "y": 102500,
+    "expected_z": 1.539151751475858,
+    "landscape_z": 1.539151751475858,
+    "pm": "PM_Bunker"
+  },
+  {
+    "hole": 4,
+    "kind": "water",
+    "x": 22500.0,
+    "y": 105000.0,
+    "expected_z": 0.4,
+    "landscape_z": -59.99847412109375,
+    "pm": "PM_Water"
+  },
+  {
+    "hole": 4,
+    "kind": "water",
+    "x": 32000.0,
+    "y": 109400.0,
+    "expected_z": 0.4,
+    "landscape_z": -59.99847412109375,
+    "pm": "PM_Water"
+  },
+  {
+    "hole": 5,
+    "kind": "green",
+    "x": 19000,
+    "y": 139000,
+    "expected_z": 30.00016291871446,
+    "landscape_z": 30.00016291871446,
+    "pm": "PM_Green"
+  },
+  {
+    "hole": 5,
+    "kind": "green",
+    "x": 19500,
+    "y": 139000,
+    "expected_z": 37.49988467063893,
+    "landscape_z": 37.49988467063893,
+    "pm": "PM_Green"
+  },
+  {
+    "hole": 5,
+    "kind": "green",
+    "x": 18500,
+    "y": 139000,
+    "expected_z": 22.50063029438731,
+    "landscape_z": 22.50063029438731,
+    "pm": "PM_Green"
+  },
+  {
+    "hole": 5,
+    "kind": "green",
+    "x": 19000,
+    "y": 139500,
+    "expected_z": 31.999666053146832,
+    "landscape_z": 31.999666053146832,
+    "pm": "PM_Green"
+  },
+  {
+    "hole": 5,
+    "kind": "green",
+    "x": 19000,
+    "y": 138500,
+    "expected_z": 28.000659784282085,
+    "landscape_z": 28.000659784282085,
+    "pm": "PM_Green"
+  },
+  {
+    "hole": 5,
+    "kind": "tee",
+    "x": 0,
+    "y": 140000,
+    "expected_z": 0.0,
+    "landscape_z": 0.0,
+    "pm": "PM_Fairway"
+  },
+  {
+    "hole": 5,
+    "kind": "tee",
+    "x": -300,
+    "y": 139700,
+    "expected_z": 0.0,
+    "landscape_z": 0.0,
+    "pm": "PM_Fairway"
+  },
+  {
+    "hole": 5,
+    "kind": "tee",
+    "x": 300,
+    "y": 140300,
+    "expected_z": 0.0,
+    "landscape_z": 0.0,
+    "pm": "PM_Fairway"
+  },
+  {
+    "hole": 5,
+    "kind": "fairway",
+    "x": 12500.0,
+    "y": 140000.0,
+    "expected_z": 11.233692813919323,
+    "landscape_z": 11.233692813919323,
+    "pm": "PM_Fairway"
+  },
+  {
+    "hole": 5,
+    "kind": "rough",
+    "x": 1000,
+    "y": 135500,
+    "expected_z": 17.99901757131196,
+    "landscape_z": 17.99901757131196,
+    "pm": "PM_Rough"
+  },
+  {
+    "hole": 5,
+    "kind": "bunker",
+    "x": 17000,
+    "y": 137000,
+    "expected_z": 3.645529402293068,
+    "landscape_z": 3.645529402293068,
+    "pm": "PM_Bunker"
+  },
+  {
+    "hole": 5,
+    "kind": "bunker",
+    "x": 20500,
+    "y": 141200,
+    "expected_z": 27.29254521575445,
+    "landscape_z": 27.29254521575445,
+    "pm": "PM_Bunker"
+  },
+  {
+    "hole": 5,
+    "kind": "bunker",
+    "x": 15000,
+    "y": 141500,
+    "expected_z": -10.115937641336373,
+    "landscape_z": -10.115937641336373,
+    "pm": "PM_Bunker"
+  },
+  {
+    "hole": 6,
+    "kind": "green",
+    "x": 38000,
+    "y": 175000,
+    "expected_z": 29.999906616636846,
+    "landscape_z": 29.999906616636846,
+    "pm": "PM_Green"
+  },
+  {
+    "hole": 6,
+    "kind": "green",
+    "x": 38500,
+    "y": 175000,
+    "expected_z": 32.998991065381,
+    "landscape_z": 32.998991065381,
+    "pm": "PM_Green"
+  },
+  {
+    "hole": 6,
+    "kind": "green",
+    "x": 37500,
+    "y": 175000,
+    "expected_z": 27.000822167892697,
+    "landscape_z": 27.000822167892697,
+    "pm": "PM_Green"
+  },
+  {
+    "hole": 6,
+    "kind": "green",
+    "x": 38000,
+    "y": 175500,
+    "expected_z": 37.00001696127135,
+    "landscape_z": 37.00001696127135,
+    "pm": "PM_Green"
+  },
+  {
+    "hole": 6,
+    "kind": "green",
+    "x": 38000,
+    "y": 174500,
+    "expected_z": 22.999796272002392,
+    "landscape_z": 22.999796272002392,
+    "pm": "PM_Green"
+  },
+  {
+    "hole": 6,
+    "kind": "tee",
+    "x": 0,
+    "y": 175000,
+    "expected_z": 0.0,
+    "landscape_z": 0.0,
+    "pm": "PM_Fairway"
+  },
+  {
+    "hole": 6,
+    "kind": "tee",
+    "x": -300,
+    "y": 174700,
+    "expected_z": 0.0,
+    "landscape_z": 0.0,
+    "pm": "PM_Fairway"
+  },
+  {
+    "hole": 6,
+    "kind": "tee",
+    "x": 300,
+    "y": 175300,
+    "expected_z": 0.0,
+    "landscape_z": 0.0,
+    "pm": "PM_Fairway"
+  },
+  {
+    "hole": 6,
+    "kind": "fairway",
+    "x": 18500.0,
+    "y": 175000.0,
+    "expected_z": 52.13418534088385,
+    "landscape_z": 52.13418534088385,
+    "pm": "PM_Fairway"
+  },
+  {
+    "hole": 6,
+    "kind": "rough",
+    "x": 1000,
+    "y": 170500,
+    "expected_z": 12.966285236651991,
+    "landscape_z": 12.966285236651991,
+    "pm": "PM_Rough"
+  },
+  {
+    "hole": 6,
+    "kind": "bunker",
+    "x": 36000,
+    "y": 177000,
+    "expected_z": -17.223653523404327,
+    "landscape_z": -17.223653523404327,
+    "pm": "PM_Bunker"
+  }
+]

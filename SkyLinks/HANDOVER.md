@@ -1,5 +1,7 @@
 # Sky Links: project handover
 
+> **Codex update, 27 September 2026:** Codex now works directly on Boss420 with repository push access and Aura's local MCP bridge. Sections 2, 8 and 9 below describe the earlier cloud handover and are partly superseded. Live inspection found all six landscapes already shaped and layered. The completed terrain pass corrected green slopes, water basins and surface masks and aligned cups/tree bases. See [current verification and next steps](Docs/TERRAIN_STATUS_2026-09-27.md) and [terrain pipeline](Art/Terrain/README.md). Keep this original handover as historical context.
+
 Written 27 September 2026 by Claude (Claude Code, cloud session), for whoever takes over the code side (Codex).
 It covers where the project is, how the pieces fit, who does what (you, Aura, the owner), where everything lives, and what's next.
 

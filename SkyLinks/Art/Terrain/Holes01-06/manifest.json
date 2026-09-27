@@ -1,0 +1,313 @@
+{
+  "encoding": "uint16 PNG, row +Y column +X",
+  "actor_z_cm": -0.4296875,
+  "scale_z": 0.4296875,
+  "holes": [
+    {
+      "label": "Terrain_Hole01",
+      "grid": {
+        "W": 1009,
+        "H": 379,
+        "x0": -3500,
+        "y0": -8000,
+        "sx": 42.65873,
+        "sy": 42.65873
+      },
+      "cup_cm": [
+        36000,
+        0,
+        30
+      ],
+      "green_slope": [
+        0.012,
+        0.009
+      ],
+      "height_range_cm": [
+        -3.45428466796875,
+        58.71612548828125
+      ],
+      "green_slope_range": [
+        0.014951626145750237,
+        0.015006713147442665
+      ],
+      "max_slope": 0.09883555710620899,
+      "files": {
+        "height": {
+          "file": "Hole01_height.png",
+          "sha256": "c3580036972741a21d2f847f83722cad136ee101678066967e89f8a5f2f1ce8e"
+        },
+        "Bunker": {
+          "file": "Hole01_Bunker.png",
+          "sha256": "7ae5b2df440d56384bff1aac44f9615469ffa7070b24bf2d873fcf74f519f5c1"
+        },
+        "Green": {
+          "file": "Hole01_Green.png",
+          "sha256": "d81e17941719f3956788fe08dc250aa46aee4357dbe35dc54c29cb9e57f800a5"
+        },
+        "Fairway": {
+          "file": "Hole01_Fairway.png",
+          "sha256": "7f4b7eb4764339debcd1d9baea6e4cf51880531458663afff439e1c32e92ccb0"
+        },
+        "Rough": {
+          "file": "Hole01_Rough.png",
+          "sha256": "d23bfe9b46414e4c4697a1b96e909981a8c6a6ee9fbc6b7abab7319e13978b46"
+        }
+      }
+    },
+    {
+      "label": "Terrain_Hole02",
+      "grid": {
+        "W": 1072,
+        "H": 631,
+        "x0": -3500,
+        "y0": 27300,
+        "sx": 24.13,
+        "sy": 24.13
+      },
+      "cup_cm": [
+        17000,
+        35400,
+        30
+      ],
+      "green_slope": [
+        -0.014,
+        0.006
+      ],
+      "height_range_cm": [
+        -59.99847412109375,
+        60.32073974609375
+      ],
+      "green_slope_range": [
+        0.015207427406679403,
+        0.015271403483884546
+      ],
+      "max_slope": 0.13508881673449036,
+      "files": {
+        "height": {
+          "file": "Hole02_height.png",
+          "sha256": "640b04545ca7767f862fe9ad87d5ce0f52b12b636aaf7a9aa14af6d769198e1f"
+        },
+        "Bunker": {
+          "file": "Hole02_Bunker.png",
+          "sha256": "4e7c159f688b8a6f83a39a2fd42cb0e8e1d03b9aba44a8e1ed09cdd03927de3b"
+        },
+        "Green": {
+          "file": "Hole02_Green.png",
+          "sha256": "6716d61574622cf42eb6941d43bb7e41880e6ac4900afa930887e6287cb61320"
+        },
+        "Fairway": {
+          "file": "Hole02_Fairway.png",
+          "sha256": "9da41869441aa58b00e08f6316d731490600d7a45dc8c33d347ab23b60662267"
+        },
+        "Rough": {
+          "file": "Hole02_Rough.png",
+          "sha256": "6c25e67218d6d2bbf286f7fd4096161bbffc646721821057683a590a1d2daa7b"
+        }
+      }
+    },
+    {
+      "label": "Terrain_Hole03",
+      "grid": {
+        "W": 1009,
+        "H": 757,
+        "x0": -3500,
+        "y0": 64700,
+        "sx": 33.630952,
+        "sy": 33.630952
+      },
+      "cup_cm": [
+        24000,
+        86500,
+        30
+      ],
+      "green_slope": [
+        0.009,
+        -0.012
+      ],
+      "height_range_cm": [
+        -16.19720458984375,
+        62.6605224609375
+      ],
+      "green_slope_range": [
+        0.014972518145263923,
+        0.015042393208379445
+      ],
+      "max_slope": 0.12532252096569013,
+      "files": {
+        "height": {
+          "file": "Hole03_height.png",
+          "sha256": "a46849d57c70fadc44abb252d09512f73af3d596075d2c57e23a672875be5b36"
+        },
+        "Bunker": {
+          "file": "Hole03_Bunker.png",
+          "sha256": "e4198f095817b8581e5770b84050f4003193ee1b8aca51cbe059efee4ed0b2a7"
+        },
+        "Green": {
+          "file": "Hole03_Green.png",
+          "sha256": "22927c471cb62f55c79f86f7dcdb06945c8f55053808053b4f741b132b4cedb9"
+        },
+        "Fairway": {
+          "file": "Hole03_Fairway.png",
+          "sha256": "45ce8d9359d2039e85c39d4ccb1e4e8c091c9df7fb45f607aabec2f17e04bbb1"
+        },
+        "Rough": {
+          "file": "Hole03_Rough.png",
+          "sha256": "33ba56567030d75b414f23f00a059c38a8a106209f75417969ab200533ca2927"
+        }
+      }
+    },
+    {
+      "label": "Terrain_Hole04",
+      "grid": {
+        "W": 1198,
+        "H": 379,
+        "x0": -3500,
+        "y0": 96500,
+        "sx": 47.619048,
+        "sy": 47.619048
+      },
+      "cup_cm": [
+        50000,
+        104500,
+        30
+      ],
+      "green_slope": [
+        -0.012,
+        -0.009
+      ],
+      "height_range_cm": [
+        -59.99847412109375,
+        58.3502197265625
+      ],
+      "green_slope_range": [
+        0.014980316042266847,
+        0.01500852918465453
+      ],
+      "max_slope": 0.11540149901652226,
+      "files": {
+        "height": {
+          "file": "Hole04_height.png",
+          "sha256": "1be65dfd7054379c9174fce27a3f46c7cbe68f8ac1d241089de4a708740267ff"
+        },
+        "Bunker": {
+          "file": "Hole04_Bunker.png",
+          "sha256": "6597153e7a8ac5826113f273adda2e31fe7939c112053850292483f26b26805f"
+        },
+        "Green": {
+          "file": "Hole04_Green.png",
+          "sha256": "2e7b2ce74586f09d6933f34f78e0f4b0f839c50b006c00f26d35c263c05c3510"
+        },
+        "Fairway": {
+          "file": "Hole04_Fairway.png",
+          "sha256": "8b699a2feac33d8e09bf6cbcbe91eb421d2406d6b097b2a58147727044308cdd"
+        },
+        "Rough": {
+          "file": "Hole04_Rough.png",
+          "sha256": "a081e93297150f2c98e0be2c39554d89105fb3f86e2ff3b316c6fb11b2441548"
+        }
+      }
+    },
+    {
+      "label": "Terrain_Hole05",
+      "grid": {
+        "W": 1009,
+        "H": 505,
+        "x0": -3500,
+        "y0": 132800,
+        "sx": 27.97619,
+        "sy": 28.174603
+      },
+      "cup_cm": [
+        19000,
+        139000,
+        30
+      ],
+      "green_slope": [
+        0.015,
+        0.004
+      ],
+      "height_range_cm": [
+        -11.41357421875,
+        60.7403564453125
+      ],
+      "green_slope_range": [
+        0.015521068338602843,
+        0.015579054451075653
+      ],
+      "max_slope": 0.14479210825308608,
+      "files": {
+        "height": {
+          "file": "Hole05_height.png",
+          "sha256": "3148bb84edc57c43e03b2ca82195c2ec43690a21332d49cdf97e068ff1208aad"
+        },
+        "Bunker": {
+          "file": "Hole05_Bunker.png",
+          "sha256": "f5e34fb369869ca0f5a77035759ecace95098d8ea29df005d5b25c96c75ba5be"
+        },
+        "Green": {
+          "file": "Hole05_Green.png",
+          "sha256": "416ac68a7e47244f6936c4ec1c3d51bed124841f244e6e20dac8b8f9645f0bac"
+        },
+        "Fairway": {
+          "file": "Hole05_Fairway.png",
+          "sha256": "7960c79f3a1303c7df1b90f3ab935c51b87ac21555dfea264ed23d815c40f72d"
+        },
+        "Rough": {
+          "file": "Hole05_Rough.png",
+          "sha256": "8797a51bf8a16b646e87f471ccc5a032973e717cf002c67abec77d93bdb6ee8f"
+        }
+      }
+    },
+    {
+      "label": "Terrain_Hole06",
+      "grid": {
+        "W": 1513,
+        "H": 442,
+        "x0": -3500,
+        "y0": 168500,
+        "sx": 29.761905,
+        "sy": 29.478458
+      },
+      "cup_cm": [
+        38000,
+        175000,
+        30
+      ],
+      "green_slope": [
+        0.006,
+        0.014
+      ],
+      "height_range_cm": [
+        -18.56719970703125,
+        59.5721435546875
+      ],
+      "green_slope_range": [
+        0.015199231991180829,
+        0.015251507663954677
+      ],
+      "max_slope": 0.14879471925673046,
+      "files": {
+        "height": {
+          "file": "Hole06_height.png",
+          "sha256": "a642e864545f00bd6223a76b0d623131cb19a39c08025d51b9dce1332733b463"
+        },
+        "Bunker": {
+          "file": "Hole06_Bunker.png",
+          "sha256": "9650c094dc79b1d5998070858e15052355feabac3d6fb36c6c4fb3936e466df3"
+        },
+        "Green": {
+          "file": "Hole06_Green.png",
+          "sha256": "dbc1b7c125e721da301f809a5764d800f31e6ad2bc186b50402819e8833e9f34"
+        },
+        "Fairway": {
+          "file": "Hole06_Fairway.png",
+          "sha256": "359675a3a6502b50fa647c7ece0706ea25826cd1d9efa22616f0c8f80d55ad2b"
+        },
+        "Rough": {
+          "file": "Hole06_Rough.png",
+          "sha256": "ea023be2b4350d06df6dce56ce6ee29921e697b011d0fb4cf87169fd9bce607a"
+        }
+      }
+    }
+  ]
+}
