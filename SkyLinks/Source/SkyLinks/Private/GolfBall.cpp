@@ -29,13 +29,8 @@ AGolfBall::AGolfBall()
 	{
 		Mesh->SetStaticMesh(Sphere.Object);
 	}
-	// Use a clean white finish and a deliberately enlarged visual. Collision and the physics
-	// sweeps still use GolfPhysics::BallRadius, so this does not make shots easier or alter rolls.
-	if (UMaterialInstanceDynamic* BallMaterial = Mesh->CreateAndSetMaterialInstanceDynamic(0))
-	{
-		BallMaterial->SetVectorParameterValue(TEXT("Color"), FLinearColor::White);
-	}
-
+	// The visual is deliberately enlarged (VisualScale). Collision and the physics sweeps still use
+	// GolfPhysics::BallRadius, so this does not make shots easier or alter rolls.
 	// Engine sphere is 100 cm across. Lift the enlarged mesh so it still sits on the ground.
 	Mesh->SetRelativeScale3D(FVector(BallRadius * 2.f * VisualScale / 100.f));
 	Mesh->SetRelativeLocation(FVector(0.f, 0.f, BallRadius * (VisualScale - 1.f)));
@@ -52,6 +47,17 @@ AGolfBall::AGolfBall()
 	ChaseCamera = CreateDefaultSubobject<UCameraComponent>(TEXT("ChaseCamera"));
 	ChaseCamera->SetupAttachment(ChaseArm);
 	ChaseCamera->SetFieldOfView(75.f);
+}
+
+void AGolfBall::BeginPlay()
+{
+	Super::BeginPlay();
+	// Clean white finish. Done here rather than in the constructor so no material instance is
+	// created on the class default object.
+	if (UMaterialInstanceDynamic* BallMaterial = Mesh->CreateAndSetMaterialInstanceDynamic(0))
+	{
+		BallMaterial->SetVectorParameterValue(TEXT("Color"), FLinearColor::White);
+	}
 }
 
 void AGolfBall::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifetimeProps) const
