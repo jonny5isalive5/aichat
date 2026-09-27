@@ -1,0 +1,24 @@
+{
+  "source_triangles": 511022,
+  "review_triangles": 45000,
+  "dimensions_m": [
+    3.2001030445098877,
+    1.6626145839691162,
+    2.0998072624206543
+  ],
+  "source_sha256": {
+    "Meshy_AI_high_detail_4_man_gol_0927165639_texture.png": "5a3873388070fe923985b32d8a972cddbc620438acb1f2c86d16d5da66773835",
+    "Meshy_AI_high_detail_4_man_gol_0927165639_texture_roughness.png": "6c237ebfa1b2cd61823dd06eb8be91d71065d7061ce865c8589ce9a18d63f647",
+    "Meshy_AI_high_detail_4_man_gol_0927165639_texture_metallic.png": "8a9a2b16153dc0a844c76ebcb3e460840969e437b9745ef6a43c9a140c90659b",
+    "Meshy_AI_high_detail_4_man_gol_0927165639_texture_normal.png": "eec4321e22f94672914bb0eba972a121841c01fa2bc5a733f08c1ee5dbf6f935",
+    "Meshy_AI_high_detail_4_man_gol_0927165639_texture.fbx": "3661c3389687c71c6e5e0e65c80f515c78e2b728574e5a25f0cbcfb4443000da"
+  },
+  "textures": {
+    "Base Color": "T_Buggy_BaseColor.png",
+    "Roughness": "T_Buggy_Roughness.png",
+    "Metallic": "T_Buggy_Metallic.png",
+    "Normal": "T_Buggy_Normal.png"
+  },
+  "status": "Static visual review only. Wheels joined to body; orientation, pivots, collision, seats and Unreal import pending.",
+  "license": "User Meshy screenshot shows CC BY 4.0; credit Meshy."
+}
