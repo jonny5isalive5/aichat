@@ -399,7 +399,10 @@ void AGolfHUD::DrawHoleCard(AGolfGameState* State)
 	if (const AGolfPlayerState* Active = Cast<AGolfPlayerState>(State->ActivePlayer); Active && Active->Ball)
 	{
 		const float Meters = FVector::Dist2D(Active->Ball->GetRestLocation(), Hole->GetCupLocation()) / 100.f;
-		Label(FString::Printf(TEXT("PIN %.0f m"), Meters), FVector2D(15.f * U, 12.f * U), 3.2f, Palette::White, false);
+		const FString PinDistance = Meters < 1.f
+			? FString::Printf(TEXT("PIN %.0f cm"), Meters * 100.f)
+			: (Meters < 10.f ? FString::Printf(TEXT("PIN %.1f m"), Meters) : FString::Printf(TEXT("PIN %.0f m"), Meters));
+		Label(PinDistance, FVector2D(15.f * U, 12.f * U), 3.2f, Palette::White, false);
 	}
 }
 
