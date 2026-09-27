@@ -1,5 +1,7 @@
 # Playing with friends
 
+**SkyLinks — Keeping Friends Connected.** See [GAME_VISION.md](GAME_VISION.md) for the game thesis and [VOICE_CHAT.md](VOICE_CHAT.md) for open-mic group voice, mute controls and the remaining device/service validation.
+
 There are three ways to get friends into your game:
 
 | Way | How | Needs |

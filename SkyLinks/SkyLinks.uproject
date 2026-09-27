@@ -36,6 +36,14 @@
 			"Enabled": true
 		},
 		{
+			"Name": "EOSVoiceChat",
+			"Enabled": true
+		},
+		{
+			"Name": "VoiceChat",
+			"Enabled": true
+		},
+		{
 			"Name": "OnlineSubsystemUtils",
 			"Enabled": true
 		},

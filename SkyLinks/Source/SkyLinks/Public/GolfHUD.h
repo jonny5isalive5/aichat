@@ -28,7 +28,11 @@ enum class EGolfHudButton : uint8
 	Throttle,
 	Reverse,
 	PlayShot,
-	SkipDrive
+	SkipDrive,
+	Microphone,
+	VoicePanel,
+	VoicePanelBackground,
+	MutePlayer
 };
 
 /**
@@ -55,6 +59,7 @@ private:
 		FVector2D Center;
 		float Radius;
 		int32 Payload;
+		FVector2D RectSize = FVector2D::ZeroVector;
 	};
 	TArray<FButton> Buttons;
 	float U = 1.f;
@@ -63,6 +68,7 @@ private:
 	void DrawKeypad(AGolfPlayerController* Controller);
 	void DrawFriends();
 	void DrawInvitePopup();
+	void DrawVoice(AGolfGameState* State, AGolfPlayerController* Controller);
 	void DrawPlaying(AGolfGameState* State, AGolfPlayerController* Controller);
 	void DrawHoleCard(AGolfGameState* State);
 	void DrawPlayers(AGolfGameState* State);

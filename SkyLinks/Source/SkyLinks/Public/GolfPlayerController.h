@@ -34,6 +34,12 @@ public:
 
 	virtual void Tick(float DeltaSeconds) override;
 	virtual void SetupInputComponent() override;
+	virtual void ClientEnableNetworkVoice_Implementation(bool bEnable) override;
+	UFUNCTION(Exec)
+	void ToggleMicrophone();
+	UFUNCTION(Exec)
+	void TogglePlayerVoiceMute(int32 PlayerId);
+	bool IsVoicePanelOpen() const { return bVoicePanelOpen; }
 
 	UFUNCTION(Server, Reliable)
 	void ServerTakeShot(const FGolfShotInput& Input);
@@ -157,6 +163,7 @@ private:
 	bool bKeypadOpen = false;
 	FString EnteredCode;
 	bool bFriendsOpen = false;
+	bool bVoicePanelOpen = false;
 
 	bool bWasMyTurn = false;
 	FVector LastTurnBall = FVector::ZeroVector;

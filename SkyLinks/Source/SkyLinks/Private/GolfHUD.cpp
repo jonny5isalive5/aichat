@@ -7,6 +7,7 @@
 #include "GolfPlayerController.h"
 #include "GolfPlayerState.h"
 #include "GolfSessionSubsystem.h"
+#include "GolfVoiceSubsystem.h"
 #include "Engine/GameInstance.h"
 #include "CanvasItem.h"
 #include "Engine/Canvas.h"
@@ -94,7 +95,11 @@ EGolfHudButton AGolfHUD::HitTest(const FVector2D& ScreenPosition, int32& OutPayl
 	for (int32 Index = Buttons.Num() - 1; Index >= 0; --Index)
 	{
 		const FButton& Button = Buttons[Index];
-		if (FVector2D::Distance(ScreenPosition, Button.Center) <= Button.Radius * 1.1f)
+		const FVector2D Offset = ScreenPosition - Button.Center;
+		const bool bInside = Button.RectSize.X > 0.f
+			? FMath::Abs(Offset.X) <= Button.RectSize.X * 0.5f && FMath::Abs(Offset.Y) <= Button.RectSize.Y * 0.5f
+			: Offset.Size() <= Button.Radius * 1.1f;
+		if (bInside)
 		{
 			OutPayload = Button.Payload;
 			return Button.Id;
@@ -143,7 +148,39 @@ void AGolfHUD::DrawHUD()
 		break;
 	}
 	DrawAnnouncement(State);
+	DrawVoice(State, Controller);
 	DrawInvitePopup();
+}
+
+void AGolfHUD::DrawVoice(AGolfGameState* State, AGolfPlayerController* Controller)
+{
+	const UGolfVoiceSubsystem* Voice = GetGameInstance()->GetSubsystem<UGolfVoiceSubsystem>();
+	if (!Voice) return;
+	const bool bMuted = Voice->IsMicrophoneMuted();
+	const FString MicLabel = bMuted ? TEXT("MUTED") : Voice->IsReady() ? TEXT("MIC ON") : TEXT("NO VOICE");
+	RoundButton(EGolfHudButton::Microphone, FVector2D(Canvas->ClipX - 8.f * U, 23.f * U), 5.f * U,
+		MicLabel, bMuted ? Palette::Red : Voice->IsReady() ? FLinearColor(0.1f, 0.4f, 0.12f, 0.9f) : Palette::PanelSolid);
+	RoundButton(EGolfHudButton::VoicePanel, FVector2D(Canvas->ClipX - 20.f * U, 23.f * U), 5.f * U,
+		TEXT("GROUP"), Palette::PanelSolid);
+	if (!Controller->IsVoicePanelOpen()) return;
+	const FVector2D Origin(Canvas->ClipX - 54.f * U, 30.f * U);
+	Box(Origin, FVector2D(52.f * U, 40.f * U), Palette::PanelSolid);
+	Buttons.Add({ EGolfHudButton::VoicePanelBackground, Origin + FVector2D(26.f * U, 20.f * U), 0.f, 0, FVector2D(52.f * U, 40.f * U) });
+	Label(TEXT("Keeping Friends Connected"), Origin + FVector2D(2.f * U, 2.f * U), 2.4f, Palette::Gold, false);
+	Label(Voice->GetStatus(), Origin + FVector2D(2.f * U, 6.f * U), 2.f, Palette::Dim, false);
+	int32 Row = 0;
+	for (const APlayerState* GroupPlayer : State->PlayerArray)
+	{
+		if (!GroupPlayer || Row >= 4) continue;
+		const float RowY = (13.f + Row++ * 7.f) * U;
+		const bool bSelf = GroupPlayer == Controller->PlayerState;
+		const bool bPlayerMuted = bSelf ? bMuted : Voice->IsPlayerMuted(GroupPlayer);
+		Label(GroupPlayer->GetPlayerName().Left(22) + (bSelf ? TEXT(" (you)") : TEXT("")),
+			Origin + FVector2D(2.f * U, RowY - U), 2.1f, Voice->IsPlayerTalking(GroupPlayer) ? Palette::Green : Palette::White, false);
+		RoundButton(bSelf ? EGolfHudButton::Microphone : EGolfHudButton::MutePlayer,
+			Origin + FVector2D(46.f * U, RowY), 3.f * U, bPlayerMuted ? TEXT("UNMUTE") : TEXT("MUTE"),
+			bPlayerMuted ? Palette::Red : Palette::PanelSolid, GroupPlayer->GetPlayerId());
+	}
 }
 
 void AGolfHUD::DrawLobby(AGolfGameState* State, AGolfPlayerController* Controller)
@@ -159,6 +196,7 @@ void AGolfHUD::DrawLobby(AGolfGameState* State, AGolfPlayerController* Controlle
 	const FVector2D Center(Canvas->ClipX * (bFriendsPanel ? 0.33f : 0.5f), Canvas->ClipY * 0.5f);
 	Box(Center - FVector2D(45.f * U, 38.f * U), FVector2D(90.f * U, 76.f * U), Palette::Panel);
 	Label(TEXT("SKY LINKS"), Center - FVector2D(0.f, 30.f * U), 9.f, Palette::Gold, true);
+	Label(TEXT("Keeping Friends Connected"), Center - FVector2D(0.f, 24.f * U), 2.6f, Palette::White, true);
 
 	int32 TotalPar = 0;
 	for (const int32 Par : State->Pars)
@@ -172,7 +210,7 @@ void AGolfHUD::DrawLobby(AGolfGameState* State, AGolfPlayerController* Controlle
 	}
 	else
 	{
-		Label(FString::Printf(TEXT("%d HOLES  ·  PAR %d"), State->Pars.Num(), TotalPar), Center - FVector2D(0.f, 22.f * U), 3.5f, Palette::Dim, true);
+		Label(FString::Printf(TEXT("%d HOLES  ·  PAR %d"), State->Pars.Num(), TotalPar), Center - FVector2D(0.f, 19.f * U), 3.5f, Palette::Dim, true);
 	}
 
 	// Room code, big, so it can be read out to friends.

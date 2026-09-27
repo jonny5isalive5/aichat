@@ -1,5 +1,9 @@
 # Sky Links
 
+**Keeping Friends Connected**
+
+Four friends, a shared round, and time to talk. This is the game's central thesis; see [the game vision](Docs/GAME_VISION.md). [Group voice](Docs/VOICE_CHAT.md) uses open mic with local and individual mute controls; four-device audio, internet service setup and mobile validation are still outstanding.
+
 An 18-hole golf sim for phones in landscape, for 1–4 players, built in Unreal Engine 5.8 with C++.
 The target look is realistic: real turf and trees, natural light, a broadcast-style HUD, and a camera that sits behind the golfer and then follows the ball in flight.
 

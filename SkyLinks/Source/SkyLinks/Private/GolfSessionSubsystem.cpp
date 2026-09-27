@@ -1,4 +1,5 @@
 #include "GolfSessionSubsystem.h"
+#include "GolfVoiceSubsystem.h"
 #include "SkyLinks.h"
 #include "Engine/GameInstance.h"
 #include "Engine/World.h"
@@ -15,6 +16,7 @@ const FName UGolfSessionSubsystem::RoomCodeKey(TEXT("ROOMCODE"));
 void UGolfSessionSubsystem::Initialize(FSubsystemCollectionBase& Collection)
 {
 	Super::Initialize(Collection);
+	Collection.InitializeDependency<UGolfVoiceSubsystem>();
 	if (IOnlineSessionPtr Sessions = GetSessions())
 	{
 		InviteReceivedHandle = Sessions->AddOnSessionInviteReceivedDelegate_Handle(
@@ -143,6 +145,7 @@ void UGolfSessionSubsystem::HostOnline()
 			Settings.bIsLANMatch = IsLan();
 			Settings.bUsesPresence = true;
 			Settings.bUseLobbiesIfAvailable = true;
+			Settings.bUseLobbiesVoiceChatIfAvailable = !IsLan();
 			Settings.bAllowJoinViaPresence = true;
 			Settings.bAllowInvites = true;
 			Settings.Set(RoomCodeKey, RoomCode, EOnlineDataAdvertisementType::ViaOnlineServiceAndPing);
@@ -156,12 +159,14 @@ void UGolfSessionSubsystem::HostOnline()
 				bSessionOperationInProgress = false;
 				Status = TEXT("Could not create a game.");
 			}
+			GetGameInstance()->GetSubsystem<UGolfVoiceSubsystem>()->Refresh(true);
 		});
 	});
 }
 
 void UGolfSessionSubsystem::OnCreateComplete(FName SessionName, bool bSuccess)
 {
+	GetGameInstance()->GetSubsystem<UGolfVoiceSubsystem>()->Refresh(true);
 	bSessionOperationInProgress = false;
 	if (IOnlineSessionPtr Sessions = GetSessions())
 	{
@@ -302,11 +307,13 @@ void UGolfSessionSubsystem::JoinResult(const FOnlineSessionSearchResult& Result)
 			bSessionOperationInProgress = false;
 			Status = TEXT("Could not join that game.");
 		}
+		GetGameInstance()->GetSubsystem<UGolfVoiceSubsystem>()->Refresh(true);
 	});
 }
 
 void UGolfSessionSubsystem::OnJoinComplete(FName SessionName, EOnJoinSessionCompleteResult::Type Result)
 {
+	GetGameInstance()->GetSubsystem<UGolfVoiceSubsystem>()->Refresh(true);
 	bSessionOperationInProgress = false;
 	IOnlineSessionPtr Sessions = GetSessions();
 	if (!Sessions.IsValid())

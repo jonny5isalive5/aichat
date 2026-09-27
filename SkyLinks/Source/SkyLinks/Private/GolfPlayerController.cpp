@@ -10,6 +10,7 @@
 #include "GolfPhysics.h"
 #include "GolfPlayerState.h"
 #include "GolfSessionSubsystem.h"
+#include "GolfVoiceSubsystem.h"
 #include "Components/InputComponent.h"
 #include "Engine/GameInstance.h"
 #include "Engine/World.h"
@@ -53,6 +54,34 @@ void AGolfPlayerController::SetupInputComponent()
 	InputComponent->BindKey(EKeys::S, IE_Pressed, this, &AGolfPlayerController::OnThrottleBackPressed);
 	InputComponent->BindKey(EKeys::S, IE_Released, this, &AGolfPlayerController::OnThrottleBackReleased);
 	InputComponent->BindKey(EKeys::F, IE_Pressed, this, &AGolfPlayerController::OnPlayShotKey);
+	InputComponent->BindKey(EKeys::M, IE_Pressed, this, &AGolfPlayerController::ToggleMicrophone);
+}
+
+void AGolfPlayerController::ToggleMicrophone()
+{
+	if (IsLocalController()) GetGameInstance()->GetSubsystem<UGolfVoiceSubsystem>()->ToggleMicrophone();
+}
+
+void AGolfPlayerController::ClientEnableNetworkVoice_Implementation(bool bEnable)
+{
+	// Travel must not let the engine's open-mic handshake undo a player's mute preference.
+	GetGameInstance()->GetSubsystem<UGolfVoiceSubsystem>()->Refresh(true);
+}
+
+void AGolfPlayerController::TogglePlayerVoiceMute(int32 PlayerId)
+{
+	if (!IsLocalController()) return;
+	if (const AGolfGameState* State = GetGolfState())
+	{
+		for (const APlayerState* RemotePlayer : State->PlayerArray)
+		{
+			if (RemotePlayer && RemotePlayer != PlayerState && RemotePlayer->GetPlayerId() == PlayerId)
+			{
+				GetGameInstance()->GetSubsystem<UGolfVoiceSubsystem>()->TogglePlayerMute(RemotePlayer);
+				break;
+			}
+		}
+	}
 }
 
 AGolfGameState* AGolfPlayerController::GetGolfState() const
@@ -455,6 +484,12 @@ bool AGolfPlayerController::HandleButton(const FVector2D& Screen, int32 Finger)
 	switch (Hud ? Hud->HitTest(Screen, Payload) : EGolfHudButton::None)
 	{
 	case EGolfHudButton::Start: ServerRequestStart(); return true;
+	case EGolfHudButton::Microphone: ToggleMicrophone(); return true;
+	case EGolfHudButton::VoicePanel: bVoicePanelOpen = !bVoicePanelOpen; return true;
+	case EGolfHudButton::VoicePanelBackground: return true;
+	case EGolfHudButton::MutePlayer:
+		TogglePlayerVoiceMute(Payload);
+		return true;
 	case EGolfHudButton::Host:  HostGame(); return true;
 	case EGolfHudButton::Join:
 		bKeypadOpen = true;

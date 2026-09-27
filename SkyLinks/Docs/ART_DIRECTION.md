@@ -1,5 +1,7 @@
 # Art direction: realistic golf sim
 
+The game's thesis is **SkyLinks — Keeping Friends Connected**. See [GAME_VISION.md](GAME_VISION.md) for the social experience that the art, interface and multiplayer features support.
+
 Sky Links aims for a realistic golf-sim look: real turf, real trees, natural light, and a broadcast-style HUD.
 The code is already set up for it: regulation cup and flag, a real-size ball, Lumen lighting and virtual shadows on PC, and fully dynamic lighting (so there's never a "lighting needs to be rebuilt" message).
 What's left is art, and that's editor work, which suits Aura.
@@ -32,8 +34,8 @@ On a Landscape, give each paint layer its physical material with a **Landscape P
 
 ### 1. Real trees (quick win)
 1. Download free trees on Fab (search "Megascans trees", e.g. European Beech, Scots Pine, Black Alder) and add them to the project.
-2. Open `Scripts/build_blockout_course.py` and put their paths in `TREE_MESHES` at the top.
-3. Run the script again. Every tree position on all 18 holes gets a random real tree, rotation and size.
+2. Import and inspect one review tree, keeping `PM_Rough` on its materials and collision.
+3. Replace placeholder trees incrementally at their existing locations after visual review. **Do not rerun `Scripts/build_blockout_course.py` on the current course: it clears and rebuilds the map, destroying the completed terrain work.**
 
 ### 2. Terrain
 The blockout is flat boxes. A real course needs a **Landscape** with gentle slopes: fairways that roll, greens with break.
