@@ -1,0 +1,9 @@
+{
+  "body_triangles": 24533,
+  "wheel_triangles": 5112,
+  "assembled_triangles": 44981,
+  "wheelbase_cm": 165,
+  "track_cm": 92,
+  "wheel_radius_cm": 23,
+  "method": "UV-preserving spatial extraction from fused source; repeated rear wheel, source art unchanged."
+}

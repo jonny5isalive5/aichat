@@ -33,6 +33,8 @@ The owner reported losing control of the computer during repeated foreground win
 
 ## Next acceptance work
 
+The owner's Meshy buggy has now replaced the runtime body/wheel assets under `/Game/Vehicles/Buggy`. Original source and the unmodified review mesh remain in `Art/BuggyMeshy`; see its README for reproduction and remaining validation. The new body uses the existing independently animated wheel components, handling, collision box and replication. Three LODs and PM_Rough assignments are present. Course.umap was not changed by this installation. New-art driving/multiplayer acceptance remains pending a coordinated test window; no foreground control is authorized by the asset installation alone.
+
 1. Controlled surface/PIE check on the final rendering configuration.
 2. Voice unmute/lifecycle follow-up on the final rebuilt code, then four separate devices/accounts for audible voice, echo, reconnect and individual mute tests. EOS credentials/policy and native mobile permission/device validation remain outstanding.
 3. Refine/review the single tree's foliage appearance and simple trunk collision before any bulk placement.
