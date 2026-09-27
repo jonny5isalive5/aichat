@@ -29,6 +29,9 @@ public:
 	/** Owning client: turn to aim now, and tell the server so spectators see it. */
 	void SetLocalAim(float InAimYaw);
 
+	/** Centres an overhead camera on a short-shot landing zone, or restores the address view. */
+	void SetPreviewCamera(const FVector& LandingLocation, bool bUseLandingView);
+
 	float GetAimYaw() const { return AimYaw; }
 	FVector GetAddressBallLocation() const { return BallLocation; }
 

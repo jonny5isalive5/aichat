@@ -5,6 +5,7 @@
 #include "Camera/CameraComponent.h"
 #include "Engine/StaticMesh.h"
 #include "Engine/World.h"
+#include "Materials/MaterialInstanceDynamic.h"
 #include "Net/UnrealNetwork.h"
 #include "UObject/ConstructorHelpers.h"
 
@@ -28,6 +29,13 @@ AGolfBall::AGolfBall()
 	{
 		Mesh->SetStaticMesh(Sphere.Object);
 	}
+	// Use a clean white finish and a deliberately enlarged visual. Collision and the physics
+	// sweeps still use GolfPhysics::BallRadius, so this does not make shots easier or alter rolls.
+	if (UMaterialInstanceDynamic* BallMaterial = Mesh->CreateAndSetMaterialInstanceDynamic(0))
+	{
+		BallMaterial->SetVectorParameterValue(TEXT("Color"), FLinearColor::White);
+	}
+
 	// Engine sphere is 100 cm across. Lift the enlarged mesh so it still sits on the ground.
 	Mesh->SetRelativeScale3D(FVector(BallRadius * 2.f * VisualScale / 100.f));
 	Mesh->SetRelativeLocation(FVector(0.f, 0.f, BallRadius * (VisualScale - 1.f)));
