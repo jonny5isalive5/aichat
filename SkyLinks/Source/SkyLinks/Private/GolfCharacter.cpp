@@ -366,7 +366,9 @@ void AGolfCharacter::ApplyAddress()
 
 	// A right-handed golfer stands on the left of the target line, facing the ball.
 	const FVector Feet = BallLocation - Right * StanceDistance - Aim.Vector() * AddressBackOffset - FVector(0.f, 0.f, GolfPhysics::BallRadius);
-	SetActorLocationAndRotation(Feet + FVector(0.f, 0.f, HalfHeight), FRotator(0.f, AimYaw + 90.f, 0.f));
+	// The Mixamo golf clips are authored a quarter turn from the body's forward (the buggy clips are not):
+	// with the actor facing down the aim line, the swing faces the ball.
+	SetActorLocationAndRotation(Feet + FVector(0.f, 0.f, HalfHeight), FRotator(0.f, AimYaw, 0.f));
 
 	CameraArm->TargetArmLength = 380.f;
 	CameraArm->SocketOffset = FVector(0.f, 45.f, 80.f);
