@@ -34,6 +34,8 @@ SLOPES = [(0.012, 0.009), (-0.014, 0.006), (0.009, -0.012), (-0.012, -0.009), (0
           (-0.011, 0.010), (0.013, -0.007), (-0.006, -0.014), (0.010, 0.011), (-0.015, -0.003), (0.004, -0.015),
           (0.012, -0.010), (-0.009, 0.012), (0.014, 0.006), (-0.013, -0.008), (0.007, 0.013), (-0.010, 0.010)]
 MARGIN_M = 35
+# Minimum height (cm) of island land inside a water rectangle; the water top is at 0.4 cm.
+ISLAND_CLEARANCE = 5.0
 SECTION_QUADS = 63
 MAX_SPACING_CM = 40.0
 
@@ -142,6 +144,11 @@ def generate(first, last):
             target=15-75*smooth(-d/10)
             height=height*(1-bank)+target*bank
             water=np.maximum(water,(d<0).astype(float)*(1-land))
+            # The water slab is one flat box over the whole rectangle (top 0.4 cm). Anything left
+            # standing inside it (an island green and its bunkers) must stay above it, or the ball
+            # finds water there. Keep that land at least ISLAND_CLEARANCE above the water top.
+            inside=smooth(-d/2)*land
+            height=np.maximum(height,ISLAND_CLEARANCE*inside+height*(1-inside))
         tee_blend=1-smooth(rect_distance(x,y,(-5,5,-5,5))/7)
         height*=1-tee_blend
         edge=np.minimum.reduce([x-x.min(),x.max()-x,y-y.min(),y.max()-y])

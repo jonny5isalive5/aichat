@@ -23,7 +23,9 @@ def validate_holes(numbers):
             t=hit.to_tuple(); z=t[5].z; pm=t[8].get_name() if t[8] else None
             row={'hole':p['hole'],'kind':p['kind'],'complex':complex_collision,'x':p['x'],'y':p['y'],'z':round(z,4),'expected_z':round(p['expected_z'],4),'pm':pm,'actor':t[9].get_actor_label()}
             rows.append(row)
-            if abs(z-p['expected_z'])>2 or pm!=p['pm']:
+            # Editor line traces from Python cannot request physical materials, so pm is None here.
+            # Only compare it when the engine actually returned one; heights are always checked.
+            if abs(z-p['expected_z'])>2 or (pm is not None and pm!=p['pm']):
                 errors.append(row)
     for number in numbers:
         hole=next(a for a in actors if a.get_actor_label()==f'GolfHole{number:02d}')
@@ -31,6 +33,10 @@ def validate_holes(numbers):
         hit=unreal.SystemLibrary.line_trace_single_for_objects(world,unreal.Vector(cup.x,cup.y,2000),unreal.Vector(cup.x,cup.y,-2000),[unreal.ObjectTypeQuery.ECC_WORLD_STATIC],False,[],unreal.DrawDebugTrace.NONE)
         if not hit or abs(hit.to_tuple()[5].z-cup.z)>1:
             errors.append({'hole':number,'kind':'cup alignment','cup_z':cup.z,'ground_z':hit.to_tuple()[5].z if hit else None})
-    report={'holes':list(numbers),'probe_count':len(rows),'errors':errors,'samples':rows}
+    unchecked=sum(1 for r in rows if r['pm'] is None)
+    report={'holes':list(numbers),'probe_count':len(rows),'errors':errors,
+            'surface_type_unchecked':unchecked,
+            'note':'Surface types need an in-game check (lie label) when surface_type_unchecked > 0',
+            'samples':rows}
     print(json.dumps(report))
     return report

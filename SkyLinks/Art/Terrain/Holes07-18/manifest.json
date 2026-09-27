@@ -30,11 +30,11 @@
         0.014835872434794665,
         0.014897036425452247
       ],
-      "max_slope": 0.5745335260475125,
+      "max_slope": 0.5351204230560462,
       "files": {
         "height": {
           "file": "Hole07_height.png",
-          "sha256": "573b3ef6a465a6c7f3333b5152fa573d7ceb7df5668b88c2e73431061b136cc1"
+          "sha256": "9ef526c7b6d6c635d6ae641f3629d7272c487ca2a6a1175e4e69caea252c5505"
         },
         "Bunker": {
           "file": "Hole07_Bunker.png",
@@ -108,11 +108,11 @@
         0.014729289372630638,
         0.014788008425450451
       ],
-      "max_slope": 0.24727198494467714,
+      "max_slope": 0.2413960246985624,
       "files": {
         "height": {
           "file": "Hole08_height.png",
-          "sha256": "ae6e7842a9348dd53afa537e79294d9c37a94fa696b9f90c2328df99d8c3b536"
+          "sha256": "d0ba6a40a929c0da4b914155a4f560af76ee99c13d28a59ce949406097a23baa"
         },
         "Bunker": {
           "file": "Hole08_Bunker.png",
@@ -810,11 +810,11 @@
         0.014753689976052108,
         0.014790931142436294
       ],
-      "max_slope": 0.18440719950787202,
+      "max_slope": 0.17946097144086123,
       "files": {
         "height": {
           "file": "Hole17_height.png",
-          "sha256": "6dd52492e535a2c028da51b33cfcba4662c7e8cf577e3cb738fad10f5fcf9856"
+          "sha256": "89e1696e39c3237136beaeb0281c65104f8c9df6618317b42ec606efbc922c19"
         },
         "Bunker": {
           "file": "Hole17_Bunker.png",
