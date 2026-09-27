@@ -1,6 +1,6 @@
 # Sky Links
 
-An 18-hole golf sim for phones in landscape, for 1–4 players, built in Unreal Engine with C++.
+An 18-hole golf sim for phones in landscape, for 1–4 players, built in Unreal Engine 5.8 with C++.
 The target look is realistic: real turf and trees, natural light, a broadcast-style HUD, and a camera that sits behind the golfer and then follows the ball in flight.
 
 ## What's here
