@@ -21,6 +21,7 @@ namespace
 {
 	constexpr float AimDegreesPerPixel = 0.08f;
 	constexpr float KeyAimDegreesPerSecond = 40.f;
+	constexpr float LandingViewMargin = 900.f; // cm of ground kept around the landing ring and the pin
 	constexpr float KeyChargeSeconds = 1.2f;
 	constexpr float MinShotPower = 0.03f;
 
@@ -211,8 +212,19 @@ void AGolfPlayerController::UpdateLandingCapture()
 		LandingCapture->bCaptureOnMovement = false;
 		LandingCapture->RegisterComponent();
 	}
-	// Straight down over the landing spot, turned so the shot travels up the window.
-	LandingCapture->SetWorldLocationAndRotation(PreviewLanding + FVector(0.f, 0.f, LandingViewHeight), FRotator(-89.9f, AimYaw, 0.f));
+	// Straight down, turned so the shot travels up the window. Frame the landing spot and the pin together,
+	// so aiming visibly moves the ring against the flag (centred on the landing alone it looked frozen).
+	const FRotator Aim(0.f, AimYaw, 0.f);
+	const FVector Forward = Aim.Vector();
+	const FVector Right = FRotationMatrix(Aim).GetUnitAxis(EAxis::Y);
+	const AGolfGameState* State = GetGolfState();
+	const FVector Pin = State && State->CurrentHole ? State->CurrentHole->GetCupLocation() : PreviewLanding;
+	LandingViewCenter = (PreviewLanding + Pin) * 0.5f;
+	const FVector Half = PreviewLanding - LandingViewCenter;
+	const float HalfWidth = FMath::Max(FMath::Abs(FVector::DotProduct(Half, Right)), FMath::Abs(FVector::DotProduct(Half, Forward)) * 16.f / 9.f)
+		+ LandingViewMargin;
+	LandingViewHeight = FMath::Clamp(HalfWidth / FMath::Tan(FMath::DegreesToRadians(LandingViewFOV * 0.5f)), 2500.f, 20000.f);
+	LandingCapture->SetWorldLocationAndRotation(LandingViewCenter + FVector(0.f, 0.f, LandingViewHeight), FRotator(-89.9f, AimYaw, 0.f));
 	LandingCapture->bCaptureEveryFrame = true;
 }
 

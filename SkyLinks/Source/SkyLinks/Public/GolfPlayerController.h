@@ -78,8 +78,9 @@ public:
 	/** Live overhead picture of the landing area, or null when there isn't one. */
 	UTextureRenderTarget2D* GetLandingViewTexture() const;
 	float GetAimYaw() const { return AimYaw; }
-	/** Overhead capture: height above the landing spot (cm) and horizontal field of view (degrees). */
-	static constexpr float LandingViewHeight = 3500.f;
+	/** Landing window: ground point at its middle, the capture height above it (cm), horizontal FOV (degrees). */
+	FVector GetLandingViewCenter() const { return LandingViewCenter; }
+	float GetLandingViewHeight() const { return LandingViewHeight; }
 	static constexpr float LandingViewFOV = 60.f;
 	int32 GetClubIndex() const { return ClubIndex; }
 	float GetClubCarry(int32 Index) const { return ClubCarry.IsValidIndex(Index) ? ClubCarry[Index] : 0.f; }
@@ -191,6 +192,8 @@ private:
 	TArray<FVector> GridPoints;
 	TArray<FVector> GridSlopes;
 	bool bLandingView = false;
+	FVector LandingViewCenter = FVector::ZeroVector;
+	float LandingViewHeight = 3500.f;
 	void UpdateLandingCapture();
 
 	UPROPERTY(Transient)

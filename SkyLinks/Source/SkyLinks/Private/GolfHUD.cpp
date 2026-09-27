@@ -388,20 +388,22 @@ void AGolfHUD::DrawLandingView(AGolfGameState* State, AGolfPlayerController* Con
 
 	// Map ground offsets from the landing spot into the window (camera looks straight down, shot goes up).
 	using PC = AGolfPlayerController;
-	const float PixelsPerCm = (Size.X * 0.5f) / (PC::LandingViewHeight * FMath::Tan(FMath::DegreesToRadians(PC::LandingViewFOV * 0.5f)));
+	const float PixelsPerCm = (Size.X * 0.5f) / (Controller->GetLandingViewHeight() * FMath::Tan(FMath::DegreesToRadians(PC::LandingViewFOV * 0.5f)));
 	const FRotator Aim(0.f, Controller->GetAimYaw(), 0.f);
 	const FVector Forward = Aim.Vector();
 	const FVector Right = FRotationMatrix(Aim).GetUnitAxis(EAxis::Y);
-	const FVector Landing = Controller->GetPreviewLanding();
+	const FVector ViewCenter = Controller->GetLandingViewCenter();
 	auto ToWindow = [&](const FVector& World, FVector2D& Out)
 	{
-		const FVector Offset = World - Landing;
+		const FVector Offset = World - ViewCenter;
 		Out = Center + FVector2D(FVector::DotProduct(Offset, Right), -FVector::DotProduct(Offset, Forward)) * PixelsPerCm;
 		return Out.X > Pos.X && Out.X < Pos.X + Size.X && Out.Y > Pos.Y && Out.Y < Pos.Y + Size.Y;
 	};
 
-	// Landing ring at the centre, and the pin if it's in the picture.
-	Ring(Center, 250.f * PixelsPerCm, Controller->IsSwinging() ? Palette::Green : Palette::White, 0.3f * U);
+	// Landing ring (moves as you aim and swipe), and the pin.
+	FVector2D LandingSpot;
+	ToWindow(Controller->GetPreviewLanding(), LandingSpot);
+	Ring(LandingSpot, FMath::Max(250.f * PixelsPerCm, 1.2f * U), Controller->IsSwinging() ? Palette::Green : Palette::White, 0.3f * U);
 	if (State->CurrentHole)
 	{
 		FVector2D Pin;
