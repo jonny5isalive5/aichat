@@ -1,0 +1,14 @@
+{
+  "source_triangles": 495533,
+  "lod0_triangles": 59943,
+  "dimensions_m": [
+    2.9276723861694336,
+    4.301935195922852,
+    4.577112197875977
+  ],
+  "materials": [
+    "tree_small_02_branches",
+    "tree_small_02_leaves",
+    "tree_small_02_trunk"
+  ]
+}
