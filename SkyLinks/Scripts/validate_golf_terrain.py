@@ -1,4 +1,9 @@
-"""Read-only editor validation; use validate_holes([1]) after an apply pass."""
+"""Read-only editor validation; use validate_holes([1]) after an apply pass.
+
+Run it in a later editor tick than apply_holes: landscape collision rebuilds asynchronously after a
+heightmap import, and a same-run trace reads the old surface. Python traces cannot return physical
+materials, so surface types are reported as unchecked; confirm them in play (the lie label).
+"""
 import json
 from pathlib import Path
 import unreal

@@ -6,6 +6,10 @@ Run this file, then:
   remove_blockout_surfaces(7)   holes 7-18: delete the flat Rough/Fairway/Green/Bunker slabs
                                 once the landscape is applied (water, trees, tee box stay)
 
+IMPORTANT: validate in a separate editor tick (a later tool call), never in the same script run as
+apply_holes. The heightmap import rebuilds landscape collision asynchronously, so an immediate trace
+still sees the old surface and reports false errors (e.g. hole 7's bunker "hitting" the water slab).
+
 Requires the Aura plugin. Preserves landscape transforms, layer bindings and water.
 Back up/save existing work before running; Aura transactions auto-save changed assets.
 """

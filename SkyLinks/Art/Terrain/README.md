@@ -1,8 +1,16 @@
 # Course terrain
 
 - `Holes01-06/`: applied on Boss420 (Codex, 27 Sep). Built on the grids Aura created.
-- `Holes07-18/`: generated, **not applied yet**. These holes have no landscapes; `manifest.json` has a
-  `create` block per hole (location, scale, resolution, layers, material) for Aura to create them first.
+- `Holes07-18/`: applied on Boss420 (Aura, 27 Sep). `manifest.json` keeps the `create` block Aura used
+  for each landscape (location, scale, resolution, layers, material).
+
+**Status 27 Sep: all 18 holes applied and validated.** Holes 1-6: 148 probes, 0 errors (max 0.40 cm).
+Holes 7-18: 306 probes, 0 errors (max 1.0 cm, the tee-box probe). Hole 7 and 17 island land stands
+above the water (hole 7 bunker at 5.2 cm). Surface types can't be read by editor traces; check the lie
+label in play.
+
+**Always validate in a separate editor tick from applying.** Landscape collision is rebuilt
+asynchronously after a heightmap import; a trace in the same script run sees the old surface.
 
 Holes 7-18 follow the same rules as 1-6 (flat tees, about 1.5 % greens, 30 cm bunker bowls, basins
 60 cm under the water top). Greens and bunkers next to water are protected, so hole 7 keeps its island
