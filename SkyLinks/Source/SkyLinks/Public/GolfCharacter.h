@@ -9,6 +9,8 @@ class USpringArmComponent;
 class UCameraComponent;
 class UAnimSequence;
 class USkeletalMesh;
+class UStaticMesh;
+class AGolfBuggy;
 
 /**
  * The golfer. Stands addressing the ball; the camera sits low behind the ball looking down the
@@ -56,11 +58,22 @@ public:
 	/** How long a reaction is worth watching before play moves on (0 if none). */
 	float GetReactionDuration(EGolferReaction Reaction) const;
 
+	/** Everyone: stand by the buggy's driver door and climb in (bEnter) or sit in it and climb out. */
+	UFUNCTION(NetMulticast, Reliable)
+	void MulticastBuggyTransition(AGolfBuggy* Buggy, bool bEnter);
+
+	/** Seconds the climb in/out takes (0 while the golfer has no animations). */
+	float GetBuggyTransitionDuration(bool bEnter) const;
+
 	UPROPERTY(VisibleAnywhere, Category = "Golf")
 	TObjectPtr<USpringArmComponent> CameraArm;
 
 	UPROPERTY(VisibleAnywhere, Category = "Golf")
 	TObjectPtr<UCameraComponent> Camera;
+
+	/** The club in the golfer's right hand. Positioned at address so the head sits behind the ball. */
+	UPROPERTY(VisibleAnywhere, Category = "Golf")
+	TObjectPtr<UStaticMeshComponent> Club;
 
 	/** Shown until you assign a skeletal mesh to the character Blueprint. */
 	UPROPERTY(VisibleAnywhere, Category = "Golf")
@@ -85,6 +98,20 @@ public:
 	UPROPERTY(EditDefaultsOnly, Category = "Golf|Animations") TSoftObjectPtr<UAnimSequence> PuttVictoryAnim;
 	UPROPERTY(EditDefaultsOnly, Category = "Golf|Animations") TSoftObjectPtr<UAnimSequence> PuttMissAnim;
 	UPROPERTY(EditDefaultsOnly, Category = "Golf|Animations") TSoftObjectPtr<UAnimSequence> BadShotAnim;
+	UPROPERTY(EditDefaultsOnly, Category = "Golf|Animations") TSoftObjectPtr<UAnimSequence> EnterBuggyAnim;
+	UPROPERTY(EditDefaultsOnly, Category = "Golf|Animations") TSoftObjectPtr<UAnimSequence> ExitBuggyAnim;
+
+	/** The Mixamo car clips are slow for a golf cart; play them faster. */
+	UPROPERTY(EditDefaultsOnly, Category = "Golf|Buggy") float BuggyAnimRate = 1.5f;
+	/** Driver's seat on the buggy, buggy-local cm at ground level (left seat). */
+	UPROPERTY(EditDefaultsOnly, Category = "Golf|Buggy") FVector DriverSeat = FVector(-9.f, -28.f, 0.f);
+	/** Where the enter clip starts, relative to the seat in buggy space (measured from the clip). */
+	UPROPERTY(EditDefaultsOnly, Category = "Golf|Buggy") FVector EnterStartFromSeat = FVector(20.5f, -193.f, 0.f);
+
+	UPROPERTY(EditDefaultsOnly, Category = "Golf|Club") TSoftObjectPtr<UStaticMesh> IronClubAsset;
+	UPROPERTY(EditDefaultsOnly, Category = "Golf|Club") TSoftObjectPtr<UStaticMesh> PutterClubAsset;
+	/** Hand bone the club follows through the swing. */
+	UPROPERTY(EditDefaultsOnly, Category = "Golf|Club") FName ClubHandBone = TEXT("mixamorig:RightHand");
 
 	/** Club-on-ball times measured from the Mixamo clips (hands' fastest point, 30 fps). */
 	UPROPERTY(EditDefaultsOnly, Category = "Golf|Animations") float DriveImpactTime = 1.67f;
@@ -94,6 +121,10 @@ public:
 	/** Distance from the ball to the golfer's feet. */
 	UPROPERTY(EditDefaultsOnly, Category = "Golf")
 	float StanceDistance = 70.f;
+
+	/** How far the golfer stands back from the ball along the target line, so the ball sits mid-stance. */
+	UPROPERTY(EditDefaultsOnly, Category = "Golf")
+	float AddressBackOffset = 30.f;
 
 protected:
 	virtual void BeginPlay() override;
@@ -110,6 +141,7 @@ protected:
 	UAnimSequence* SwingAsset(EGolferSwing Swing) const;
 	UAnimSequence* ReactionAsset(EGolferReaction Reaction) const;
 	void HoldAddressPose();
+	void PlaceClub();
 
 	UPROPERTY(ReplicatedUsing = OnRep_Address)
 	FVector BallLocation = FVector::ZeroVector;
@@ -125,4 +157,5 @@ protected:
 	bool bLastPosedPutting = false;
 	/** True while a swing or reaction is playing, so address updates don't cut it off. */
 	bool bPlayingAction = false;
+	FTimerHandle ClubTimer;
 };

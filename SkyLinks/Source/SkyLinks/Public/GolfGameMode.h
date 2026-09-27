@@ -83,4 +83,7 @@ protected:
 	FTimerHandle FlowTimer;
 	FTimerHandle CameraTimer;
 	FTimerHandle StrikeTimer;
+	FTimerHandle TransitionTimer;
+	/** A golfer is climbing into or out of a buggy; ignore drive/skip presses until it finishes. */
+	bool bBuggyTransition = false;
 };

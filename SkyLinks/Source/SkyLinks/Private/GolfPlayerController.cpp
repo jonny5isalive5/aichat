@@ -12,6 +12,8 @@
 #include "GolfSessionSubsystem.h"
 #include "GolfVoiceSubsystem.h"
 #include "Components/InputComponent.h"
+#include "Components/SceneCaptureComponent2D.h"
+#include "Engine/TextureRenderTarget2D.h"
 #include "Engine/GameInstance.h"
 #include "Engine/World.h"
 
@@ -178,6 +180,42 @@ float AGolfPlayerController::GetIdlePreviewPower() const
 		: 1.f;
 }
 
+UTextureRenderTarget2D* AGolfPlayerController::GetLandingViewTexture() const
+{
+	return bLandingView && bHasPreview && LandingCapture && LandingCapture->bCaptureEveryFrame ? LandingTarget.Get() : nullptr;
+}
+
+void AGolfPlayerController::UpdateLandingCapture()
+{
+	// The main camera stays behind the golfer so aiming works as normal; the overhead view of the
+	// landing area is rendered into a small window on the HUD instead.
+	const bool bWanted = bLandingView && bHasPreview && IsMyTurn();
+	if (!bWanted)
+	{
+		if (LandingCapture)
+		{
+			LandingCapture->bCaptureEveryFrame = false;
+		}
+		return;
+	}
+	if (!LandingCapture)
+	{
+		LandingTarget = NewObject<UTextureRenderTarget2D>(this);
+		LandingTarget->InitAutoFormat(480, 270);
+		LandingCapture = NewObject<USceneCaptureComponent2D>(this);
+		LandingCapture->SetUsingAbsoluteLocation(true);
+		LandingCapture->SetUsingAbsoluteRotation(true);
+		LandingCapture->TextureTarget = LandingTarget;
+		LandingCapture->CaptureSource = ESceneCaptureSource::SCS_FinalColorLDR;
+		LandingCapture->FOVAngle = LandingViewFOV;
+		LandingCapture->bCaptureOnMovement = false;
+		LandingCapture->RegisterComponent();
+	}
+	// Straight down over the landing spot, turned so the shot travels up the window.
+	LandingCapture->SetWorldLocationAndRotation(PreviewLanding + FVector(0.f, 0.f, LandingViewHeight), FRotator(-89.9f, AimYaw, 0.f));
+	LandingCapture->bCaptureEveryFrame = true;
+}
+
 FString AGolfPlayerController::GetSpinLabel() const
 {
 	return SpinLabels[SpinPreset];
@@ -214,6 +252,7 @@ void AGolfPlayerController::Tick(float DeltaSeconds)
 		CancelSwing();
 		bHasPreview = false;
 		bLandingView = false;
+		UpdateLandingCapture();
 		GridPoints.Reset();
 		GridSlopes.Reset();
 	}
@@ -387,6 +426,8 @@ void AGolfPlayerController::Fire(float Power, float Accuracy)
 	Input.Spin = Spin;
 	ServerTakeShot(Input);
 	bHasPreview = false;
+	bLandingView = false;
+	UpdateLandingCapture();
 	GridPoints.Reset();
 	GridSlopes.Reset();
 }
@@ -461,11 +502,8 @@ void AGolfPlayerController::RefreshPreview()
 	// players can read the landing area while they adjust power and aim.
 	bLandingView = !Club.bIsPutter && Club.LaunchAngle >= 28.f
 		&& FVector::Dist2D(Start, PreviewLanding) <= LandingViewMaxCarry;
-	if (AGolfCharacter* Golfer = GetMyGolfer())
-	{
-		Golfer->SetPreviewCamera(PreviewLanding, bLandingView);
-	}
 	bHasPreview = true;
+	UpdateLandingCapture();
 }
 
 void AGolfPlayerController::RefreshGreenGrid()

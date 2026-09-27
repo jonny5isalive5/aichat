@@ -261,6 +261,8 @@ void AGolfGameMode::StartHole(int32 Index)
 	bShotInFlight = false;
 
 	State->bActiveDriving = false;
+	bBuggyTransition = false;
+	GetWorldTimerManager().ClearTimer(TransitionTimer);
 	const float TeeYaw = Hole->GetDefaultAimYaw(Hole->GetTeeLocation());
 	const FRotator TeeHeading(0.f, TeeYaw, 0.f);
 	const FVector TeeRight = FRotationMatrix(TeeHeading).GetUnitAxis(EAxis::Y);
@@ -382,18 +384,47 @@ void AGolfGameMode::StartDriving(AGolfPlayerState* Player)
 			Golfer->SetActorHiddenInGame(true);
 		}
 	}
-	Player->GetPlayerController()->Possess(Player->Buggy);
 	ViewAll(Player->Buggy, 0.6f);
-
 	const float Meters = FVector::Dist2D(Player->Buggy->GetActorLocation(), Player->Ball->GetRestLocation()) / 100.f;
 	State->MulticastAnnounce(FString::Printf(TEXT("%s  ·  DRIVE TO YOUR BALL  ·  %.0f m"), *Player->GetPlayerName(), Meters));
+
+	// Climb in first (seen from behind the buggy), then hand over the controls.
+	TWeakObjectPtr<AGolfPlayerState> WeakPlayer = Player;
+	auto TakeWheel = [this, WeakPlayer]()
+	{
+		bBuggyTransition = false;
+		AGolfPlayerState* Driver = WeakPlayer.Get();
+		if (!Driver || !Driver->Buggy || !Driver->GetPlayerController() || !GetGolfState()->bActiveDriving)
+		{
+			return;
+		}
+		if (AGolfCharacter* Golfer = GetGolfer(Driver))
+		{
+			Golfer->SetActorHiddenInGame(true);
+		}
+		Driver->GetPlayerController()->Possess(Driver->Buggy);
+		ViewAll(Driver->Buggy, 0.2f);
+	};
+	AGolfCharacter* Golfer = GetGolfer(Player);
+	const float Duration = Golfer ? Golfer->GetBuggyTransitionDuration(true) : 0.f;
+	if (Duration > 0.f)
+	{
+		bBuggyTransition = true;
+		Golfer->SetActorHiddenInGame(false);
+		Golfer->MulticastBuggyTransition(Player->Buggy, true);
+		GetWorldTimerManager().SetTimer(TransitionTimer, FTimerDelegate::CreateWeakLambda(this, TakeWheel), Duration, false);
+	}
+	else
+	{
+		TakeWheel();
+	}
 }
 
 void AGolfGameMode::FinishDriving(APlayerController* Driver, bool bSkip)
 {
 	AGolfGameState* State = GetGolfState();
 	AGolfPlayerState* Player = Driver ? Driver->GetPlayerState<AGolfPlayerState>() : nullptr;
-	if (!Player || !State->bActiveDriving || State->ActivePlayer != Player || !Player->Buggy)
+	if (!Player || !State->bActiveDriving || State->ActivePlayer != Player || !Player->Buggy || bBuggyTransition)
 	{
 		return;
 	}
@@ -411,9 +442,32 @@ void AGolfGameMode::FinishDriving(APlayerController* Driver, bool bSkip)
 		return;
 	}
 
-	State->bActiveDriving = false;
+	// Stop driving now; climb out while everyone watches from behind the buggy, then walk up to the ball.
 	PossessGolfer(Player);
-	AddressBall(Player);
+	ViewAll(Player->Buggy, 0.3f);
+	TWeakObjectPtr<AGolfPlayerState> WeakPlayer = Player;
+	auto StepUp = [this, WeakPlayer]()
+	{
+		bBuggyTransition = false;
+		GetGolfState()->bActiveDriving = false;
+		if (AGolfPlayerState* Returning = WeakPlayer.Get())
+		{
+			AddressBall(Returning);
+		}
+	};
+	AGolfCharacter* Golfer = GetGolfer(Player);
+	const float Duration = Golfer ? Golfer->GetBuggyTransitionDuration(false) : 0.f;
+	if (Duration > 0.f)
+	{
+		bBuggyTransition = true;
+		Golfer->SetActorHiddenInGame(false);
+		Golfer->MulticastBuggyTransition(Player->Buggy, false);
+		GetWorldTimerManager().SetTimer(TransitionTimer, FTimerDelegate::CreateWeakLambda(this, StepUp), Duration, false);
+	}
+	else
+	{
+		StepUp();
+	}
 }
 
 void AGolfGameMode::AddressBall(AGolfPlayerState* Player)

@@ -15,6 +15,7 @@
 #include "Engine/Font.h"
 #include "Engine/World.h"
 #include "Camera/PlayerCameraManager.h"
+#include "Engine/TextureRenderTarget2D.h"
 
 namespace Palette
 {
@@ -361,11 +362,61 @@ void AGolfHUD::DrawPlaying(AGolfGameState* State, AGolfPlayerController* Control
 	{
 		DrawClubDisc(Controller);
 		DrawPowerMeter(Controller);
+		DrawLandingView(State, Controller);
 	}
 	if (Controller->IsDriving())
 	{
 		DrawDriving(Controller);
 	}
+}
+
+void AGolfHUD::DrawLandingView(AGolfGameState* State, AGolfPlayerController* Controller)
+{
+	UTextureRenderTarget2D* Picture = Controller->GetLandingViewTexture();
+	if (!Picture || !Picture->GetResource())
+	{
+		return;
+	}
+	// Window at the top middle, 16:9.
+	const FVector2D Size(34.f * U * 16.f / 9.f, 34.f * U);
+	const FVector2D Pos(Canvas->ClipX * 0.5f - Size.X * 0.5f, 2.f * U);
+	const FVector2D Center = Pos + Size * 0.5f;
+	Box(Pos - FVector2D(0.4f * U, 0.4f * U), Size + FVector2D(0.8f * U, 0.8f * U), Palette::PanelSolid);
+	FCanvasTileItem Tile(Pos, Picture->GetResource(), Size, FLinearColor::White);
+	Tile.BlendMode = SE_BLEND_Opaque;
+	Canvas->DrawItem(Tile);
+
+	// Map ground offsets from the landing spot into the window (camera looks straight down, shot goes up).
+	using PC = AGolfPlayerController;
+	const float PixelsPerCm = (Size.X * 0.5f) / (PC::LandingViewHeight * FMath::Tan(FMath::DegreesToRadians(PC::LandingViewFOV * 0.5f)));
+	const FRotator Aim(0.f, Controller->GetAimYaw(), 0.f);
+	const FVector Forward = Aim.Vector();
+	const FVector Right = FRotationMatrix(Aim).GetUnitAxis(EAxis::Y);
+	const FVector Landing = Controller->GetPreviewLanding();
+	auto ToWindow = [&](const FVector& World, FVector2D& Out)
+	{
+		const FVector Offset = World - Landing;
+		Out = Center + FVector2D(FVector::DotProduct(Offset, Right), -FVector::DotProduct(Offset, Forward)) * PixelsPerCm;
+		return Out.X > Pos.X && Out.X < Pos.X + Size.X && Out.Y > Pos.Y && Out.Y < Pos.Y + Size.Y;
+	};
+
+	// Landing ring at the centre, and the pin if it's in the picture.
+	Ring(Center, 250.f * PixelsPerCm, Controller->IsSwinging() ? Palette::Green : Palette::White, 0.3f * U);
+	if (State->CurrentHole)
+	{
+		FVector2D Pin;
+		if (ToWindow(State->CurrentHole->GetCupLocation(), Pin))
+		{
+			const FLinearColor Yellow(1.f, 0.85f, 0.f, 1.f);
+			Line(Pin, Pin - FVector2D(0.f, 3.f * U), FLinearColor::White, 0.25f * U);
+			for (int32 Stroke = 0; Stroke <= 6; ++Stroke)
+			{
+				Line(Pin - FVector2D(0.f, 3.f * U - Stroke * 0.2f * U), Pin + FVector2D(2.f * U, -2.4f * U), Yellow, 0.3f * U);
+			}
+			Ring(Pin, 0.6f * U, Yellow, 0.25f * U);
+		}
+	}
+	Label(TEXT("LANDING"), FVector2D(Center.X, Pos.Y + Size.Y - 2.f * U), 2.2f, Palette::Gold, true);
 }
 
 void AGolfHUD::DrawPinMarker(AGolfGameState* State)
@@ -548,8 +599,11 @@ void AGolfHUD::DrawGreenGrid(AGolfPlayerController* Controller)
 	// The arrows point downhill. Their length and colour communicate the strength of the break.
 	const TArray<FVector>& Points = Controller->GetGreenGridPoints();
 	const TArray<FVector>& Slopes = Controller->GetGreenGridSlopes();
-	Box(FVector2D(Canvas->ClipX * 0.5f - 15.f * U, 2.f * U), FVector2D(30.f * U, 4.f * U), Palette::Panel);
-	Label(TEXT("BREAK GUIDE  ·  ARROWS POINT DOWNHILL"), FVector2D(Canvas->ClipX * 0.5f, 4.f * U), 2.2f, Palette::Gold, true);
+	if (Points.Num() > 0)
+	{
+		Box(FVector2D(Canvas->ClipX * 0.5f - 15.f * U, 2.f * U), FVector2D(30.f * U, 4.f * U), Palette::Panel);
+		Label(TEXT("BREAK GUIDE  ·  ARROWS POINT DOWNHILL"), FVector2D(Canvas->ClipX * 0.5f, 4.f * U), 2.2f, Palette::Gold, true);
+	}
 	for (int32 Index = 0; Index < Points.Num() && Index < Slopes.Num(); ++Index)
 	{
 		const float Percent = Slopes[Index].Size() * 100.f;
@@ -591,11 +645,6 @@ void AGolfHUD::DrawPreview(AGolfPlayerController* Controller)
 	const TArray<FVector>& Path = Controller->GetPreviewPath();
 	const FVector Landing = Controller->GetPreviewLanding();
 	const bool bPutt = Controller->IsPutting();
-	if (Controller->IsLandingView())
-	{
-		Box(FVector2D(Canvas->ClipX * 0.5f - 10.f * U, 2.f * U), FVector2D(20.f * U, 4.f * U), Palette::Panel);
-		Label(TEXT("CHIP LANDING VIEW"), FVector2D(Canvas->ClipX * 0.5f, 4.f * U), 2.3f, Palette::Gold, true);
-	}
 
 	if (bPutt)
 	{

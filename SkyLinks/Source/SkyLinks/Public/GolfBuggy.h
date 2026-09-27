@@ -59,6 +59,9 @@ public:
 	/** How close to the ball the buggy must be before the player can get out and play. */
 	static constexpr float ArriveDistance = 1500.f;
 
+	/** Height of the collision box centre (the actor origin) above the ground. */
+	static constexpr float RideHeight = 85.f;
+
 	UPROPERTY(VisibleAnywhere, Category = "Buggy")
 	TObjectPtr<UBoxComponent> Collision;
 
@@ -152,6 +155,5 @@ private:
 	FVector LastLocation = FVector::ZeroVector;
 	bool bUsingFallbackWheels = false;
 
-	/** Height of the collision box centre above the ground. */
-	static constexpr float RideHeight = 85.f;
+
 };

@@ -17,5 +17,12 @@ bones), with golf animations downloaded from Mixamo on that same character.
 Impact times were measured from the clips (the right hand's fastest point near the bottom of the swing).
 The first frame of each swing is used as the address pose while the player aims.
 
+Clubs: `Art/Blender/build_clubs.py` makes `SM_Club_Iron` (full shots and chips) and `SM_Club_Putter`.
+At address the game stands the club head behind the ball, points the shaft at the hands and fixes it to
+the right hand, so it follows the swing.
+
+Buggy: `Entering Car` starts about 1.9 m left of the driver's seat facing the buggy and ends seated;
+`Exiting Car` is the reverse. Both play at 1.5x speed.
+
 Import into Unreal: run `Scripts/import_golfer.py` in the editor. It creates `/Game/Characters/Golfer/SK_Golfer`
 (with skeleton and physics asset) and `/Game/Characters/Golfer/Animations/A_*`, which `AGolfCharacter` loads.

@@ -7,6 +7,8 @@
 #include "GolfPlayerController.generated.h"
 
 class AGolfBall;
+class USceneCaptureComponent2D;
+class UTextureRenderTarget2D;
 class AGolfBuggy;
 class AGolfCharacter;
 class AGolfGameState;
@@ -71,8 +73,14 @@ public:
 	float GetSwingPower() const { return SwingPower; }
 	float GetSwingAccuracy() const { return SwingAccuracy; }
 	bool IsPutting() const;
-	/** True while a short wedge preview is using the overhead landing-zone camera. */
+	/** True while a short wedge shot shows the overhead landing view (a window on the HUD). */
 	bool IsLandingView() const { return bLandingView; }
+	/** Live overhead picture of the landing area, or null when there isn't one. */
+	UTextureRenderTarget2D* GetLandingViewTexture() const;
+	float GetAimYaw() const { return AimYaw; }
+	/** Overhead capture: height above the landing spot (cm) and horizontal field of view (degrees). */
+	static constexpr float LandingViewHeight = 3500.f;
+	static constexpr float LandingViewFOV = 60.f;
 	int32 GetClubIndex() const { return ClubIndex; }
 	float GetClubCarry(int32 Index) const { return ClubCarry.IsValidIndex(Index) ? ClubCarry[Index] : 0.f; }
 	FString GetSpinLabel() const;
@@ -183,5 +191,12 @@ private:
 	TArray<FVector> GridPoints;
 	TArray<FVector> GridSlopes;
 	bool bLandingView = false;
+	void UpdateLandingCapture();
+
+	UPROPERTY(Transient)
+	TObjectPtr<USceneCaptureComponent2D> LandingCapture;
+
+	UPROPERTY(Transient)
+	TObjectPtr<UTextureRenderTarget2D> LandingTarget;
 	float PerfectFlashTime = -100.f;
 };

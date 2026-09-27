@@ -10,6 +10,8 @@
 #include "GameFramework/SpringArmComponent.h"
 #include "Animation/AnimSequence.h"
 #include "Engine/SkeletalMesh.h"
+#include "GolfBuggy.h"
+#include "TimerManager.h"
 #include "Materials/MaterialInstanceDynamic.h"
 #include "Net/UnrealNetwork.h"
 #include "UObject/ConstructorHelpers.h"
@@ -31,6 +33,11 @@ AGolfCharacter::AGolfCharacter()
 	}
 	PlaceholderBody->SetRelativeScale3D(FVector(0.5f, 0.5f, 1.7f));
 	PlaceholderBody->SetCollisionEnabled(ECollisionEnabled::NoCollision);
+
+	Club = CreateDefaultSubobject<UStaticMeshComponent>(TEXT("Club"));
+	Club->SetupAttachment(GetMesh());
+	Club->SetCollisionEnabled(ECollisionEnabled::NoCollision);
+	Club->SetCastShadow(true);
 
 	// Camera: low, behind the ball, looking down the aim line. Placed in world space by ApplyAddress.
 	CameraArm = CreateDefaultSubobject<USpringArmComponent>(TEXT("CameraArm"));
@@ -56,6 +63,10 @@ AGolfCharacter::AGolfCharacter()
 	PuttVictoryAnim = TSoftObjectPtr<UAnimSequence>(Anim(TEXT("A_PuttVictory")));
 	PuttMissAnim = TSoftObjectPtr<UAnimSequence>(Anim(TEXT("A_PuttMiss")));
 	BadShotAnim = TSoftObjectPtr<UAnimSequence>(Anim(TEXT("A_BadShot")));
+	EnterBuggyAnim = TSoftObjectPtr<UAnimSequence>(Anim(TEXT("A_EnterBuggy")));
+	ExitBuggyAnim = TSoftObjectPtr<UAnimSequence>(Anim(TEXT("A_ExitBuggy")));
+	IronClubAsset = TSoftObjectPtr<UStaticMesh>(Path(TEXT("SM_Club_Iron")));
+	PutterClubAsset = TSoftObjectPtr<UStaticMesh>(Path(TEXT("SM_Club_Putter")));
 }
 
 void AGolfCharacter::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifetimeProps) const
@@ -88,7 +99,10 @@ void AGolfCharacter::Restart()
 	Super::Restart();
 	// Possession resets the movement mode; the golfer is placed by code, never walks.
 	GetCharacterMovement()->DisableMovement();
-	ApplyAddress();
+	if (!bPlayingAction)
+	{
+		ApplyAddress(); // Not while climbing out of the buggy, or it would snap back to the old spot.
+	}
 }
 
 void AGolfCharacter::LoadBody()
@@ -150,6 +164,72 @@ void AGolfCharacter::HoldAddressPose()
 		GetMesh()->SetPosition(0.f, false);
 		GetMesh()->SetPlayRate(0.f);
 	}
+	// Place the club once the address pose has been evaluated (next frames), so the hands are in place.
+	if (UWorld* World = GetWorld())
+	{
+		World->GetTimerManager().SetTimer(ClubTimer, this, &AGolfCharacter::PlaceClub, 0.1f, false);
+	}
+}
+
+void AGolfCharacter::PlaceClub()
+{
+	UStaticMesh* ClubMesh = (bPuttingStance ? PutterClubAsset : IronClubAsset).LoadSynchronous();
+	if (!bHasBody || !ClubMesh)
+	{
+		Club->SetVisibility(false);
+		return;
+	}
+	if (bPlayingAction)
+	{
+		return; // Mid-swing or reaction: leave the club where the hand has it.
+	}
+	Club->SetStaticMesh(ClubMesh);
+	Club->SetVisibility(true);
+
+	// The club head rests just behind the ball on the ground; the shaft points at the middle of the hands.
+	const FVector Forward = FRotator(0.f, AimYaw, 0.f).Vector();
+	const FVector Head = BallLocation - FVector(0.f, 0.f, GolfPhysics::BallRadius) - Forward * 4.f;
+	const FVector Grip = (GetMesh()->GetBoneLocation(ClubHandBone) + GetMesh()->GetBoneLocation(TEXT("mixamorig:LeftHand"))) * 0.5f;
+	const FVector Shaft = (Grip - Head).GetSafeNormal();
+	if (Shaft.IsNearlyZero())
+	{
+		return;
+	}
+	// Club mesh: origin at the sole, shaft up +Z, face towards +X (the target).
+	const FRotator Rotation = FRotationMatrix::MakeFromZX(Shaft, Forward).Rotator();
+
+	// Fix it to the right hand, keeping this world placement (and real-world size despite the body scale).
+	Club->AttachToComponent(GetMesh(), FAttachmentTransformRules(EAttachmentRule::KeepWorld, EAttachmentRule::KeepWorld, EAttachmentRule::KeepWorld, false), ClubHandBone);
+	Club->SetWorldLocationAndRotation(Head, Rotation);
+	Club->SetWorldScale3D(FVector::OneVector);
+}
+
+float AGolfCharacter::GetBuggyTransitionDuration(bool bEnter) const
+{
+	const UAnimSequence* Clip = bHasBody ? (bEnter ? EnterBuggyAnim : ExitBuggyAnim).LoadSynchronous() : nullptr;
+	return Clip ? Clip->GetPlayLength() / FMath::Max(BuggyAnimRate, 0.1f) : 0.f;
+}
+
+void AGolfCharacter::MulticastBuggyTransition_Implementation(AGolfBuggy* Buggy, bool bEnter)
+{
+	UAnimSequence* Clip = bHasBody ? (bEnter ? EnterBuggyAnim : ExitBuggyAnim).LoadSynchronous() : nullptr;
+	if (!Clip || !Buggy)
+	{
+		return;
+	}
+	// Measured from the Mixamo clips: "Entering Car" starts about 1.9 m to the left of the seat facing
+	// the buggy and ends seated; "Exiting Car" starts seated facing forward.
+	const FTransform BuggyFrame(FRotator(0.f, Buggy->GetActorRotation().Yaw, 0.f), Buggy->GetActorLocation() - FVector(0.f, 0.f, AGolfBuggy::RideHeight));
+	const FVector Local = bEnter ? DriverSeat + EnterStartFromSeat : DriverSeat;
+	const FVector Ground = BuggyFrame.TransformPosition(Local);
+	const float Yaw = Buggy->GetActorRotation().Yaw + (bEnter ? 90.f : 0.f);
+	SetActorLocationAndRotation(Ground + FVector(0.f, 0.f, GetCapsuleComponent()->GetScaledCapsuleHalfHeight()), FRotator(0.f, Yaw, 0.f));
+
+	bPlayingAction = true;
+	Club->SetVisibility(false);
+	GetMesh()->PlayAnimation(Clip, false);
+	GetMesh()->SetPosition(0.f, false);
+	GetMesh()->SetPlayRate(BuggyAnimRate);
 }
 
 float AGolfCharacter::GetImpactDelay(EGolferSwing Swing) const
@@ -239,7 +319,7 @@ void AGolfCharacter::ApplyAddress()
 	const float HalfHeight = GetCapsuleComponent()->GetScaledCapsuleHalfHeight();
 
 	// A right-handed golfer stands on the left of the target line, facing the ball.
-	const FVector Feet = BallLocation - Right * StanceDistance - FVector(0.f, 0.f, GolfPhysics::BallRadius);
+	const FVector Feet = BallLocation - Right * StanceDistance - Aim.Vector() * AddressBackOffset - FVector(0.f, 0.f, GolfPhysics::BallRadius);
 	SetActorLocationAndRotation(Feet + FVector(0.f, 0.f, HalfHeight), FRotator(0.f, AimYaw + 90.f, 0.f));
 
 	CameraArm->TargetArmLength = 380.f;

@@ -8,6 +8,7 @@ Sources (Art/Golfer):
   Golfer.fbx                 Mixamo "With Skin" export of the Tripo golfer (33-bone mixamorig skeleton,
                              about 95 cm tall; the game scales it 1.9x)
   Animations/*.fbx           Mixamo "Without Skin" clips downloaded on that same character
+Art/Exports/SM_Club_Iron.fbx, SM_Club_Putter.fbx   Blender clubs (Art/Blender/build_clubs.py)
 
 Idle.fbx and Walking.fbx were downloaded on a different Mixamo character (65 bones, other proportions)
 and are skipped until they are re-downloaded on the golfer. Re-running replaces existing assets.
@@ -92,8 +93,24 @@ def import_animation(skeleton, source_name, asset_name):
     return anim
 
 
+def import_clubs():
+    for name in ['SM_Club_Iron', 'SM_Club_Putter']:
+        options = unreal.FbxImportUI()
+        options.set_editor_property('import_mesh', True)
+        options.set_editor_property('import_as_skeletal', False)
+        options.set_editor_property('mesh_type_to_import', unreal.FBXImportType.FBXIT_STATIC_MESH)
+        options.set_editor_property('import_materials', True)
+        options.set_editor_property('import_textures', False)
+        options.static_mesh_import_data.set_editor_property('combine_meshes', True)
+        options.static_mesh_import_data.set_editor_property('auto_generate_collision', False)
+        mesh = run_task(Path(unreal.Paths.project_dir()) / 'Art' / 'Exports' / f'{name}.fbx', DEST, name, options)
+        assert isinstance(mesh, unreal.StaticMesh), f'{name} did not import'
+        print(f'CLUB {name} length {mesh.get_bounds().box_extent.z * 2:.1f} cm')
+
+
 def import_golfer(include_idle_walk=False):
     skeleton = import_body()
+    import_clubs()
     wanted = dict(ANIMATIONS)
     if include_idle_walk:
         wanted.update(NEEDS_REDOWNLOAD)
