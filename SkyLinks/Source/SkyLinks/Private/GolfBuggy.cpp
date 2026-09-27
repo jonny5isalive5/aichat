@@ -61,7 +61,7 @@ AGolfBuggy::AGolfBuggy()
 	CameraArm->bEnableCameraRotationLag = true;
 	CameraArm->CameraLagSpeed = 8.f;
 	CameraArm->CameraRotationLagSpeed = 5.f;
-	CameraArm->bDoCollisionTest = true;
+	CameraArm->bDoCollisionTest = false; // Never pull the camera into the canopy (golfer climbing in/out, trees).
 
 	Camera = CreateDefaultSubobject<UCameraComponent>(TEXT("Camera"));
 	Camera->SetupAttachment(CameraArm);

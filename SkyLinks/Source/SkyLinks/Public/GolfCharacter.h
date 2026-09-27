@@ -110,8 +110,8 @@ public:
 
 	UPROPERTY(EditDefaultsOnly, Category = "Golf|Club") TSoftObjectPtr<UStaticMesh> IronClubAsset;
 	UPROPERTY(EditDefaultsOnly, Category = "Golf|Club") TSoftObjectPtr<UStaticMesh> PutterClubAsset;
-	/** Hand bone the club follows through the swing. */
-	UPROPERTY(EditDefaultsOnly, Category = "Golf|Club") FName ClubHandBone = TEXT("mixamorig:RightHand");
+	/** Hand bone the club follows through the swing (matched by suffix, so importer renaming doesn't matter). */
+	UPROPERTY(EditDefaultsOnly, Category = "Golf|Club") FString ClubHandBone = TEXT("RightHand");
 
 	/** Club-on-ball times measured from the Mixamo clips (hands' fastest point, 30 fps). */
 	UPROPERTY(EditDefaultsOnly, Category = "Golf|Animations") float DriveImpactTime = 1.67f;
@@ -142,6 +142,8 @@ protected:
 	UAnimSequence* ReactionAsset(EGolferReaction Reaction) const;
 	void HoldAddressPose();
 	void PlaceClub();
+	/** Bone whose name is Suffix, or ends in ":Suffix" / "_Suffix"; NAME_None if the mesh has none. */
+	FName FindBone(const TCHAR* Suffix) const;
 
 	UPROPERTY(ReplicatedUsing = OnRep_Address)
 	FVector BallLocation = FVector::ZeroVector;

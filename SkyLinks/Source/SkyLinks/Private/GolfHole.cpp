@@ -2,6 +2,7 @@
 #include "Components/StaticMeshComponent.h"
 #include "Engine/StaticMesh.h"
 #include "Materials/MaterialInstanceDynamic.h"
+#include "Materials/MaterialInterface.h"
 #include "UObject/ConstructorHelpers.h"
 
 AGolfHole::AGolfHole()
@@ -49,14 +50,14 @@ void AGolfHole::BeginPlay()
 
 void AGolfHole::ApplyColors()
 {
-	auto Tint = [](UStaticMeshComponent* Part, const FLinearColor& Color)
+	UMaterialInterface* Base = LoadObject<UMaterialInterface>(nullptr, TEXT("/Engine/BasicShapes/BasicShapeMaterial.BasicShapeMaterial"));
+	auto Tint = [this, Base](UStaticMeshComponent* Part, const FLinearColor& Color)
 	{
-		if (Part && Part->GetStaticMesh())
+		if (Part && Part->GetStaticMesh() && Base)
 		{
-			if (UMaterialInstanceDynamic* Material = Part->CreateAndSetMaterialInstanceDynamic(0))
-			{
-				Material->SetVectorParameterValue(TEXT("Color"), Color);
-			}
+			UMaterialInstanceDynamic* Material = UMaterialInstanceDynamic::Create(Base, this);
+			Material->SetVectorParameterValue(TEXT("Color"), Color);
+			Part->SetMaterial(0, Material);
 		}
 	};
 	Tint(CupMesh, FLinearColor(0.01f, 0.01f, 0.01f));

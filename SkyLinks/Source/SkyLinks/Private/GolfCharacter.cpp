@@ -23,6 +23,8 @@ AGolfCharacter::AGolfCharacter()
 
 	GetCapsuleComponent()->SetCollisionResponseToChannel(ECC_GolfBall, ECR_Ignore);
 	GetMesh()->SetCollisionResponseToChannel(ECC_GolfBall, ECR_Ignore);
+	GetCapsuleComponent()->SetCollisionResponseToChannel(ECC_Camera, ECR_Ignore);
+	GetMesh()->SetCollisionResponseToChannel(ECC_Camera, ECR_Ignore);
 
 	PlaceholderBody = CreateDefaultSubobject<UStaticMeshComponent>(TEXT("PlaceholderBody"));
 	PlaceholderBody->SetupAttachment(GetCapsuleComponent());
@@ -171,6 +173,22 @@ void AGolfCharacter::HoldAddressPose()
 	}
 }
 
+FName AGolfCharacter::FindBone(const TCHAR* Suffix) const
+{
+	const FString Wanted(Suffix);
+	for (int32 Index = 0; Index < GetMesh()->GetNumBones(); ++Index)
+	{
+		const FName Bone = GetMesh()->GetBoneName(Index);
+		const FString Name = Bone.ToString();
+		if (Name.Equals(Wanted, ESearchCase::IgnoreCase) || Name.EndsWith(TEXT(":") + Wanted, ESearchCase::IgnoreCase)
+			|| Name.EndsWith(TEXT("_") + Wanted, ESearchCase::IgnoreCase))
+		{
+			return Bone;
+		}
+	}
+	return NAME_None;
+}
+
 void AGolfCharacter::PlaceClub()
 {
 	UStaticMesh* ClubMesh = (bPuttingStance ? PutterClubAsset : IronClubAsset).LoadSynchronous();
@@ -186,10 +204,22 @@ void AGolfCharacter::PlaceClub()
 	Club->SetStaticMesh(ClubMesh);
 	Club->SetVisibility(true);
 
+	// Make sure the bones are in the address pose now, not last frame's (or a hidden golfer's) pose.
+	GetMesh()->TickAnimation(0.f, false);
+	GetMesh()->RefreshBoneTransforms();
+
+	const FName RightHand = FindBone(*ClubHandBone);
+	const FName LeftHand = FindBone(TEXT("LeftHand"));
+	if (RightHand.IsNone() || LeftHand.IsNone())
+	{
+		UE_LOG(LogSkyLinks, Warning, TEXT("Golfer: no hand bones found; the club stays hidden."));
+		Club->SetVisibility(false);
+		return;
+	}
 	// The club head rests just behind the ball on the ground; the shaft points at the middle of the hands.
 	const FVector Forward = FRotator(0.f, AimYaw, 0.f).Vector();
 	const FVector Head = BallLocation - FVector(0.f, 0.f, GolfPhysics::BallRadius) - Forward * 4.f;
-	const FVector Grip = (GetMesh()->GetBoneLocation(ClubHandBone) + GetMesh()->GetBoneLocation(TEXT("mixamorig:LeftHand"))) * 0.5f;
+	const FVector Grip = (GetMesh()->GetBoneLocation(RightHand) + GetMesh()->GetBoneLocation(LeftHand)) * 0.5f;
 	const FVector Shaft = (Grip - Head).GetSafeNormal();
 	if (Shaft.IsNearlyZero())
 	{
@@ -199,7 +229,7 @@ void AGolfCharacter::PlaceClub()
 	const FRotator Rotation = FRotationMatrix::MakeFromZX(Shaft, Forward).Rotator();
 
 	// Fix it to the right hand, keeping this world placement (and real-world size despite the body scale).
-	Club->AttachToComponent(GetMesh(), FAttachmentTransformRules(EAttachmentRule::KeepWorld, EAttachmentRule::KeepWorld, EAttachmentRule::KeepWorld, false), ClubHandBone);
+	Club->AttachToComponent(GetMesh(), FAttachmentTransformRules(EAttachmentRule::KeepWorld, EAttachmentRule::KeepWorld, EAttachmentRule::KeepWorld, false), RightHand);
 	Club->SetWorldLocationAndRotation(Head, Rotation);
 	Club->SetWorldScale3D(FVector::OneVector);
 }
@@ -302,9 +332,16 @@ void AGolfCharacter::ServerSetAim_Implementation(float InAimYaw)
 
 void AGolfCharacter::OnRep_Address()
 {
+	const bool bNewAddress = BallLocation != LastPosedBall || bPuttingStance != bLastPosedPutting;
+	// The aiming player already turned locally; an echo of an older aim from the server would snap
+	// the golfer back and forth. Only take the server's aim when it's a new address.
+	if (IsLocallyControlled() && !bNewAddress)
+	{
+		return;
+	}
 	ApplyAddress();
 	// A new ball position or stance means a new shot: go back to the address pose.
-	if (BallLocation != LastPosedBall || bPuttingStance != bLastPosedPutting)
+	if (bNewAddress)
 	{
 		LastPosedBall = BallLocation;
 		bLastPosedPutting = bPuttingStance;
