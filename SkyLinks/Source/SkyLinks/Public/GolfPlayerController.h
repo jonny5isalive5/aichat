@@ -71,6 +71,8 @@ public:
 	float GetSwingPower() const { return SwingPower; }
 	float GetSwingAccuracy() const { return SwingAccuracy; }
 	bool IsPutting() const;
+	/** True while a short wedge preview is using the overhead landing-zone camera. */
+	bool IsLandingView() const { return bLandingView; }
 	int32 GetClubIndex() const { return ClubIndex; }
 	float GetClubCarry(int32 Index) const { return ClubCarry.IsValidIndex(Index) ? ClubCarry[Index] : 0.f; }
 	FString GetSpinLabel() const;
@@ -128,6 +130,7 @@ private:
 	void OnTurnStarted();
 	void RefreshPreview();
 	void RefreshGreenGrid();
+	float GetIdlePreviewPower() const;
 
 	AGolfGameState* GetGolfState() const;
 	AGolfCharacter* GetMyGolfer() const;
@@ -179,5 +182,6 @@ private:
 	FVector PreviewLanding = FVector::ZeroVector;
 	TArray<FVector> GridPoints;
 	TArray<FVector> GridSlopes;
+	bool bLandingView = false;
 	float PerfectFlashTime = -100.f;
 };

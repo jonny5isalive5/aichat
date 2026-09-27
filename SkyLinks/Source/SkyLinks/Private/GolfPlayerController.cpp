@@ -24,6 +24,7 @@ namespace
 
 	const FVector2D SpinPresets[] = { { 0.f, 0.f }, { 0.f, -1.f }, { 0.f, 1.f } };
 	const TCHAR* SpinLabels[] = { TEXT("SPIN"), TEXT("BACK"), TEXT("TOP") };
+	constexpr float LandingViewMaxCarry = 7500.f;
 }
 
 AGolfPlayerController::AGolfPlayerController()
@@ -155,6 +156,28 @@ bool AGolfPlayerController::IsPutting() const
 	return Bag.IsValidIndex(ClubIndex) && Bag[ClubIndex].bIsPutter;
 }
 
+float AGolfPlayerController::GetIdlePreviewPower() const
+{
+	if (!IsPutting())
+	{
+		return 1.f;
+	}
+
+	const AGolfBall* Ball = GetMyBall();
+	const AGolfGameState* State = GetGolfState();
+	const TArray<FGolfClub>& Bag = GolfPhysics::GetClubBag();
+	if (!Ball || !State || !State->CurrentHole || !Bag.IsValidIndex(ClubIndex))
+	{
+		return 1.f;
+	}
+
+	const float FullPowerDistance = GolfPhysics::PuttDistance(Bag[ClubIndex].LaunchSpeed);
+	const float ToPin = FVector::Dist2D(Ball->GetRestLocation(), State->CurrentHole->GetCupLocation());
+	return FullPowerDistance > KINDA_SMALL_NUMBER
+		? FMath::Clamp(FMath::Sqrt(ToPin / FullPowerDistance), MinShotPower, 1.f)
+		: 1.f;
+}
+
 FString AGolfPlayerController::GetSpinLabel() const
 {
 	return SpinLabels[SpinPreset];
@@ -190,6 +213,7 @@ void AGolfPlayerController::Tick(float DeltaSeconds)
 	{
 		CancelSwing();
 		bHasPreview = false;
+		bLandingView = false;
 		GridPoints.Reset();
 		GridSlopes.Reset();
 	}
@@ -220,7 +244,7 @@ void AGolfPlayerController::Tick(float DeltaSeconds)
 	}
 
 	// The preview follows the power being swiped; at rest it shows a full-power shot.
-	const float WantedPower = IsSwinging() ? FMath::Max(SwingPower, MinShotPower) : 1.f;
+	const float WantedPower = IsSwinging() ? FMath::Max(SwingPower, MinShotPower) : GetIdlePreviewPower();
 	if (FMath::Abs(WantedPower - PreviewPower) > 0.01f)
 	{
 		PreviewPower = WantedPower;
@@ -398,6 +422,7 @@ void AGolfPlayerController::RefreshPreview()
 	if (!Ball || !Bag.IsValidIndex(ClubIndex))
 	{
 		bHasPreview = false;
+		bLandingView = false;
 		return;
 	}
 
@@ -431,6 +456,15 @@ void AGolfPlayerController::RefreshPreview()
 		Input.Spin = Spin;
 		GolfPhysics::PredictCarry(GetWorld(), GolfPhysics::MakeLaunch(Club, Input, Ball->GetLie(), Start), Ball, PreviewPath, PreviewLanding);
 	}
+
+	// Wedges with a short predicted carry are played as chips. Centre the view on the target so
+	// players can read the landing area while they adjust power and aim.
+	bLandingView = !Club.bIsPutter && Club.LaunchAngle >= 28.f
+		&& FVector::Dist2D(Start, PreviewLanding) <= LandingViewMaxCarry;
+	if (AGolfCharacter* Golfer = GetMyGolfer())
+	{
+		Golfer->SetPreviewCamera(PreviewLanding, bLandingView);
+	}
 	bHasPreview = true;
 }
 
@@ -447,14 +481,16 @@ void AGolfPlayerController::RefreshGreenGrid()
 		return;
 	}
 
-	// Sample the green in a band along the aim line, out past the longest putt.
-	const float Reach = GolfPhysics::PuttDistance(GolfPhysics::GetClubBag()[ClubIndex].LaunchSpeed) + 300.f;
 	const FRotator Aim(0.f, AimYaw, 0.f);
 	const FVector Forward = Aim.Vector();
 	const FVector Right = FRotationMatrix(Aim).GetUnitAxis(EAxis::Y);
 	const FVector Origin = Ball->GetRestLocation();
-	constexpr float Spacing = 75.f;
-	constexpr float HalfWidth = 375.f;
+	// Read only the corridor around the selected putt. A full-power putter preview can reach 40m,
+	// which made the old grid busy and unrelated to the shot the player was setting up.
+	const float PreviewDistance = bHasPreview ? FVector::Dist2D(Origin, PreviewLanding) : 0.f;
+	const float Reach = FMath::Clamp(PreviewDistance + 250.f, 500.f, 3000.f);
+	constexpr float Spacing = 100.f;
+	constexpr float HalfWidth = 150.f;
 
 	for (float Along = -150.f; Along <= Reach; Along += Spacing)
 	{

@@ -89,6 +89,21 @@ void AGolfCharacter::SetLocalAim(float InAimYaw)
 	ServerSetAim(InAimYaw);
 }
 
+void AGolfCharacter::SetPreviewCamera(const FVector& LandingLocation, bool bUseLandingView)
+{
+	if (!bUseLandingView)
+	{
+		ApplyAddress();
+		return;
+	}
+
+	// A 45 m high camera keeps the landing ring and its surrounding green readable on a phone.
+	CameraArm->TargetArmLength = 0.f;
+	CameraArm->SocketOffset = FVector::ZeroVector;
+	CameraArm->SetWorldLocationAndRotation(LandingLocation + FVector(0.f, 0.f, 4500.f), FRotator(-89.f, AimYaw, 0.f));
+	Camera->SetFieldOfView(70.f);
+}
+
 void AGolfCharacter::ServerSetAim_Implementation(float InAimYaw)
 {
 	AimYaw = InAimYaw;
@@ -110,7 +125,10 @@ void AGolfCharacter::ApplyAddress()
 	const FVector Feet = BallLocation - Right * StanceDistance - FVector(0.f, 0.f, GolfPhysics::BallRadius);
 	SetActorLocationAndRotation(Feet + FVector(0.f, 0.f, HalfHeight), FRotator(0.f, AimYaw + 90.f, 0.f));
 
+	CameraArm->TargetArmLength = 380.f;
+	CameraArm->SocketOffset = FVector(0.f, 45.f, 80.f);
 	CameraArm->SetWorldLocationAndRotation(BallLocation + FVector(0.f, 0.f, 60.f), FRotator(-8.f, AimYaw, 0.f));
+	Camera->SetFieldOfView(70.f);
 }
 
 void AGolfCharacter::MulticastPlaySwing_Implementation()

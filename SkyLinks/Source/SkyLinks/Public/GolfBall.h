@@ -55,9 +55,9 @@ public:
 	UPROPERTY(VisibleAnywhere, Category = "Golf")
 	TObjectPtr<UCameraComponent> ChaseCamera;
 
-	/** Drawn size relative to a regulation ball. Raise it if the ball is hard to see on small phones; physics size is unchanged. */
+	/** Drawn size relative to a regulation ball. This is deliberately oversized for readable phone play; physics size is unchanged. */
 	UPROPERTY(EditDefaultsOnly, Category = "Golf")
-	float VisualScale = 1.f;
+	float VisualScale = 3.f;
 
 	/** How far behind the ball the chase camera trails. */
 	UPROPERTY(EditDefaultsOnly, Category = "Golf|Camera")

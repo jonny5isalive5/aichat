@@ -545,28 +545,38 @@ void AGolfHUD::DrawWind(AGolfGameState* State)
 
 void AGolfHUD::DrawGreenGrid(AGolfPlayerController* Controller)
 {
-	// Slope arrows point downhill. White is nearly flat, amber is a few percent, red is steep.
+	// The arrows point downhill. Their length and colour communicate the strength of the break.
 	const TArray<FVector>& Points = Controller->GetGreenGridPoints();
 	const TArray<FVector>& Slopes = Controller->GetGreenGridSlopes();
+	Box(FVector2D(Canvas->ClipX * 0.5f - 15.f * U, 2.f * U), FVector2D(30.f * U, 4.f * U), Palette::Panel);
+	Label(TEXT("BREAK GUIDE  ·  ARROWS POINT DOWNHILL"), FVector2D(Canvas->ClipX * 0.5f, 4.f * U), 2.2f, Palette::Gold, true);
 	for (int32 Index = 0; Index < Points.Num() && Index < Slopes.Num(); ++Index)
 	{
 		const float Percent = Slopes[Index].Size() * 100.f;
-		const FLinearColor Color = Percent < 1.f ? FLinearColor(1.f, 1.f, 1.f, 0.45f)
-			: Percent < 3.f ? FLinearColor(1.f, 0.8f, 0.3f, 0.8f) : FLinearColor(1.f, 0.3f, 0.2f, 0.9f);
+		if (Percent < 0.6f)
+		{
+			continue;
+		}
+		const FLinearColor Color = Percent < 2.f ? FLinearColor(1.f, 0.8f, 0.3f, 0.85f)
+			: FLinearColor(1.f, 0.45f, 0.25f, 0.9f);
 
 		FVector2D From;
 		if (!ToScreen(Points[Index] + FVector(0.f, 0.f, 1.f), From))
 		{
 			continue;
 		}
-		Disc(From, 0.25f * U, Color);
-		if (Percent >= 0.3f)
+		const FVector Tip = Points[Index] + Slopes[Index].GetSafeNormal() * FMath::Clamp(Percent * 20.f, 30.f, 90.f) + FVector(0.f, 0.f, 1.f);
+		FVector2D To;
+		if (ToScreen(Tip, To))
 		{
-			const FVector Tip = Points[Index] + Slopes[Index].GetSafeNormal() * FMath::Clamp(Percent * 8.f, 12.f, 45.f) + FVector(0.f, 0.f, 1.f);
-			FVector2D To;
-			if (ToScreen(Tip, To))
+			Line(From, To, Color, 0.35f * U);
+			const FVector2D Direction = (To - From).GetSafeNormal();
+			if (!Direction.IsNearlyZero())
 			{
-				Line(From, To, Color, 0.25f * U);
+				const FVector2D Side(-Direction.Y, Direction.X);
+				const float HeadLength = 1.1f * U;
+				Line(To, To - Direction * HeadLength + Side * (0.65f * U), Color, 0.35f * U);
+				Line(To, To - Direction * HeadLength - Side * (0.65f * U), Color, 0.35f * U);
 			}
 		}
 	}
@@ -581,6 +591,11 @@ void AGolfHUD::DrawPreview(AGolfPlayerController* Controller)
 	const TArray<FVector>& Path = Controller->GetPreviewPath();
 	const FVector Landing = Controller->GetPreviewLanding();
 	const bool bPutt = Controller->IsPutting();
+	if (Controller->IsLandingView())
+	{
+		Box(FVector2D(Canvas->ClipX * 0.5f - 10.f * U, 2.f * U), FVector2D(20.f * U, 4.f * U), Palette::Panel);
+		Label(TEXT("CHIP LANDING VIEW"), FVector2D(Canvas->ClipX * 0.5f, 4.f * U), 2.3f, Palette::Gold, true);
+	}
 
 	if (bPutt)
 	{
