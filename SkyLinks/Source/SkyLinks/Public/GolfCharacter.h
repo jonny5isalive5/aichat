@@ -112,6 +112,8 @@ public:
 	UPROPERTY(EditDefaultsOnly, Category = "Golf|Club") TSoftObjectPtr<UStaticMesh> PutterClubAsset;
 	/** Hand bone the club follows through the swing (matched by suffix, so importer renaming doesn't matter). */
 	UPROPERTY(EditDefaultsOnly, Category = "Golf|Club") FString ClubHandBone = TEXT("RightHand");
+	/** How far the club sticks out past the middle of the hands (cm). */
+	UPROPERTY(EditDefaultsOnly, Category = "Golf|Club") float ClubGripOverhang = 12.f;
 
 	/** Club-on-ball times measured from the Mixamo clips (hands' fastest point, 30 fps). */
 	UPROPERTY(EditDefaultsOnly, Category = "Golf|Animations") float DriveImpactTime = 1.67f;

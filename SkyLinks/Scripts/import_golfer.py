@@ -10,6 +10,8 @@ Sources (Art/Golfer):
   Animations/*.fbx           Mixamo "Without Skin" clips downloaded on that same character
 Art/Exports/SM_Club_Iron.fbx, SM_Club_Putter.fbx   Blender clubs (Art/Blender/build_clubs.py)
 
+Animations/Fixed/*.fbx      cleaned swing clips from Art/Blender/fix_swing_clips.py, used instead of the originals
+
 Idle.fbx and Walking.fbx were downloaded on a different Mixamo character (65 bones, other proportions)
 and are skipped until they are re-downloaded on the golfer. Re-running replaces existing assets.
 """
@@ -73,7 +75,9 @@ def import_body():
 
 
 def import_animation(skeleton, source_name, asset_name):
-    path = SOURCE / 'Animations' / f'{source_name}.fbx'
+    # Art/Blender/fix_swing_clips.py writes cleaned copies (feet planted) of glitchy clips to Animations/Fixed.
+    fixed = SOURCE / 'Animations' / 'Fixed' / f'{source_name}.fbx'
+    path = fixed if fixed.is_file() else SOURCE / 'Animations' / f'{source_name}.fbx'
     if not path.is_file():
         print(f'MISSING {path.name}')
         return None
@@ -89,7 +93,7 @@ def import_animation(skeleton, source_name, asset_name):
     if not isinstance(anim, unreal.AnimSequence):
         print(f'FAILED {source_name} -> {asset_name}')
         return None
-    print(f'ANIM {asset_name:18s} {anim.get_play_length():6.2f} s  <- {source_name}')
+    print(f'ANIM {asset_name:18s} {anim.get_play_length():6.2f} s  <- {source_name}{" (fixed)" if path == fixed else ""}')
     return anim
 
 
@@ -119,6 +123,12 @@ def import_golfer(include_idle_walk=False):
     missing = required - set(imported)
     print(f'GOLFER DONE: {len(imported)} animations; required swings missing: {sorted(missing) or "none"}')
     return imported
+
+
+def reimport_animations(names):
+    """Re-import only these clips, e.g. reimport_animations(['A_Chip', 'A_Putt']) after fixing them."""
+    skeleton = unreal.load_asset(f'{DEST}/SK_Golfer').get_editor_property('skeleton')
+    return [name for source, name in ANIMATIONS.items() if name in names and import_animation(skeleton, source, name)]
 
 
 import_golfer()

@@ -20,6 +20,11 @@ AGolfCharacter::AGolfCharacter()
 {
 	bReplicates = true;
 	SetReplicateMovement(false);
+	// The golfer is posed by code (address, buggy). Following the controller's yaw would turn them away
+	// from the ball every frame (flipping while aiming) and walk them past the buggy when climbing in.
+	bUseControllerRotationPitch = false;
+	bUseControllerRotationYaw = false;
+	bUseControllerRotationRoll = false;
 
 	GetCapsuleComponent()->SetCollisionResponseToChannel(ECC_GolfBall, ECR_Ignore);
 	GetMesh()->SetCollisionResponseToChannel(ECC_GolfBall, ECR_Ignore);
@@ -231,7 +236,11 @@ void AGolfCharacter::PlaceClub()
 	// Fix it to the right hand, keeping this world placement (and real-world size despite the body scale).
 	Club->AttachToComponent(GetMesh(), FAttachmentTransformRules(EAttachmentRule::KeepWorld, EAttachmentRule::KeepWorld, EAttachmentRule::KeepWorld, false), RightHand);
 	Club->SetWorldLocationAndRotation(Head, Rotation);
-	Club->SetWorldScale3D(FVector::OneVector);
+	// Stretch the shaft (not the head) so the grip reaches the hands of the scaled-up golfer.
+	const float MeshLength = ClubMesh->GetBounds().BoxExtent.Z * 2.f;
+	const float Reach = FVector::Dist(Head, Grip) + ClubGripOverhang;
+	const float Stretch = MeshLength > 1.f ? FMath::Clamp(Reach / MeshLength, 0.7f, 1.8f) : 1.f;
+	Club->SetWorldScale3D(FVector(1.f, 1.f, Stretch));
 }
 
 float AGolfCharacter::GetBuggyTransitionDuration(bool bEnter) const
