@@ -62,6 +62,8 @@ private:
 	void TryLogin(const FString& Type);
 
 	void JoinResult(const FOnlineSessionSearchResult& Result);
+	void CloseExistingSession(TFunction<void()> Then);
+	void OnDestroyComplete(FName SessionName, bool bSuccess);
 	void OnCreateComplete(FName SessionName, bool bSuccess);
 	void OnFindComplete(bool bSuccess);
 	void OnJoinComplete(FName SessionName, EOnJoinSessionCompleteResult::Type Result);
@@ -73,6 +75,9 @@ private:
 	TSharedPtr<FOnlineSessionSearch> Search;
 	FString SearchCode;
 	FDelegateHandle CreateHandle, FindHandle, JoinHandle, InviteReceivedHandle, InviteAcceptedHandle, LoginHandle;
+	FDelegateHandle DestroyHandle;
+	TFunction<void()> AfterDestroy;
+	bool bSessionOperationInProgress = false;
 
 	TArray<FGolfFriend> Friends;
 	FOnlineSessionSearchResult PendingInvite;

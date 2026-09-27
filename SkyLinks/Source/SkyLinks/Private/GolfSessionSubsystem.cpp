@@ -8,6 +8,7 @@
 #include "Interfaces/OnlinePresenceInterface.h"
 #include "Online/OnlineSessionNames.h"
 #include "OnlineSubsystem.h"
+#include "OnlineSubsystemUtils.h"
 
 const FName UGolfSessionSubsystem::RoomCodeKey(TEXT("ROOMCODE"));
 
@@ -27,27 +28,40 @@ void UGolfSessionSubsystem::Deinitialize()
 {
 	if (IOnlineSessionPtr Sessions = GetSessions())
 	{
+		Sessions->ClearOnCreateSessionCompleteDelegate_Handle(CreateHandle);
+		Sessions->ClearOnFindSessionsCompleteDelegate_Handle(FindHandle);
+		Sessions->ClearOnJoinSessionCompleteDelegate_Handle(JoinHandle);
+		Sessions->ClearOnDestroySessionCompleteDelegate_Handle(DestroyHandle);
 		Sessions->ClearOnSessionInviteReceivedDelegate_Handle(InviteReceivedHandle);
 		Sessions->ClearOnSessionUserInviteAcceptedDelegate_Handle(InviteAcceptedHandle);
 	}
+	if (const IOnlineSubsystem* Subsystem = Online::GetSubsystem(GetWorld()))
+	{
+		if (IOnlineIdentityPtr Identity = Subsystem->GetIdentityInterface())
+		{
+			Identity->ClearOnLoginCompleteDelegate_Handle(0, LoginHandle);
+		}
+	}
+	AfterLogin = nullptr;
+	AfterDestroy = nullptr;
 	Super::Deinitialize();
 }
 
 IOnlineSessionPtr UGolfSessionSubsystem::GetSessions() const
 {
-	const IOnlineSubsystem* Subsystem = IOnlineSubsystem::Get();
+	const IOnlineSubsystem* Subsystem = Online::GetSubsystem(GetWorld());
 	return Subsystem ? Subsystem->GetSessionInterface() : nullptr;
 }
 
 bool UGolfSessionSubsystem::IsLan() const
 {
-	const IOnlineSubsystem* Subsystem = IOnlineSubsystem::Get();
+	const IOnlineSubsystem* Subsystem = Online::GetSubsystem(GetWorld());
 	return !Subsystem || Subsystem->GetSubsystemName() == TEXT("NULL");
 }
 
 bool UGolfSessionSubsystem::SupportsFriends() const
 {
-	const IOnlineSubsystem* Subsystem = IOnlineSubsystem::Get();
+	const IOnlineSubsystem* Subsystem = Online::GetSubsystem(GetWorld());
 	return !IsLan() && Subsystem && Subsystem->GetFriendsInterface().IsValid();
 }
 
@@ -55,7 +69,7 @@ bool UGolfSessionSubsystem::SupportsFriends() const
 
 void UGolfSessionSubsystem::EnsureLoggedIn(TFunction<void()> Then)
 {
-	const IOnlineSubsystem* Subsystem = IOnlineSubsystem::Get();
+	const IOnlineSubsystem* Subsystem = Online::GetSubsystem(GetWorld());
 	IOnlineIdentityPtr Identity = Subsystem ? Subsystem->GetIdentityInterface() : nullptr;
 	if (IsLan() || !Identity.IsValid() || Identity->GetLoginStatus(0) == ELoginStatus::LoggedIn)
 	{
@@ -71,7 +85,7 @@ void UGolfSessionSubsystem::EnsureLoggedIn(TFunction<void()> Then)
 
 void UGolfSessionSubsystem::TryLogin(const FString& Type)
 {
-	IOnlineIdentityPtr Identity = IOnlineSubsystem::Get()->GetIdentityInterface();
+	IOnlineIdentityPtr Identity = Online::GetSubsystem(GetWorld())->GetIdentityInterface();
 	FOnlineAccountCredentials Credentials;
 	Credentials.Type = Type;
 	Status = TEXT("Signing in...");
@@ -87,9 +101,11 @@ void UGolfSessionSubsystem::OnLoginComplete(int32 LocalUserNum, bool bWasSuccess
 		return;
 	}
 
-	IOnlineSubsystem::Get()->GetIdentityInterface()->ClearOnLoginCompleteDelegate_Handle(0, LoginHandle);
+	Online::GetSubsystem(GetWorld())->GetIdentityInterface()->ClearOnLoginCompleteDelegate_Handle(0, LoginHandle);
 	if (!bWasSuccessful)
 	{
+		bSessionOperationInProgress = false;
+		AfterLogin = nullptr;
 		Status = FString::Printf(TEXT("Sign-in failed: %s"), *Error);
 		return;
 	}
@@ -105,45 +121,48 @@ void UGolfSessionSubsystem::OnLoginComplete(int32 LocalUserNum, bool bWasSuccess
 
 void UGolfSessionSubsystem::HostOnline()
 {
+	if (bSessionOperationInProgress) return;
+	bSessionOperationInProgress = true;
 	EnsureLoggedIn([this]()
 	{
 		IOnlineSessionPtr Sessions = GetSessions();
 		RoomCode = FString::Printf(TEXT("%04d"), FMath::RandRange(0, 9999));
 		if (!Sessions.IsValid())
 		{
+			bSessionOperationInProgress = false;
 			Status = TEXT("No online service. Hosting directly.");
 			GetWorld()->ServerTravel(CourseMap + TEXT("?listen"));
 			return;
 		}
-		if (Sessions->GetNamedSession(NAME_GameSession))
+		CloseExistingSession([this, Sessions]()
 		{
-			Sessions->DestroySession(NAME_GameSession);
-		}
+			FOnlineSessionSettings Settings;
+			Settings.NumPublicConnections = MaxPlayers;
+			Settings.bShouldAdvertise = true;
+			Settings.bAllowJoinInProgress = true;
+			Settings.bIsLANMatch = IsLan();
+			Settings.bUsesPresence = true;
+			Settings.bUseLobbiesIfAvailable = true;
+			Settings.bAllowJoinViaPresence = true;
+			Settings.bAllowInvites = true;
+			Settings.Set(RoomCodeKey, RoomCode, EOnlineDataAdvertisementType::ViaOnlineServiceAndPing);
 
-		FOnlineSessionSettings Settings;
-		Settings.NumPublicConnections = MaxPlayers;
-		Settings.bShouldAdvertise = true;
-		Settings.bAllowJoinInProgress = true;
-		Settings.bIsLANMatch = IsLan();
-		Settings.bUsesPresence = true;
-		Settings.bUseLobbiesIfAvailable = true;
-		Settings.bAllowJoinViaPresence = true;
-		Settings.bAllowInvites = true;
-		Settings.Set(RoomCodeKey, RoomCode, EOnlineDataAdvertisementType::ViaOnlineServiceAndPing);
-
-		CreateHandle = Sessions->AddOnCreateSessionCompleteDelegate_Handle(
-			FOnCreateSessionCompleteDelegate::CreateUObject(this, &UGolfSessionSubsystem::OnCreateComplete));
-		Status = TEXT("Creating game...");
-		if (!Sessions->CreateSession(0, NAME_GameSession, Settings))
-		{
-			Sessions->ClearOnCreateSessionCompleteDelegate_Handle(CreateHandle);
-			Status = TEXT("Could not create a game.");
-		}
+			CreateHandle = Sessions->AddOnCreateSessionCompleteDelegate_Handle(
+				FOnCreateSessionCompleteDelegate::CreateUObject(this, &UGolfSessionSubsystem::OnCreateComplete));
+			Status = TEXT("Creating game...");
+			if (!Sessions->CreateSession(0, NAME_GameSession, Settings))
+			{
+				Sessions->ClearOnCreateSessionCompleteDelegate_Handle(CreateHandle);
+				bSessionOperationInProgress = false;
+				Status = TEXT("Could not create a game.");
+			}
+		});
 	});
 }
 
 void UGolfSessionSubsystem::OnCreateComplete(FName SessionName, bool bSuccess)
 {
+	bSessionOperationInProgress = false;
 	if (IOnlineSessionPtr Sessions = GetSessions())
 	{
 		Sessions->ClearOnCreateSessionCompleteDelegate_Handle(CreateHandle);
@@ -157,16 +176,57 @@ void UGolfSessionSubsystem::OnCreateComplete(FName SessionName, bool bSuccess)
 	GetWorld()->ServerTravel(CourseMap + TEXT("?listen"));
 }
 
+void UGolfSessionSubsystem::CloseExistingSession(TFunction<void()> Then)
+{
+	IOnlineSessionPtr Sessions = GetSessions();
+	if (!Sessions.IsValid() || !Sessions->GetNamedSession(NAME_GameSession))
+	{
+		Then();
+		return;
+	}
+	AfterDestroy = MoveTemp(Then);
+	DestroyHandle = Sessions->AddOnDestroySessionCompleteDelegate_Handle(
+		FOnDestroySessionCompleteDelegate::CreateUObject(this, &UGolfSessionSubsystem::OnDestroyComplete));
+	Status = TEXT("Leaving previous game...");
+	if (!Sessions->DestroySession(NAME_GameSession))
+	{
+		Sessions->ClearOnDestroySessionCompleteDelegate_Handle(DestroyHandle);
+		AfterDestroy = nullptr;
+		bSessionOperationInProgress = false;
+		Status = TEXT("Could not leave the previous game. Please try again.");
+	}
+}
+
+void UGolfSessionSubsystem::OnDestroyComplete(FName SessionName, bool bSuccess)
+{
+	if (IOnlineSessionPtr Sessions = GetSessions())
+	{
+		Sessions->ClearOnDestroySessionCompleteDelegate_Handle(DestroyHandle);
+	}
+	TFunction<void()> Next = MoveTemp(AfterDestroy);
+	AfterDestroy = nullptr;
+	if (!bSuccess)
+	{
+		bSessionOperationInProgress = false;
+		Status = TEXT("Could not leave the previous game. Please try again.");
+		return;
+	}
+	if (Next) Next();
+}
+
 // ---------------------------------------------------------------- joining by room code
 
 void UGolfSessionSubsystem::JoinByCode(const FString& Code)
 {
+	if (bSessionOperationInProgress) return;
+	bSessionOperationInProgress = true;
 	SearchCode = Code;
 	EnsureLoggedIn([this]()
 	{
 		IOnlineSessionPtr Sessions = GetSessions();
 		if (!Sessions.IsValid())
 		{
+			bSessionOperationInProgress = false;
 			Status = TEXT("No online service. Use the console: open <host IP>");
 			return;
 		}
@@ -186,6 +246,7 @@ void UGolfSessionSubsystem::JoinByCode(const FString& Code)
 		if (!Sessions->FindSessions(0, Search.ToSharedRef()))
 		{
 			Sessions->ClearOnFindSessionsCompleteDelegate_Handle(FindHandle);
+			bSessionOperationInProgress = false;
 			Status = TEXT("Search failed.");
 		}
 	});
@@ -193,12 +254,18 @@ void UGolfSessionSubsystem::JoinByCode(const FString& Code)
 
 void UGolfSessionSubsystem::OnFindComplete(bool bSuccess)
 {
+	bSessionOperationInProgress = false;
 	IOnlineSessionPtr Sessions = GetSessions();
 	if (!Sessions.IsValid() || !Search.IsValid())
 	{
 		return;
 	}
 	Sessions->ClearOnFindSessionsCompleteDelegate_Handle(FindHandle);
+	if (!bSuccess)
+	{
+		Status = TEXT("Search failed.");
+		return;
+	}
 
 	for (const FOnlineSessionSearchResult& Result : Search->SearchResults)
 	{
@@ -216,24 +283,31 @@ void UGolfSessionSubsystem::OnFindComplete(bool bSuccess)
 
 void UGolfSessionSubsystem::JoinResult(const FOnlineSessionSearchResult& Result)
 {
+	if (bSessionOperationInProgress) return;
 	IOnlineSessionPtr Sessions = GetSessions();
 	if (!Sessions.IsValid())
 	{
 		return;
 	}
-	if (Sessions->GetNamedSession(NAME_GameSession))
+	bSessionOperationInProgress = true;
+	CloseExistingSession([this, Sessions, Result]()
 	{
-		Sessions->DestroySession(NAME_GameSession);
-	}
-	Result.Session.SessionSettings.Get(RoomCodeKey, RoomCode);
-	JoinHandle = Sessions->AddOnJoinSessionCompleteDelegate_Handle(
-		FOnJoinSessionCompleteDelegate::CreateUObject(this, &UGolfSessionSubsystem::OnJoinComplete));
-	Status = TEXT("Joining...");
-	Sessions->JoinSession(0, NAME_GameSession, Result);
+		Result.Session.SessionSettings.Get(RoomCodeKey, RoomCode);
+		JoinHandle = Sessions->AddOnJoinSessionCompleteDelegate_Handle(
+			FOnJoinSessionCompleteDelegate::CreateUObject(this, &UGolfSessionSubsystem::OnJoinComplete));
+		Status = TEXT("Joining...");
+		if (!Sessions->JoinSession(0, NAME_GameSession, Result))
+		{
+			Sessions->ClearOnJoinSessionCompleteDelegate_Handle(JoinHandle);
+			bSessionOperationInProgress = false;
+			Status = TEXT("Could not join that game.");
+		}
+	});
 }
 
 void UGolfSessionSubsystem::OnJoinComplete(FName SessionName, EOnJoinSessionCompleteResult::Type Result)
 {
+	bSessionOperationInProgress = false;
 	IOnlineSessionPtr Sessions = GetSessions();
 	if (!Sessions.IsValid())
 	{
@@ -264,7 +338,7 @@ void UGolfSessionSubsystem::RefreshFriends()
 	}
 	EnsureLoggedIn([this]()
 	{
-		IOnlineFriendsPtr FriendsInterface = IOnlineSubsystem::Get()->GetFriendsInterface();
+		IOnlineFriendsPtr FriendsInterface = Online::GetSubsystem(GetWorld())->GetFriendsInterface();
 		FriendsInterface->ReadFriendsList(0, EFriendsLists::ToString(EFriendsLists::Default),
 			FOnReadFriendsListComplete::CreateUObject(this, &UGolfSessionSubsystem::OnFriendsRead));
 	});
@@ -279,7 +353,7 @@ void UGolfSessionSubsystem::OnFriendsRead(int32 LocalUserNum, bool bWasSuccessfu
 		return;
 	}
 	TArray<TSharedRef<FOnlineFriend>> List;
-	IOnlineSubsystem::Get()->GetFriendsInterface()->GetFriendsList(0, ListName, List);
+	Online::GetSubsystem(GetWorld())->GetFriendsInterface()->GetFriendsList(0, ListName, List);
 	for (const TSharedRef<FOnlineFriend>& Friend : List)
 	{
 		FGolfFriend Entry;
@@ -314,7 +388,7 @@ void UGolfSessionSubsystem::OnInviteReceived(const FUniqueNetId& UserId, const F
 	PendingInvite = Invite;
 	bHasPendingInvite = true;
 	PendingInviteFrom = TEXT("A friend");
-	if (IOnlineFriendsPtr FriendsInterface = IOnlineSubsystem::Get()->GetFriendsInterface())
+	if (IOnlineFriendsPtr FriendsInterface = Online::GetSubsystem(GetWorld())->GetFriendsInterface())
 	{
 		if (TSharedPtr<FOnlineFriend> Friend = FriendsInterface->GetFriend(0, FromId, EFriendsLists::ToString(EFriendsLists::Default)))
 		{
