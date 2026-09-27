@@ -42,4 +42,3 @@ tree.static_mesh_component.set_collision_profile_name('BlockAll')
 tree.static_mesh_component.set_phys_material_override(pm)
 unreal.get_editor_subsystem(unreal.LevelEditorSubsystem).save_current_level()
 print('Tree review actor',tree.get_path_name(),'ground',z,'bounds',tree.get_actor_bounds(False),'LODs',mesh.get_num_lods())
-

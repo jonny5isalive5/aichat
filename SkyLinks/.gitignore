@@ -10,3 +10,4 @@ DerivedDataCache/
 *.xcworkspace
 *.blend1
 __pycache__/
+.Aura/

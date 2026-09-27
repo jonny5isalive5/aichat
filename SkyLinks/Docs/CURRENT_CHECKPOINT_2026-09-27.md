@@ -29,7 +29,7 @@ Next: compare these traces in a controlled normal PIE session and verify actual 
 
 ## Desktop control boundary
 
-The owner reported losing control of the computer during repeated foreground window automation. Foreground automation stopped. Keep work in the background and arrange a clear test window before using the mouse/keyboard or bringing gameplay windows forward. The current background editor was set to BelowNormal CPU priority. Do not start multiple extra editor instances or run the whole-course builder.
+The owner reported losing control of the computer during repeated foreground window automation. Foreground automation stopped. Keep work in the background and arrange a clear test window before using the mouse/keyboard or bringing gameplay windows forward. The current background editor was set to BelowNormal CPU priority and a runtime-only `t.MaxFPS 10` cap. Restore an appropriate frame cap for an agreed performance/gameplay test; this is not a project setting. Do not start multiple extra editor instances or run the whole-course builder.
 
 ## Next acceptance work
 

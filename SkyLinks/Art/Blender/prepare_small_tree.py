@@ -41,4 +41,3 @@ scene.render.filepath=str(out/'SmallTree_preview.png')
 (out/'mesh-report.json').write_text(json.dumps(report,indent=2))
 bpy.ops.render.render(write_still=True)
 print(report)
-
