@@ -258,4 +258,3 @@ void AGolfCharacter::MulticastPlaySwing_Implementation(EGolferSwing Swing)
 		GetMesh()->SetPlayRate(1.f);
 	}
 }
-}
