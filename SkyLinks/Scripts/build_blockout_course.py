@@ -263,7 +263,7 @@ def build_hole(number, hole, mats, rng):
 
 def build_environment():
     folder = "Course/Environment"
-    sun = actors.spawn_actor_from_class(unreal.DirectionalLight, unreal.Vector(0, 0, 5000), unreal.Rotator(0, -45, 30))
+    sun = actors.spawn_actor_from_class(unreal.DirectionalLight, unreal.Vector(0, 0, 5000), unreal.Rotator(0, -70, 30))
     sun.set_folder_path(folder)
     sun.light_component.set_editor_property("atmosphere_sun_light", True)
     sun.light_component.set_editor_property("intensity", 8.0)

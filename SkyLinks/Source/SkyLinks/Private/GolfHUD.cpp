@@ -346,6 +346,7 @@ void AGolfHUD::DrawPlaying(AGolfGameState* State, AGolfPlayerController* Control
 		DrawGreenGrid(Controller);
 		DrawPreview(Controller);
 	}
+	DrawPinMarker(State);
 	DrawHoleCard(State);
 	DrawPlayers(State);
 	DrawWind(State);
@@ -364,6 +365,59 @@ void AGolfHUD::DrawPlaying(AGolfGameState* State, AGolfPlayerController* Control
 	if (Controller->IsDriving())
 	{
 		DrawDriving(Controller);
+	}
+}
+
+void AGolfHUD::DrawPinMarker(AGolfGameState* State)
+{
+	// A fixed-size flag over the cup so the target stays readable from any distance.
+	const AGolfHole* Hole = State->CurrentHole;
+	if (!Hole)
+	{
+		return;
+	}
+	const FVector Cup = Hole->GetCupLocation();
+	FVector2D Base, Top;
+	if (!ToScreen(Cup, Base) || !ToScreen(Cup + FVector(0.f, 0.f, 213.f), Top))
+	{
+		return;
+	}
+
+	// Keep the marker at least a readable height even when the real flag is a few pixels tall.
+	const float MinHeight = 7.f * U;
+	if (Base.Y - Top.Y < MinHeight)
+	{
+		Top = Base - FVector2D(0.f, MinHeight);
+	}
+	const float PoleHeight = Base.Y - Top.Y;
+	const FLinearColor Yellow(1.f, 0.85f, 0.f, 1.f);
+	const FLinearColor Outline(0.f, 0.f, 0.f, 0.75f);
+
+	// Pole with a dark outline so it reads on grass and sky alike.
+	Line(Base, Top, Outline, 0.7f * U);
+	Line(Base, Top, FLinearColor::White, 0.35f * U);
+
+	// Pennant: filled with stacked lines between the pole and the tip.
+	const float FlagHeight = FMath::Min(PoleHeight * 0.4f, 3.5f * U);
+	const float FlagLength = FlagHeight * 1.5f;
+	const FVector2D Tip = Top + FVector2D(FlagLength, FlagHeight * 0.5f);
+	constexpr int32 Strokes = 10;
+	for (int32 Index = 0; Index <= Strokes; ++Index)
+	{
+		const FVector2D OnPole = Top + FVector2D(0.f, FlagHeight * Index / Strokes);
+		Line(OnPole, Tip, Yellow, FMath::Max(1.f, FlagHeight / Strokes + 1.f));
+	}
+	Line(Top, Tip, Outline, 0.2f * U);
+	Line(Top + FVector2D(0.f, FlagHeight), Tip, Outline, 0.2f * U);
+
+	// Cup ring and distance from the active ball.
+	Ring(Base, 0.9f * U, Yellow, 0.3f * U);
+	if (const AGolfPlayerState* Active = Cast<AGolfPlayerState>(State->ActivePlayer); Active && Active->Ball)
+	{
+		const float Meters = FVector::Dist2D(Active->Ball->GetRestLocation(), Cup) / 100.f;
+		const FString Distance = Meters < 1.f ? FString::Printf(TEXT("%.0f cm"), Meters * 100.f)
+			: (Meters < 10.f ? FString::Printf(TEXT("%.1f m"), Meters) : FString::Printf(TEXT("%.0f m"), Meters));
+		Label(Distance, Top - FVector2D(0.f, 2.2f * U), 2.6f, Yellow, true);
 	}
 }
 

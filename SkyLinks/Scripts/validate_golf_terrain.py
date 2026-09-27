@@ -6,7 +6,9 @@ import unreal
 
 def validate_holes(numbers):
     root=Path(unreal.Paths.project_dir()).resolve()
-    samples=json.loads((root/'Art/Terrain/Holes01-06/validation_samples.json').read_text())
+    samples=[]
+    for batch in ['Holes01-06','Holes07-18']:
+        samples+=json.loads((root/'Art/Terrain'/batch/'validation_samples.json').read_text())
     world=unreal.get_editor_subsystem(unreal.UnrealEditorSubsystem).get_editor_world()
     assert world.get_path_name()=='/Game/Maps/Course.Course'
     actors=unreal.get_editor_subsystem(unreal.EditorActorSubsystem).get_all_level_actors()

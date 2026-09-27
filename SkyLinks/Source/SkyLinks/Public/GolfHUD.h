@@ -74,6 +74,7 @@ private:
 	void DrawPlayers(AGolfGameState* State);
 	void DrawWind(AGolfGameState* State);
 	void DrawDriving(AGolfPlayerController* Controller);
+	void DrawPinMarker(AGolfGameState* State);
 	void DrawGreenGrid(AGolfPlayerController* Controller);
 	void DrawPreview(AGolfPlayerController* Controller);
 	void DrawClubDisc(AGolfPlayerController* Controller);

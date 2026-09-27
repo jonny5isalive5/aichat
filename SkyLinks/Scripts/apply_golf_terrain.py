@@ -1,5 +1,11 @@
 """Apply generated terrain through Aura inside the SkyLinks Unreal editor.
-Run this file then call apply_holes([1]) (or selected hole numbers 1..6).
+
+Run this file, then:
+  apply_holes([1])              any subset of 1..18 whose landscape already exists
+  describe_create([7, 8])       holes 7-18: the exact landscape Aura must create first
+  remove_blockout_surfaces(7)   holes 7-18: delete the flat Rough/Fairway/Green/Bunker slabs
+                                once the landscape is applied (water, trees, tee box stay)
+
 Requires the Aura plugin. Preserves landscape transforms, layer bindings and water.
 Back up/save existing work before running; Aura transactions auto-save changed assets.
 """
@@ -9,17 +15,46 @@ from pathlib import Path
 import unreal
 
 
-def apply_holes(numbers):
+def _batch(number):
+    assert 1<=number<=18
     root=Path(unreal.Paths.project_dir()).resolve()
-    folder=root/'Art/Terrain/Holes01-06'
+    folder=root/'Art/Terrain'/('Holes01-06' if number<=6 else 'Holes07-18')
     manifest=json.loads((folder/'manifest.json').read_text())
+    entry=next(h for h in manifest['holes'] if h['label']==f'Terrain_Hole{number:02d}')
+    return folder,manifest,entry
+
+
+def describe_create(numbers):
+    """Print the landscape Aura must create for each new hole (location, scale, resolution, layers)."""
+    for number in numbers:
+        _,_,h=_batch(number)
+        assert 'create' in h, f'Hole {number} uses an existing Aura landscape'
+        print(json.dumps(h['create']))
+
+
+def remove_blockout_surfaces(number):
+    """Delete the flat blockout slabs that the landscape replaces on this hole."""
+    actors=unreal.get_editor_subsystem(unreal.EditorActorSubsystem).get_all_level_actors()
+    labels=[a.get_actor_label() for a in actors]
+    assert f'Terrain_Hole{number:02d}' in labels, 'Apply the landscape before removing the slabs'
+    doomed=[a for a in actors if str(a.get_folder_path())==f'Course/Hole{number:02d}'
+            and isinstance(a,unreal.StaticMeshActor)
+            and (a.get_actor_label()=='Rough' or a.get_actor_label()=='Green'
+                 or a.get_actor_label().startswith('Fairway') or a.get_actor_label().startswith('Bunker'))]
+    for actor in doomed:
+        print('REMOVE',number,actor.get_actor_label())
+        unreal.get_editor_subsystem(unreal.EditorActorSubsystem).destroy_actor(actor)
+    return len(doomed)
+
+
+def apply_holes(numbers):
     world=unreal.get_editor_subsystem(unreal.UnrealEditorSubsystem).get_editor_world()
     assert world.get_path_name()=='/Game/Maps/Course.Course', 'Wrong map'
     actors=unreal.get_editor_subsystem(unreal.EditorActorSubsystem).get_all_level_actors()
     landscapes={a.get_actor_label():a for a in actors if isinstance(a,unreal.Landscape)}
     for number in numbers:
-        assert 1<=number<=6
-        h=manifest['holes'][number-1]
+        folder,manifest,h=_batch(number)
+        assert h['label'] in landscapes, f"{h['label']} does not exist yet: create it first (describe_create([{number}]))"
         land=landscapes[h['label']]
         for entry in h['files'].values():
             assert hashlib.sha256((folder/entry['file']).read_bytes()).hexdigest()==entry['sha256'], 'Generated file hash mismatch'

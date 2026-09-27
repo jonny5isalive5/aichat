@@ -1,4 +1,25 @@
-# Holes 1-6 terrain
+# Course terrain
+
+- `Holes01-06/`: applied on Boss420 (Codex, 27 Sep). Built on the grids Aura created.
+- `Holes07-18/`: generated, **not applied yet**. These holes have no landscapes; `manifest.json` has a
+  `create` block per hole (location, scale, resolution, layers, material) for Aura to create them first.
+
+Holes 7-18 follow the same rules as 1-6 (flat tees, about 1.5 % greens, 30 cm bunker bowls, basins
+60 cm under the water top). Greens and bunkers next to water are protected, so hole 7 keeps its island
+green and hole 17 its water-side green. Their grids cover the same area as the blockout rough
+(hole bounds + 35 m), with 63-quad sections and at most 40 cm spacing.
+
+### Holes 7-18 in the editor (one hole at a time)
+
+1. `describe_create([7])` from `Scripts/apply_golf_terrain.py` prints the landscape to create.
+   Aura creates it with those exact values, then sets up the four layers the same way as
+   `Terrain_Hole01` (layer infos `LI_Rough/Fairway/Green/Bunker`, material `M_Hole01_Landscape`).
+2. `apply_holes([7])` applies the heights and weights, then aligns the cup and re-seats the trees.
+3. `remove_blockout_surfaces(7)` deletes the flat Rough/Fairway/Green/Bunker slabs (water, trees and
+   the tee box stay).
+4. `validate_holes([7])` from `Scripts/validate_golf_terrain.py` must return an empty error list.
+
+## Holes 1-6 terrain
 
 `Holes01-06/` contains reproducible 16-bit height PNGs, four normalized 8-bit weightmaps per hole, a manifest with SHA-256 hashes, and world-space acceptance probes.
 
@@ -7,10 +28,13 @@
 Requires Python, NumPy and Pillow. From `SkyLinks`:
 
 ```powershell
-python Scripts/generate_golf_terrain.py
+python Scripts/generate_golf_terrain.py            # both batches, or pass 1-6 / 7-18
 python Scripts/generate_terrain_probes.py
 python Scripts/test_golf_terrain.py
 ```
+
+Regenerating holes 1-6 gives pixel-identical images (PNG compression may differ between Pillow
+versions, which changes the file hashes but not the terrain).
 
 The generator reads the first six layouts from `Scripts/build_blockout_course.py` without running its editor operations, and preserves the existing grids from `Saved/terrain/heightmaps/raw/meta.json`.
 
