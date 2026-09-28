@@ -344,6 +344,37 @@ def footbridge_wood():
     return mat
 
 
+FAB_TEXTURES = '/Game/Course/Vegetation'   # Bridge_BaseColor / Bridge_Normal from the listing's "Additional files" zip
+
+
+def footbridge_fab_material():
+    """M_Footbridge_Fab from the Fab textures (Bridge_BaseColor, Bridge_Normal), or None until they're imported."""
+    colour = unreal.load_asset(f'{FAB_TEXTURES}/Bridge_BaseColor')
+    normal = unreal.load_asset(f'{FAB_TEXTURES}/Bridge_Normal')
+    if not isinstance(colour, unreal.Texture2D):
+        return None
+    for texture in (colour, normal):
+        if isinstance(texture, unreal.Texture2D):
+            texture.set_editor_property('max_texture_size', 2048)  # 4K is more than a footbridge needs (phones)
+    if isinstance(normal, unreal.Texture2D):
+        normal.set_editor_property('compression_settings', unreal.TextureCompressionSettings.TC_NORMALMAP)
+        normal.set_editor_property('srgb', False)
+    for texture in (colour, normal):
+        if isinstance(texture, unreal.Texture2D):
+            unreal.EditorAssetLibrary.save_loaded_asset(texture)
+    mat = _material('M_Footbridge_Fab')
+    base = _expr(mat, unreal.MaterialExpressionTextureSample, -600, 0, texture=colour)
+    lib.connect_material_property(base, 'RGB', unreal.MaterialProperty.MP_BASE_COLOR)
+    if isinstance(normal, unreal.Texture2D):
+        bump = _expr(mat, unreal.MaterialExpressionTextureSample, -600, 300, texture=normal,
+                     sampler_type=unreal.MaterialSamplerType.SAMPLERTYPE_NORMAL)
+        lib.connect_material_property(bump, 'RGB', unreal.MaterialProperty.MP_NORMAL)
+    lib.connect_material_property(_const(mat, 0.8, -600, 550), '', unreal.MaterialProperty.MP_ROUGHNESS)
+    lib.recompile_material(mat)
+    unreal.EditorAssetLibrary.save_loaded_asset(mat)
+    return mat
+
+
 def place_footbridges(number, spots, deck_offset_cm=0.0, wood=True):
     """The Fab bridge over each brook crossing (looks only), stretched to the span; the Props mesh underneath
     becomes the invisible flat deck the buggy and ball actually use."""
@@ -358,6 +389,8 @@ def place_footbridges(number, spots, deck_offset_cm=0.0, wood=True):
     mesh = unreal.load_asset(FAB_BRIDGE)
     if not mesh or not spots.get('footbridges'):
         return
+    # The Fab bridge's own textures when they've been imported, otherwise the painted-wood stand-in.
+    look = footbridge_fab_material() or (footbridge_wood() if wood else None)
     box = mesh.get_bounding_box()
     width_cm, length_cm = box.max.x - box.min.x, box.max.y - box.min.y
     for i, (x, y, z, yaw, length) in enumerate(spots['footbridges']):
@@ -365,9 +398,9 @@ def place_footbridges(number, spots, deck_offset_cm=0.0, wood=True):
         bridge = actors.spawn_actor_from_object(mesh, unreal.Vector(x * M, y * M, z * M + deck_offset_cm), unreal.Rotator(0, 0, yaw - 90.0))
         bridge.set_actor_scale3d(unreal.Vector(FOOTBRIDGE_WIDTH * M / width_cm, (length + 1.5) * M / length_cm, 1.0))
         bridge.static_mesh_component.set_collision_enabled(unreal.CollisionEnabled.NO_COLLISION)
-        if wood:
+        if look:
             for slot in range(bridge.static_mesh_component.get_num_materials()):
-                bridge.static_mesh_component.set_material(slot, footbridge_wood())
+                bridge.static_mesh_component.set_material(slot, look)
         bridge.set_actor_label(f'Footbridge{number:02d}_{i + 1}')
         bridge.set_folder_path(folder)
 
