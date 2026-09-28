@@ -513,14 +513,17 @@ def make_path_decal():
     return mat
 
 
+KEEP_TREES = {1}  # holes whose trees the owner arranged by hand: refresh_islands leaves their foliage alone
+
+
 def refresh_islands(holes=HOLES):
     """After a rebuild of the island meshes (new bunkers, buggy paths...): re-import every hole's surface, rock,
     ivy, water and footbridge deck in place, re-seat the holes, footbridges and rope bridges, and replant the
-    trees (clear of the new paths and bunkers). Your moved floating islands, the fog and the sea stay as they are.
-    Trees you moved or painted with the course's FT_ foliage types are replaced by the fresh planting."""
+    trees island by island (clear of the new paths and bunkers). Holes in KEEP_TREES (hole 1, arranged by hand)
+    keep their trees. Your moved floating islands, the fog and the sea stay as they are."""
     world = unreal.get_editor_subsystem(unreal.UnrealEditorSubsystem).get_editor_world()
     materials = build_materials()
-    unreal.SkyLinksForest.clear_foliage(world, _foliage_types())
+    types = _foliage_types()
     for number in holes:
         spots_path = SOURCE / f'Hole{number:02d}_spots.json'
         if not spots_path.is_file():
@@ -532,8 +535,14 @@ def refresh_islands(holes=HOLES):
                 import_mesh(name, materials, part not in NO_COLLISION)
         place_hole(number, spots)
         place_footbridges(number, spots)
+        if number in KEEP_TREES or not spots.get('land_outline'):
+            print(f'HOLE {number} refreshed (trees kept)')
+            continue
+        # Only this island's trees go (inside its outline); every other island keeps its own.
+        outline = [unreal.Vector2D(x * M, y * M) for x, y in spots['land_outline']]
+        removed = unreal.SkyLinksForest.clear_foliage_inside(world, types, outline)
         plant_forest(number, spots)
-        print(f'HOLE {number} refreshed')
+        print(f'HOLE {number} refreshed: {removed} old trees out, new ones planted')
     apply_bridges(materials, json.loads((SOURCE / 'Course_links.json').read_text()))
     unreal.get_editor_subsystem(unreal.LevelEditorSubsystem).save_current_level()
     print('ISLANDS REFRESHED. Run validate_course() in a separate call.')

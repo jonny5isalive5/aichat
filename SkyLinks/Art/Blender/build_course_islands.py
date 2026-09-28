@@ -185,6 +185,7 @@ CART_WIDTH = 3.2        # m
 CART_OFFSET = 7.0       # m: the path likes to run this far off the edge of the fairway, in the rough
 ANCHORS = {}            # hole -> {'in': (x, y), 'out': (x, y)} local metres; filled in main() from the bridges
 CAR_PARK_EXIT = (-73.0, -30.0)  # hole 1: the edge of the clubhouse pad nearest the first tee
+HAND_PATHS = {1}        # holes whose buggy paths the owner laid by hand
 SOFT_PATHS = False      # --soft-paths: no path borders in the mesh (fallback if the mesher chokes on them)
 
 
@@ -777,7 +778,8 @@ def build_hole(number, rng):
     B.build_materials()
     name = f'SM_H{number:02d}'
 
-    cart = cart_path(number, layout)
+    # Hole 1's paths were laid by hand in the editor (decals), so it gets no automatic one.
+    cart = cart_path(number, layout) if number not in HAND_PATHS else None
     cart_area = None
     if cart is not None:
         cart_area = cart.buffer(CART_WIDTH / 2, 12).difference(
@@ -879,6 +881,8 @@ def build_hole(number, rng):
              'cup': world(cx, cy), 'tee_markers': [world(1.5, s * 2.5) for s in (-1, 1)],
              'player_start': world(-5.0, 0.0),
              'gameplay_trees': [world(x, y) for x, y in clear_trees],
+             'land_outline': [[round(float(v), 2) for v in C.to_world(number, x, y)] for x, y in
+                              layout['land'].buffer(3).simplify(1.0).exterior.coords],
              'cart_path': [world(x, y) for x, y in (layout['cart'].coords if layout.get('cart') is not None else [])],
              'forest': forest_plan(number, layout, local_h, rng), 'floaters': floater_spots, 'footbridges': footbridge_spots}
     if number == 1:

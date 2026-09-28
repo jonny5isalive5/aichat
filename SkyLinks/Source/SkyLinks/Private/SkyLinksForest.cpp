@@ -161,3 +161,56 @@ void ASkyLinksForest::ClearFoliage(UObject* WorldContextObject, const TArray<UFo
 	}
 #endif
 }
+
+int32 ASkyLinksForest::ClearFoliageInside(UObject* WorldContextObject, const TArray<UFoliageType*>& Types, const TArray<FVector2D>& Outline)
+{
+	int32 Removed = 0;
+#if WITH_EDITOR
+	UWorld* World = WorldContextObject ? WorldContextObject->GetWorld() : nullptr;
+	if (!World || Outline.Num() < 3)
+	{
+		return 0;
+	}
+	auto Inside = [&Outline](const FVector& P)
+	{
+		// Even-odd ray test in XY.
+		bool bIn = false;
+		for (int32 I = 0, J = Outline.Num() - 1; I < Outline.Num(); J = I++)
+		{
+			const FVector2D& A = Outline[I];
+			const FVector2D& B = Outline[J];
+			if ((A.Y > P.Y) != (B.Y > P.Y) && P.X < (B.X - A.X) * (P.Y - A.Y) / (B.Y - A.Y) + A.X)
+			{
+				bIn = !bIn;
+			}
+		}
+		return bIn;
+	};
+	for (TActorIterator<AInstancedFoliageActor> It(World); It; ++It)
+	{
+		for (UFoliageType* Type : Types)
+		{
+			FFoliageInfo* Info = Type ? It->FindInfo(Type) : nullptr;
+			if (!Info)
+			{
+				continue;
+			}
+			TArray<int32> Doomed;
+			for (int32 Index = 0; Index < Info->Instances.Num(); ++Index)
+			{
+				if (Inside(Info->Instances[Index].Location))
+				{
+					Doomed.Add(Index);
+				}
+			}
+			if (Doomed.Num() > 0)
+			{
+				It->Modify();
+				Info->RemoveInstances(Doomed, true);
+				Removed += Doomed.Num();
+			}
+		}
+	}
+#endif
+	return Removed;
+}

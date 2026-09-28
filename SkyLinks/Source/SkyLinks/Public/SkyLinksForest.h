@@ -44,6 +44,11 @@ public:
 	UFUNCTION(BlueprintCallable, Category = "SkyLinks|Forest", meta = (WorldContext = "WorldContextObject"))
 	static void ClearFoliage(UObject* WorldContextObject, const TArray<UFoliageType*>& Types);
 
+	/** Editor: remove the foliage instances of these types that stand inside an outline (world XY, cm), e.g. one
+	 * island, leaving every other island's trees alone. Returns how many were removed. */
+	UFUNCTION(BlueprintCallable, Category = "SkyLinks|Forest", meta = (WorldContext = "WorldContextObject"))
+	static int32 ClearFoliageInside(UObject* WorldContextObject, const TArray<UFoliageType*>& Types, const TArray<FVector2D>& Outline);
+
 	/** Trees fade out beyond this distance (cm). */
 	UPROPERTY(EditAnywhere, Category = "SkyLinks|Forest")
 	float CullDistance = 90000.f;
