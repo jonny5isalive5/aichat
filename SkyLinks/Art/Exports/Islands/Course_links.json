@@ -2,6 +2,8 @@
  "bridges": [
   {
    "name": "SM_Bridge_01_02",
+   "rails": "SM_Bridge_01_02_Rails",
+   "guard": "SM_Bridge_01_02_Guard",
    "a": [
     374.2963434353146,
     27.20686074355365,
@@ -17,6 +19,8 @@
   },
   {
    "name": "SM_Bridge_02_03",
+   "rails": "SM_Bridge_02_03_Rails",
+   "guard": "SM_Bridge_02_03_Guard",
    "a": [
     352.3303036492934,
     422.4403180783943,
@@ -32,6 +36,8 @@
   },
   {
    "name": "SM_Bridge_03_04",
+   "rails": "SM_Bridge_03_04_Rails",
+   "guard": "SM_Bridge_03_04_Guard",
    "a": [
     278.5396294905598,
     870.5481371154173,
@@ -47,6 +53,8 @@
   },
   {
    "name": "SM_Bridge_04_05",
+   "rails": "SM_Bridge_04_05_Rails",
+   "guard": "SM_Bridge_04_05_Guard",
    "a": [
     473.90352446701297,
     1438.841521771745,
@@ -62,6 +70,8 @@
   },
   {
    "name": "SM_Bridge_05_06",
+   "rails": "SM_Bridge_05_06_Rails",
+   "guard": "SM_Bridge_05_06_Guard",
    "a": [
     516.5988841400948,
     1782.8518653646427,

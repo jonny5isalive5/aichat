@@ -210,6 +210,10 @@ void AGolfPlayerController::UpdateLandingCapture()
 		LandingCapture->CaptureSource = ESceneCaptureSource::SCS_FinalColorLDR;
 		LandingCapture->FOVAngle = LandingViewFOV;
 		LandingCapture->bCaptureOnMovement = false;
+		// Trees (instanced) render as black blobs in the overhead capture; the window only needs the ground.
+		LandingCapture->ShowFlags.SetInstancedStaticMeshes(false);
+		LandingCapture->ShowFlags.SetInstancedFoliage(false);
+		LandingCapture->ShowFlags.SetInstancedGrass(false);
 		LandingCapture->RegisterComponent();
 	}
 	// Straight down, turned so the shot travels up the window. Frame the landing spot and the pin together,

@@ -7,7 +7,9 @@ Run in the editor, Output Log in Python mode:
 
 - Imports Art/Exports/Trees/SM_*.fbx to /Game/Course/Trees (UCX_ trunk boxes become their collision)
 - Builds M_Tree_Bark and M_Tree_Leaves: vertex colours for colour, a detail texture, and a cheap wind sway in
-  the shader (vertex alpha = how much each part moves), so they cost almost nothing on phones
+  the shader (vertex alpha = how much each part moves), so they cost almost nothing on phones; each tree
+  instance gets its own leaf shade
+- Builds M_Tree_Vines (Art/Textures/T_Vines.png, masked and two-sided) for the islands' hanging ivy
 - Adds two lower LODs to each tree
 - Creates instanced-static-mesh foliage types in /Game/Course/Foliage (FT_Oak_A, FT_Oak_B, FT_Poplar, FT_Pine,
   FT_Birch, FT_Bush_Round, FT_Bush_Flowering). In Foliage Mode tick several at once to paint a mixed wood.
@@ -76,15 +78,48 @@ def _sine(mat, source, x, y):
     return node
 
 
-def tree_material(name, detail, roughness, wind_cm):
-    """Vertex colour (sRGB bytes, squared) x detail texture; world position offset sway scaled by vertex alpha."""
+def _import_vine_texture():
+    task = unreal.AssetImportTask()
+    for key, value in [('filename', str(ROOT / 'Art' / 'Textures' / 'T_Vines.png')), ('destination_path', DEST),
+                       ('automated', True), ('replace_existing', True), ('save', True)]:
+        task.set_editor_property(key, value)
+    tools.import_asset_tasks([task])
+    texture = unreal.load_asset(f'{DEST}/T_Vines')
+    assert texture, 'Art/Textures/T_Vines.png did not import'
+    texture.set_editor_property('compression_settings', unreal.TextureCompressionSettings.TC_DEFAULT)
+    unreal.EditorAssetLibrary.save_loaded_asset(texture)
+    return texture
+
+
+def tree_material(name, detail, roughness, wind_cm, tint=False, card=None):
+    """Vertex colour (sRGB bytes, squared) x detail texture; world position offset sway scaled by vertex alpha.
+
+    tint: each instance gets its own shade (PerInstanceRandom), so a wood of one tree kind isn't all one green.
+    card: a colour + alpha texture instead of the detail texture (masked, two-sided): the hanging ivy cards."""
     mat = _material(name)
     vc = _expr(mat, unreal.MaterialExpressionVertexColor, -1600, 0)
-    texture = _expr(mat, unreal.MaterialExpressionTextureSample, -1300, 150,
-                    texture=unreal.load_asset(f'{DETAIL}/{detail}'),
-                    sampler_type=unreal.MaterialSamplerType.SAMPLERTYPE_LINEAR_GRAYSCALE)
-    colour = _op(mat, unreal.MaterialExpressionMultiply, _op(mat, unreal.MaterialExpressionMultiply, vc, vc, -1300, 0),
-                 texture, -1000, 50, b_out='R')
+    if card:
+        texture = _expr(mat, unreal.MaterialExpressionTextureSample, -1300, 150, texture=card)
+        colour = _op(mat, unreal.MaterialExpressionMultiply, _op(mat, unreal.MaterialExpressionMultiply, vc, vc, -1300, 0),
+                     texture, -1000, 50, b_out='RGB')
+        lib.connect_material_property(texture, 'A', unreal.MaterialProperty.MP_OPACITY_MASK)
+        mat.set_editor_property('blend_mode', unreal.BlendMode.BLEND_MASKED)
+        mat.set_editor_property('two_sided', True)
+    else:
+        texture = _expr(mat, unreal.MaterialExpressionTextureSample, -1300, 150,
+                        texture=unreal.load_asset(f'{DETAIL}/{detail}'),
+                        sampler_type=unreal.MaterialSamplerType.SAMPLERTYPE_LINEAR_GRAYSCALE)
+        colour = _op(mat, unreal.MaterialExpressionMultiply, _op(mat, unreal.MaterialExpressionMultiply, vc, vc, -1300, 0),
+                     texture, -1000, 50, b_out='R')
+    if tint:
+        # From a cool deep green to a warm yellow-green per instance.
+        shade = _expr(mat, unreal.MaterialExpressionLinearInterpolate, -1000, -200)
+        lib.connect_material_expressions(_expr(mat, unreal.MaterialExpressionConstant3Vector, -1300, -300,
+                                               constant=unreal.LinearColor(0.72, 0.82, 0.78, 1)), '', shade, 'A')
+        lib.connect_material_expressions(_expr(mat, unreal.MaterialExpressionConstant3Vector, -1300, -200,
+                                               constant=unreal.LinearColor(1.3, 1.18, 0.7, 1)), '', shade, 'B')
+        lib.connect_material_expressions(_expr(mat, unreal.MaterialExpressionPerInstanceRandom, -1300, -100), '', shade, 'Alpha')
+        colour = _op(mat, unreal.MaterialExpressionMultiply, colour, shade, -800, 0)
     lib.connect_material_property(colour, '', unreal.MaterialProperty.MP_BASE_COLOR)
     lib.connect_material_property(_const(mat, roughness, -1000, 250), '', unreal.MaterialProperty.MP_ROUGHNESS)
 
@@ -166,7 +201,8 @@ def _foliage(short, mesh):
 
 def import_trees():
     bark = tree_material('M_Tree_Bark', 'T_RockDetail', 0.9, 6.0)
-    leaves = tree_material('M_Tree_Leaves', 'T_GrassDetail', 0.75, 28.0)
+    leaves = tree_material('M_Tree_Leaves', 'T_GrassDetail', 0.75, 28.0, tint=True)
+    tree_material('M_Tree_Vines', None, 0.8, 45.0, card=_import_vine_texture())  # the islands' hanging ivy
     made = []
     for fbx in sorted(SOURCE.glob('SM_*.fbx')):
         mesh = _import_mesh(fbx)

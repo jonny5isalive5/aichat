@@ -124,11 +124,12 @@ class Parts:
     """Loose geometry (planks, ropes, posts, vines) with vertex colour RGBA; material 0 bark/wood, 1 leaves."""
 
     def __init__(self):
-        self.v, self.f, self.c, self.m = [], [], [], []
+        self.v, self.f, self.c, self.m, self.uv = [], [], [], [], []
 
-    def _add(self, verts, faces, colour, mat, alpha):
+    def _add(self, verts, faces, colour, mat, alpha, uvs=None):
         base = len(self.v)
         self.v.extend(verts)
+        self.uv.extend(uvs if uvs is not None else [None] * len(verts))
         cols = colour if callable(colour) else (lambda p: colour)
         for p in verts:
             self.c.append((*cols(p), alpha(p) if callable(alpha) else alpha))
@@ -161,6 +162,23 @@ class Parts:
                 faces.append((a, b, b + sides, a + sides))
         self._add(verts, faces, colour, mat, alpha)
 
+    def ribbon(self, points, width, facing, colour, alpha, mat=2, tile=2.0):
+        """A leafy vine card: a strip `width` wide through `points`, facing `facing` (horizontal), UV v along it."""
+        side = Vector((-facing[1], facing[0], 0)).normalized()
+        verts, uvs, faces = [], [], []
+        run = 0.0
+        for i, p in enumerate(points):
+            p = Vector(p)
+            if i:
+                run += (p - Vector(points[i - 1])).length
+            w = width * (1.0 - 0.35 * i / max(1, len(points) - 1))
+            verts += [tuple(p - side * w / 2), tuple(p + side * w / 2)]
+            uvs += [(0.0, run / tile), (1.0, run / tile)]
+        for i in range(len(points) - 1):
+            a = i * 2
+            faces.append((a, a + 1, a + 3, a + 2))
+        self._add(verts, faces, colour, mat, alpha, uvs)
+
     def leaf(self, centre, radius, colour, alpha, rng):
         """Small low-poly leaf clump (icosahedron, 20 triangles)."""
         t = (1 + 5 ** 0.5) / 2
@@ -189,8 +207,10 @@ class Parts:
         uv = mesh.uv_layers.new(name='UVMap')
         for poly in mesh.polygons:
             for li in poly.loop_indices:
-                co = mesh.vertices[mesh.loops[li].vertex_index].co
-                uv.data[li].uv = (co.x + co.y, co.z)
+                vi = mesh.loops[li].vertex_index
+                given = self.uv[vi]
+                co = mesh.vertices[vi].co
+                uv.data[li].uv = given if given is not None else (co.x + co.y, co.z)
         mesh.validate()
         obj = bpy.data.objects.new(name, mesh)
         bpy.context.scene.collection.objects.link(obj)
@@ -200,9 +220,26 @@ class Parts:
 def vc_material(name):
     mat = bpy.data.materials.new(name)
     mat.use_nodes = True
-    attr = mat.node_tree.nodes.new('ShaderNodeVertexColor')
+    nodes, links = mat.node_tree.nodes, mat.node_tree.links
+    bsdf = nodes['Principled BSDF']
+    attr = nodes.new('ShaderNodeVertexColor')
     attr.layer_name = 'Col'
-    mat.node_tree.links.new(attr.outputs['Color'], mat.node_tree.nodes['Principled BSDF'].inputs['Base Color'])
+    texture_path = B.TEXTURES / 'T_Vines.png'
+    if name == 'Vines' and texture_path.is_file():
+        # Preview only (Unreal builds M_Tree_Vines): ivy texture x vertex colour, cut out by its alpha.
+        tex = nodes.new('ShaderNodeTexImage')
+        tex.image = bpy.data.images.load(str(texture_path), check_existing=True)
+        mix = nodes.new('ShaderNodeMix')
+        mix.data_type = 'RGBA'
+        mix.blend_type = 'MULTIPLY'
+        mix.inputs['Factor'].default_value = 1.0
+        links.new(tex.outputs['Color'], mix.inputs[6])
+        links.new(attr.outputs['Color'], mix.inputs[7])
+        links.new(mix.outputs[2], bsdf.inputs['Base Color'])
+        links.new(tex.outputs['Alpha'], bsdf.inputs['Alpha'])
+        mat.blend_method = 'CLIP'
+        return mat
+    links.new(attr.outputs['Color'], bsdf.inputs['Base Color'])
     return mat
 
 
@@ -213,7 +250,8 @@ ROOT_BROWN = (0.30, 0.20, 0.12)
 
 
 def hang(parts, rim_xy, outward, top_z, length, rng, leafy):
-    """One strand hanging from the rim, drifting away from the cliff as it falls."""
+    """One strand hanging from the rim, drifting away from the cliff as it falls: a leafy ivy card (crossed
+    with a second card when long), or a bare root."""
     steps = max(3, int(length / 0.9))
     pts = []
     sway = Vector((rng.uniform(-1, 1), rng.uniform(-1, 1), 0)) * 0.25
@@ -225,22 +263,75 @@ def hang(parts, rim_xy, outward, top_z, length, rng, leafy):
 
     def wind(p):
         return min(1.0, 0.1 + (top_z - p[2]) / max(length, 1.0) * 0.9)
-    parts.tube(pts, lambda t: 0.06 * (1 - 0.6 * t), ROOT_BROWN if not leafy else (0.25, 0.3, 0.12), 0, wind, sides=4)
-    if leafy:
-        colour = rng.choice(VINE_GREENS)
-        for i, p in enumerate(pts[1:], start=1):
-            for _ in range(1 if i % 3 else 2):
-                off = Vector((rng.uniform(-0.3, 0.3), rng.uniform(-0.3, 0.3), rng.uniform(-0.2, 0.2)))
-                parts.leaf(Vector(p) + off, rng.uniform(0.35, 0.55), colour, wind(p), rng)
+    if not leafy:
+        parts.tube(pts, lambda t: 0.06 * (1 - 0.6 * t), ROOT_BROWN, 0, wind, sides=4)
+        return
+    tint = rng.uniform(0.75, 1.1)
+    colour = (tint, tint * rng.uniform(0.95, 1.05), tint * rng.uniform(0.85, 1.0))
+    width = rng.uniform(1.3, 2.2)
+    tile = width * 3.4  # T_Vines is 1:4, so leaves keep (nearly) their shape
+    parts.ribbon(pts, width, outward, colour, wind, tile=tile)
+    if length > 6:
+        a = math.radians(rng.choice((55, -55)))
+        crossed = (outward[0] * math.cos(a) - outward[1] * math.sin(a), outward[0] * math.sin(a) + outward[1] * math.cos(a))
+        parts.ribbon(pts, width * 0.8, crossed, colour, wind, tile=tile * 0.8)
+
+
+def vine_texture():
+    """T_Vines.png: a hanging ivy strip (stem and leaves, transparent around them), tiling top to bottom."""
+    from PIL import Image, ImageDraw
+    w, h = 256, 1024
+    img = Image.new('RGBA', (w, h), (0, 0, 0, 0))
+    draw = ImageDraw.Draw(img)
+    rng = random.Random(11)
+
+    def stem_x(y, k=0):
+        # Two stems twining round each other (k = 0, 1), each a whole number of waves so the strip tiles.
+        return w / 2 + (30 - 8 * k) * math.sin(2 * math.pi * y / h * (2 + k) + k * 2.1) + 8 * math.sin(2 * math.pi * y / h * 5)
+    for k in (0, 1):
+        for y in range(0, h, 2):
+            x = stem_x(y, k)
+            draw.ellipse((x - 3, y - 3, x + 3, y + 3), fill=(70, 80, 40, 255))
+    greens = [(52, 110, 38), (70, 130, 45), (40, 92, 34), (88, 145, 55), (60, 118, 42)]
+    for _ in range(190):
+        y = rng.uniform(0, h)
+        side = rng.choice((-1, 1))
+        length = rng.uniform(40, 78)
+        angle = math.radians(rng.uniform(25, 70)) * side
+        base = (stem_x(y, rng.randint(0, 1)), y)
+        tip = (base[0] + math.sin(angle) * length, base[1] + math.cos(angle) * length * 0.6)
+        colour = rng.choice(greens)
+        for dy in (-h, 0, h):  # wrap so the strip tiles
+            pts = []
+            for k in range(14):
+                t = k / 13
+                bulge = math.sin(math.pi * t) * length * 0.32 * (1.15 if t < 0.5 else 0.9)
+                cx = base[0] + (tip[0] - base[0]) * t
+                cy = base[1] + (tip[1] - base[1]) * t + dy
+                nx, ny = -(tip[1] - base[1]), tip[0] - base[0]
+                n = math.hypot(nx, ny) or 1
+                pts.append((cx + nx / n * bulge, cy + ny / n * bulge))
+            for k in range(13, -1, -1):
+                t = k / 13
+                bulge = math.sin(math.pi * t) * length * 0.32
+                cx = base[0] + (tip[0] - base[0]) * t
+                cy = base[1] + (tip[1] - base[1]) * t + dy
+                nx, ny = -(tip[1] - base[1]), tip[0] - base[0]
+                n = math.hypot(nx, ny) or 1
+                pts.append((cx - nx / n * bulge, cy - ny / n * bulge))
+            draw.polygon(pts, fill=(*colour, 255))
+            draw.line([(base[0], base[1] + dy), (tip[0], tip[1] + dy)], fill=tuple(int(c * 0.7) for c in colour) + (255,), width=2)
+    B.TEXTURES.mkdir(parents=True, exist_ok=True)
+    img.save(B.TEXTURES / 'T_Vines.png')
 
 
 def add_vines(parts, poly, height_local, number, rng, skip=(), density=1.0):
     """Ivy and roots along the island rim (local polygon), written into `parts` in world coordinates."""
     ring = poly.exterior
-    pts = np.array([ring.interpolate(s).coords[0] for s in np.arange(0, ring.length, 3.5)])
+    pts = np.array([ring.interpolate(s).coords[0] for s in np.arange(0, ring.length, 0.75)])
     ccw = ring.is_ccw
     for i, p in enumerate(pts):
-        if rng.random() > 0.55 * density:
+        if rng.random() > density:
             continue
         if any(math.hypot(p[0] - sx, p[1] - sy) < sr for sx, sy, sr in skip):
             continue
@@ -249,8 +340,8 @@ def add_vines(parts, poly, height_local, number, rng, skip=(), density=1.0):
         if not ccw:
             outward = -outward
         z = float(height_local(np.array([p[0]]), np.array([p[1]]))[0])
-        leafy = rng.random() < 0.72
-        length = rng.uniform(4, 16) if leafy else rng.uniform(3, 9)
+        leafy = rng.random() < 0.85
+        length = (rng.uniform(4, 11) if rng.random() < 0.45 else rng.uniform(11, 30)) if leafy else rng.uniform(3, 9)
         # Write straight into world space: turn the outward direction with the hole.
         wx, wy = C.to_world(number, p[0], p[1])
         yaw = math.radians(C.PLACE[number][1])
@@ -265,8 +356,12 @@ WOOD = [(0.42, 0.30, 0.18), (0.36, 0.25, 0.15), (0.48, 0.34, 0.20)]
 ROPE = (0.62, 0.52, 0.34)
 
 
-def rope_bridge(parts, a, b, rng, width=2.4, sag_ratio=0.055, leafy=True):
-    """Planks on a sagging deck between two anchor points (world x, y, z), rope rails, hangers, log posts."""
+def rope_bridge(deck_parts, parts, a, b, rng, width=2.4, sag_ratio=0.055, leafy=True, ground=None, guard=None):
+    """Planks on a sagging deck between two anchor points (world x, y, z) into `deck_parts` (collides, so the
+    buggy can cross); rope rails, hangers, log posts and a gate tall enough for the buggy into `parts` (no
+    collision). ground(x, y) -> island height or None: over land the deck never dips under the grass, so the
+    buggy meets no lip at the cliff edge. `guard` gets low walls along both edges (hidden, they only collide)
+    so the buggy can't drive off the side."""
     a, b = Vector(a), Vector(b)
     span = (b - a).length
     sag = 0.8 + span * sag_ratio
@@ -274,8 +369,26 @@ def rope_bridge(parts, a, b, rng, width=2.4, sag_ratio=0.055, leafy=True):
     flat = Vector((along.x, along.y, 0)).normalized()
     across = Vector((-flat.y, flat.x, 0))
 
+    # Deck height along the span: the sagging rope curve, lifted flush with the grass over land, then eased so it
+    # never falls away faster than a gentle ramp (no lip where it leaves the cliff edge).
+    ts = np.linspace(0.0, 1.0, 401)
+    zs = np.array([(a.lerp(b, t)).z - sag * 4 * t * (1 - t) for t in ts])
+    if ground:
+        for i, t in enumerate(ts):
+            p = a.lerp(b, t)
+            g = ground(p.x, p.y)
+            if g is not None:
+                zs[i] = max(zs[i], g - 0.02)
+    dz = 0.3 * span / 400
+    for i in range(1, len(zs)):
+        zs[i] = max(zs[i], zs[i - 1] - dz)
+    for i in range(len(zs) - 2, -1, -1):
+        zs[i] = max(zs[i], zs[i + 1] - dz)
+
     def deck(t):
-        return a.lerp(b, t) - Vector((0, 0, sag * 4 * t * (1 - t)))
+        p = a.lerp(b, t)
+        p.z = float(np.interp(t, ts, zs))
+        return p
 
     count = int(span / 0.42)
     for i in range(count + 1):
@@ -283,7 +396,7 @@ def rope_bridge(parts, a, b, rng, width=2.4, sag_ratio=0.055, leafy=True):
         p = deck(t)
         tangent = (deck(min(1, t + 0.01)) - deck(max(0, t - 0.01))).normalized()
         jitter = Vector((0, 0, rng.uniform(-0.02, 0.02)))
-        parts.box(p + jitter, tangent, across, (0.17, width / 2 * rng.uniform(0.9, 1.0), 0.04), rng.choice(WOOD))
+        deck_parts.box(p + jitter, tangent, across, (0.17, width / 2 * rng.uniform(0.9, 1.0), 0.04), rng.choice(WOOD))
     steps = max(8, int(span / 1.2))
     for side in (-1, 1):
         edge = [tuple(deck(i / steps) + across * side * width / 2) for i in range(steps + 1)]
@@ -299,11 +412,18 @@ def rope_bridge(parts, a, b, rng, width=2.4, sag_ratio=0.055, leafy=True):
                     parts.leaf(q, rng.uniform(0.25, 0.4), rng.choice(VINE_GREENS), 0.4, rng)
         for end, sign in ((a, 1), (b, -1)):
             post = end + across * side * (width / 2 + 0.2) - flat * sign * 0.6
-            parts.tube([tuple(post - Vector((0, 0, 0.8))), tuple(post + Vector((0, 0, 1.9)))], 0.16, rng.choice(WOOD), sides=6)
+            parts.tube([tuple(post - Vector((0, 0, 0.8))), tuple(post + Vector((0, 0, 2.95)))], 0.16, rng.choice(WOOD), sides=6)
             parts.tube([tuple(post + Vector((0, 0, 1.4))), tuple(end + across * side * width / 2 + Vector((0, 0, 1.1)))], 0.035, ROPE, sides=4)
     for end, sign in ((a, 1), (b, -1)):   # crossbar over each end, jungle-gate style
-        centre = end - flat * sign * 0.6 + Vector((0, 0, 1.85))
+        centre = end - flat * sign * 0.6 + Vector((0, 0, 2.8))  # the buggy's roof clears it
         parts.tube([tuple(centre - across * (width / 2 + 0.4)), tuple(centre + across * (width / 2 + 0.4))], 0.1, rng.choice(WOOD), sides=6)
+    if guard is not None:
+        for side in (-1, 1):
+            for i in range(steps):
+                p0, p1 = deck(i / steps), deck((i + 1) / steps)
+                d = p1 - p0
+                mid = (p0 + p1) / 2 + across * side * (width / 2 + 0.08) + Vector((0, 0, 0.6))
+                guard.box(mid, d, across, (d.length / 2 + 0.05, 0.06, 0.6), ROPE)
     return span, sag
 
 
@@ -426,7 +546,7 @@ def build_hole(number, rng):
                               np.concatenate(f_parts[2]), ['Rough', 'IslandRock'], np.concatenate(f_parts[3]))
 
     add_vines(vines, land, local_h, number, rng, skip=skip)
-    vine_obj = vines.mesh(f'{name}_Vines')
+    vine_obj = vines.mesh(f'{name}_Vines', ('TreeBark', 'TreeLeaves', 'Vines'))
     exported = [top, rock, floater_obj, vine_obj]
 
     if layout.get('water') is not None:
@@ -512,11 +632,20 @@ def build_bridges(layouts, rng):
         bx, by = pb.x + va[0] * 4, pb.y + va[1] * 4
         za = float(ha(*[np.array([v]) for v in C.to_local(n, ax, ay)])[0]) + C.PLACE[n][2]
         zb = float(hb(*[np.array([v]) for v in C.to_local(n + 1, bx, by)])[0]) + C.PLACE[n + 1][2]
-        parts = Parts()
-        span, sag = rope_bridge(parts, (ax, ay, za + 0.1), (bx, by, zb + 0.1), rng)
-        obj = parts.mesh(f'SM_Bridge_{n:02d}_{n + 1:02d}')
-        sl.export_fbx(str(OUT / f'{obj.name}.fbx'), [obj])
-        bridges.append(dict(name=obj.name, a=[ax, ay, za], b=[bx, by, zb], span=round(span, 1), sag=round(sag, 1)))
+        def ground(x, y, n=n, ha=ha, hb=hb, wa=wa, wb=wb):
+            for num, land, h in ((n, wa, ha), (n + 1, wb, hb)):
+                if land.contains(Point(x, y)):
+                    lx, ly = C.to_local(num, x, y)
+                    return float(h(np.array([lx]), np.array([ly]))[0]) + C.PLACE[num][2]
+            return None
+        deck, rails, guard = Parts(), Parts(), Parts()
+        span, sag = rope_bridge(deck, rails, (ax, ay, za - 0.02), (bx, by, zb - 0.02), rng, ground=ground, guard=guard)
+        base = f'SM_Bridge_{n:02d}_{n + 1:02d}'
+        obj, rails_obj, guard_obj = deck.mesh(base), rails.mesh(f'{base}_Rails'), guard.mesh(f'{base}_Guard')
+        for o in (obj, rails_obj, guard_obj):
+            sl.export_fbx(str(OUT / f'{o.name}.fbx'), [o])
+        bridges.append(dict(name=obj.name, rails=rails_obj.name, guard=guard_obj.name, a=[ax, ay, za], b=[bx, by, zb],
+                            span=round(span, 1), sag=round(sag, 1)))
         print(f'BRIDGE {n}->{n + 1}: {span:.0f} m, drop {za - zb:+.1f} m, sag {sag:.1f} m')
     return bridges
 
@@ -562,6 +691,11 @@ def render_course(layouts):
     for fbx in sorted(OUT.glob('SM_*.fbx')):
         if fbx.stem.startswith(('SM_H', 'SM_Bridge')):
             bpy.ops.import_scene.fbx(filepath=str(fbx))
+    ivy = vc_material('Vines')
+    for obj in bpy.data.objects:
+        for slot in obj.material_slots:
+            if slot.material and slot.material.name.startswith('Vines') and slot.material != ivy:
+                slot.material = ivy
     for mat in bpy.data.materials:
         if mat.use_nodes and 'Principled BSDF' in mat.node_tree.nodes and not any(n.type == 'VERTEX_COLOR' for n in mat.node_tree.nodes):
             attr = mat.node_tree.nodes.new('ShaderNodeVertexColor')
@@ -607,6 +741,7 @@ def main():
     args = sys.argv[sys.argv.index('--') + 1:] if '--' in sys.argv else []
     wanted = [int(a) for a in args if a.isdigit()] or [1, 2, 3, 4, 5, 6]
     OUT.mkdir(parents=True, exist_ok=True)
+    vine_texture()
     layouts = {}
     for number in sorted(set(wanted) | {n for w in wanted for n in (w - 1, w + 1) if 1 <= n <= 6}):
         layouts[number] = (layout_for(number), None)

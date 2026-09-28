@@ -7,12 +7,12 @@
                                 tee and cup
     isl.apply_islands(n)        one hole only (no bridges or fog)
 
-Needs, from Scripts/import_trees.py, the stylised trees and their M_Tree_Bark / M_Tree_Leaves materials (the
-vines and the rope bridges use them too), and the SkyLinksForest C++ class (rebuild first).
+Needs, from Scripts/import_trees.py, the stylised trees and their M_Tree_Bark / M_Tree_Leaves / M_Tree_Vines
+materials (the vines and the rope bridges use them too), and the SkyLinksForest C++ class (rebuild first).
 
 Sources (Art/Blender/build_course_islands.py), all in world coordinates, placed at the origin:
   Art/Exports/Islands/SM_Hnn_{IslandTop,IslandRock,Floaters,Vines,Water,Props}.fbx, Holenn_spots.json
-  Art/Exports/Islands/SM_Bridge_nn_mm.fbx, Course_links.json (bridges and fog patches)
+  Art/Exports/Islands/SM_Bridge_nn_mm.fbx (deck, collides) + SM_Bridge_nn_mm_{Rails,Guard}.fbx, Course_links.json (bridges and fog patches)
 Each hole's GolfHole actor is moved to its island: tee, heading, height, aim point, cup, par and name.
 Re-running replaces everything it made; it is safe to run twice.
 """
@@ -164,7 +164,7 @@ def build_materials():
     materials['IslandRock'] = rock_material(*ROCK)
     materials['Water'] = plain_material('M_Island_Water', (0.015, 0.06, 0.08), 0.06, 'PM_Water', specular=0.8)
     plain_material(SEA, (0.01, 0.05, 0.1), 0.15)
-    for slot, name in (('TreeBark', 'M_Tree_Bark'), ('TreeLeaves', 'M_Tree_Leaves')):
+    for slot, name in (('TreeBark', 'M_Tree_Bark'), ('TreeLeaves', 'M_Tree_Leaves'), ('Vines', 'M_Tree_Vines')):
         mat = unreal.load_asset(f'{TREES}/{name}')
         assert mat, f'{TREES}/{name} missing: run import_trees.import_trees() first'
         materials[slot] = mat
@@ -314,6 +314,16 @@ def apply_bridges(materials, links):
     for bridge in links['bridges']:
         mesh = import_mesh(bridge['name'], materials)
         place(mesh, bridge['name'].replace('SM_', ''), folder)
+        if bridge.get('rails'):
+            # Ropes, posts and gates: no collision, so the buggy can't snag on them.
+            rails = import_mesh(bridge['rails'], materials, collide=False)
+            place(rails, bridge['rails'].replace('SM_', ''), folder, collide=False)
+        if bridge.get('guard'):
+            # Low walls along the deck edges: invisible, they only keep the buggy on the bridge.
+            guard = place(import_mesh(bridge['guard'], materials), bridge['guard'].replace('SM_', ''), folder)
+            guard.set_actor_hidden_in_game(True)
+            guard.static_mesh_component.set_editor_property('cast_shadow', False)
+            guard.static_mesh_component.set_editor_property('visible', False)
         print(f"BRIDGE {bridge['name']}: {bridge['span']} m")
 
 
