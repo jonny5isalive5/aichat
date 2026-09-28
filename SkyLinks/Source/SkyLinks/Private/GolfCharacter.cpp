@@ -67,7 +67,7 @@ AGolfCharacter::AGolfCharacter()
 	PuttAnim = TSoftObjectPtr<UAnimSequence>(Anim(TEXT("A_Putt")));
 	HoleInOneAnim = TSoftObjectPtr<UAnimSequence>(Anim(TEXT("A_HoleInOne")));
 	CelebrateAnim = TSoftObjectPtr<UAnimSequence>(Anim(TEXT("A_Celebrate")));
-	PuttVictoryAnim = TSoftObjectPtr<UAnimSequence>(Anim(TEXT("A_PuttVictory")));
+	PuttVictoryAnim = TSoftObjectPtr<UAnimSequence>(Anim(TEXT("A_PuttVictoryLong")));
 	PuttMissAnim = TSoftObjectPtr<UAnimSequence>(Anim(TEXT("A_PuttMiss")));
 	BadShotAnim = TSoftObjectPtr<UAnimSequence>(Anim(TEXT("A_BadShot")));
 	EnterBuggyAnim = TSoftObjectPtr<UAnimSequence>(Anim(TEXT("A_EnterBuggy")));
@@ -288,14 +288,23 @@ float AGolfCharacter::GetImpactDelay(EGolferSwing Swing) const
 float AGolfCharacter::GetReactionDuration(EGolferReaction Reaction) const
 {
 	const UAnimSequence* Clip = bHasBody ? ReactionAsset(Reaction) : nullptr;
-	// Long Mixamo clips are cut short so the round keeps moving.
-	return Clip ? FMath::Min(Clip->GetPlayLength(), 4.f) : 0.f;
+	// Long Mixamo clips are cut short so the round keeps moving (the putt victory runs until the ball is out).
+	const float Cap = Reaction == EGolferReaction::PuttVictory ? 5.f : 4.f;
+	return Clip ? FMath::Min(Clip->GetPlayLength(), Cap) : 0.f;
 }
 
-void AGolfCharacter::MulticastPlayReaction_Implementation(EGolferReaction Reaction)
+void AGolfCharacter::MulticastPlayReaction_Implementation(EGolferReaction Reaction, FVector CupLocation)
 {
 	if (UAnimSequence* Clip = bHasBody ? ReactionAsset(Reaction) : nullptr)
 	{
+		if (Reaction == EGolferReaction::PuttVictory)
+		{
+			// The clip walks forward and picks the ball out of a cup at CupPickupOffset: stand back from the
+			// real cup by that much, keeping the putting direction, so the hand goes into the actual hole.
+			const FRotator Facing(0.f, GetActorRotation().Yaw, 0.f);
+			const FVector Feet = CupLocation - Facing.RotateVector(CupPickupOffset);
+			SetActorLocation(FVector(Feet.X, Feet.Y, CupLocation.Z + GetCapsuleComponent()->GetScaledCapsuleHalfHeight()));
+		}
 		bPlayingAction = true;
 		GetMesh()->SetPlayRate(1.f);
 		GetMesh()->PlayAnimation(Clip, false);

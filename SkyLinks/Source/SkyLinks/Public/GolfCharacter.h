@@ -48,9 +48,9 @@ public:
 	UFUNCTION(NetMulticast, Reliable)
 	void MulticastPlaySwing(EGolferSwing Swing);
 
-	/** Everyone: play a celebration or reaction after a shot. */
+	/** Everyone: play a celebration or reaction after a shot (the putt victory walks to CupLocation). */
 	UFUNCTION(NetMulticast, Reliable)
-	void MulticastPlayReaction(EGolferReaction Reaction);
+	void MulticastPlayReaction(EGolferReaction Reaction, FVector CupLocation);
 
 	/** Seconds from the start of the swing to club-on-ball; 0 while the golfer has no animations. */
 	float GetImpactDelay(EGolferSwing Swing) const;
@@ -96,6 +96,8 @@ public:
 	UPROPERTY(EditDefaultsOnly, Category = "Golf|Animations") TSoftObjectPtr<UAnimSequence> HoleInOneAnim;
 	UPROPERTY(EditDefaultsOnly, Category = "Golf|Animations") TSoftObjectPtr<UAnimSequence> CelebrateAnim;
 	UPROPERTY(EditDefaultsOnly, Category = "Golf|Animations") TSoftObjectPtr<UAnimSequence> PuttVictoryAnim;
+	/** Where the putt victory clip's right hand goes into the cup, actor-local cm (measured at 3.7 s). */
+	UPROPERTY(EditDefaultsOnly, Category = "Golf|Animations") FVector CupPickupOffset = FVector(142.f, 54.f, 0.f);
 	UPROPERTY(EditDefaultsOnly, Category = "Golf|Animations") TSoftObjectPtr<UAnimSequence> PuttMissAnim;
 	UPROPERTY(EditDefaultsOnly, Category = "Golf|Animations") TSoftObjectPtr<UAnimSequence> BadShotAnim;
 	UPROPERTY(EditDefaultsOnly, Category = "Golf|Animations") TSoftObjectPtr<UAnimSequence> EnterBuggyAnim;

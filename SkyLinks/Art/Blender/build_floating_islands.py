@@ -468,6 +468,7 @@ def build(number):
     in_main = shapely.distance(layout['main'], pts) < 1e-6
     depth = np.where(in_main, d['depth'][0], d['depth'][1])
     rock_v, dist, t = underside(uxy, land, top_fn, depth, number * 13)
+    utris = utris[:, ::-1]  # the underside faces down and out, the opposite way to the grass top
     rock = make_mesh(f'SM_H{number:02d}_IslandRock', rock_v, utris, np.zeros(len(utris), int), ['IslandRock'],
                      rock_colours(rock_v[:, 2], dist, t, uxy[:, 0], uxy[:, 1], number))
 
@@ -488,7 +489,7 @@ def build(number):
         radius = math.sqrt(poly.area / math.pi)
         rv, rd, rt = underside(ux, poly, fn, radius * 1.7, 700 + i)
         f_verts.append(rv)
-        f_tris.append(ut + offset)
+        f_tris.append(ut[:, ::-1] + offset)  # rock faces down and out
         f_mats.append(np.ones(len(ut), int))
         f_cols.append(rock_colours(rv[:, 2], rd, rt, ux[:, 0], ux[:, 1], 700 + i))
         offset += len(ux)

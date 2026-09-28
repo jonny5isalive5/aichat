@@ -642,7 +642,7 @@ void AGolfGameMode::OnBallStopped(AGolfBall* Ball, EGolfShotResult Result)
 		if (Duration > 0.f)
 		{
 			Golfer->SetActorHiddenInGame(false);
-			Golfer->MulticastPlayReaction(Reaction);
+			Golfer->MulticastPlayReaction(Reaction, State->CurrentHole->GetCupLocation());
 			ViewAll(Golfer, 0.5f);
 			Delay = FMath::Max(Delay, Duration);
 		}

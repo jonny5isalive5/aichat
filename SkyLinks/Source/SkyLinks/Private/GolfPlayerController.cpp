@@ -398,10 +398,13 @@ void AGolfPlayerController::UpdateSwipe(const FVector2D& Screen)
 	const float Height = ViewportHeight();
 	SwingPower = FMath::Clamp((SwipeStart.Y - Screen.Y) / (FullPowerSwipe * Height), 0.f, 1.f);
 
-	// Straight up is straight. Drift right slices (positive), drift left hooks.
-	const float Drift = (Screen.X - SwipeStart.X) / (FullErrorDrift * Height);
-	const float Magnitude = FMath::Clamp((FMath::Abs(Drift) - StraightDeadzone) / (1.f - StraightDeadzone), 0.f, 1.f);
-	SwingAccuracy = FMath::Sign(Drift) * Magnitude;
+	// Up and down sets the distance; left and right moves the drop zone (the aim) with the finger.
+	if (!FMath::IsNearlyEqual(Screen.X, AimLastX))
+	{
+		SetAim(AimYaw + (Screen.X - AimLastX) * AimDegreesPerPixel);
+		AimLastX = Screen.X;
+	}
+	SwingAccuracy = 0.f;
 }
 
 void AGolfPlayerController::ReleaseSwing()
@@ -689,6 +692,7 @@ void AGolfPlayerController::OnTouchPressed(ETouchIndex::Type FingerIndex, FVecto
 			TouchRoles[Finger] = ETouchRole::Swipe;
 			bSwiping = true;
 			SwipeStart = Screen;
+			AimLastX = Screen.X;
 			SwingPower = 0.f;
 			SwingAccuracy = 0.f;
 		}

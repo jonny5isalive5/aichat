@@ -100,10 +100,6 @@ public:
 	static constexpr float SwipeZoneTop = 0.5f;
 	/** Swipe length for full power, as a fraction of screen height. */
 	static constexpr float FullPowerSwipe = 0.45f;
-	/** Sideways drift for a full hook or slice, as a fraction of screen height. */
-	static constexpr float FullErrorDrift = 0.12f;
-	/** Drift inside this fraction of FullErrorDrift still counts as dead straight. */
-	static constexpr float StraightDeadzone = 0.15f;
 
 private:
 	enum class ETouchRole : uint8 { None, Aim, Swipe, Steer, Gas, Reverse };
