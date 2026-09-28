@@ -63,8 +63,8 @@ DESIGNS = {
                   ((335, -86), 9, -28), ((-35, 62), 12, -18), ((430, 40), 14, -12), ((-190, 30), 10, -30),
                   ((20, 75), 6, 9), ((400, -60), 7, 4)],
         depth=(62, 48),  # underside depth of the biggest island and of the home island
-        # Flat pads (centre, radius): clubhouse footprint, buggy parking behind the tee.
-        pads=[((-110, -45), 26), ((-14, 0), 9)],
+        # Flat pads (centre, radius): clubhouse with its putting green and car park, buggy parking behind the tee.
+        pads=[((-110, -45), 44), ((-14, 0), 9)],
         clubhouse=(-110, -45),
     ),
 }
