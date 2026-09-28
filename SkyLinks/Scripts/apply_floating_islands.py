@@ -1,16 +1,20 @@
-"""Put a hole's floating islands into the Course map (run inside the editor, e.g. through Aura).
+"""Put the floating-island course into the Course map (run inside the editor, Output Log in Python mode or Aura).
 
-    apply_islands(1)      import the Blender islands for hole 1, build their materials, remove the flat
-                          landscape and slabs of that hole, place the islands and re-seat the cup,
-                          trees, tee markers, clubhouse and player start on the new ground
-    validate_islands(1)   run in a LATER tool call (collision cooks after the import): traces the
-                          tee, fairway, green, bunkers and the gaps and prints what the ball would find
+    import sys, unreal; sys.path.append(unreal.Paths.project_dir() + "Scripts")
+    import apply_floating_islands as isl
+    isl.apply_course()          holes 1-6: islands, water, vines, footbridges, trees, rope bridges, fog, sea
+    isl.validate_course()       in a LATER call (collision cooks after the import): what the ball finds at each
+                                tee and cup
+    isl.apply_islands(n)        one hole only (no bridges or fog)
 
-Sources come from Art/Blender/build_floating_islands.py:
-  Art/Exports/Islands/SM_H01_IslandTop.fbx, SM_H01_IslandRock.fbx, SM_H01_Floaters.fbx, Hole01_spots.json
-  Art/Textures/T_GrassDetail.png, T_SandDetail.png, T_RockDetail.png
+Needs, from Scripts/import_trees.py, the stylised trees and their M_Tree_Bark / M_Tree_Leaves materials (the
+vines and the rope bridges use them too), and the SkyLinksForest C++ class (rebuild first).
 
-Re-running replaces the meshes and materials and re-places everything; it is safe to run twice.
+Sources (Art/Blender/build_course_islands.py), all in world coordinates, placed at the origin:
+  Art/Exports/Islands/SM_Hnn_{IslandTop,IslandRock,Floaters,Vines,Water,Props}.fbx, Holenn_spots.json
+  Art/Exports/Islands/SM_Bridge_nn_mm.fbx, Course_links.json (bridges and fog patches)
+Each hole's GolfHole actor is moved to its island: tee, heading, height, aim point, cup, par and name.
+Re-running replaces everything it made; it is safe to run twice.
 """
 import json
 from pathlib import Path
@@ -23,8 +27,10 @@ TEXTURE_SOURCE = ROOT / 'Art' / 'Textures'
 DEST = '/Game/Course/Islands'
 TEXTURE_DEST = DEST + '/Textures'
 MAT_DIR = '/Game/Course/Materials'
+TREES = '/Game/Course/Trees'
 MAP_PATH = '/Game/Maps/Course'
 M = 100.0
+HOLES = range(1, 7)
 
 # Slot name in the FBX -> (Unreal material, base colour (linear), roughness, colour variation, mowing stripes,
 # detail texture, physical material). Colour variation and stripes come from the vertex colours (R, G).
@@ -37,6 +43,8 @@ GRASS = {
 }
 ROCK = ('M_Island_Rock', 'T_RockDetail', 'PM_Rough')
 SEA = 'M_Island_Sea'
+PARTS = ('IslandTop', 'IslandRock', 'Floaters', 'Vines', 'Water', 'Props')
+NO_COLLISION = ('Vines',)  # hanging ivy: the ball and buggy pass through
 
 actors = unreal.get_editor_subsystem(unreal.EditorActorSubsystem)
 tools = unreal.AssetToolsHelpers.get_asset_tools()
@@ -55,15 +63,12 @@ def _import(filename, destination, options=None):
 
 
 def import_textures():
-    textures = {}
     for name in ('T_GrassDetail', 'T_SandDetail', 'T_RockDetail'):
         texture = _import(TEXTURE_SOURCE / f'{name}.png', TEXTURE_DEST)
         assert texture, f'{name}.png did not import'
         texture.set_editor_property('srgb', False)  # a brightness multiplier, not a colour
         texture.set_editor_property('compression_settings', unreal.TextureCompressionSettings.TC_GRAYSCALE)
         unreal.EditorAssetLibrary.save_loaded_asset(texture)
-        textures[name] = texture
-    return textures
 
 
 def _material(name):
@@ -139,11 +144,15 @@ def rock_material(name, detail, physical):
     return _finish(mat, physical)
 
 
-def sea_material():
-    mat = _material(SEA)
-    base = _expr(mat, unreal.MaterialExpressionConstant3Vector, -500, 0, constant=unreal.LinearColor(0.01, 0.05, 0.1, 1))
+def plain_material(name, colour, roughness, physical=None, specular=None):
+    mat = _material(name)
+    base = _expr(mat, unreal.MaterialExpressionConstant3Vector, -500, 0, constant=unreal.LinearColor(*colour, 1))
     lib.connect_material_property(base, '', unreal.MaterialProperty.MP_BASE_COLOR)
-    lib.connect_material_property(_const(mat, 0.15, -500, 200), '', unreal.MaterialProperty.MP_ROUGHNESS)
+    lib.connect_material_property(_const(mat, roughness, -500, 200), '', unreal.MaterialProperty.MP_ROUGHNESS)
+    if specular is not None:
+        lib.connect_material_property(_const(mat, specular, -500, 300), '', unreal.MaterialProperty.MP_SPECULAR)
+    if physical:
+        return _finish(mat, physical)
     lib.recompile_material(mat)
     unreal.EditorAssetLibrary.save_loaded_asset(mat)
     return mat
@@ -153,10 +162,16 @@ def build_materials():
     import_textures()
     materials = {slot: grass_material(*spec) for slot, spec in GRASS.items()}
     materials['IslandRock'] = rock_material(*ROCK)
+    materials['Water'] = plain_material('M_Island_Water', (0.015, 0.06, 0.08), 0.06, 'PM_Water', specular=0.8)
+    plain_material(SEA, (0.01, 0.05, 0.1), 0.15)
+    for slot, name in (('TreeBark', 'M_Tree_Bark'), ('TreeLeaves', 'M_Tree_Leaves')):
+        mat = unreal.load_asset(f'{TREES}/{name}')
+        assert mat, f'{TREES}/{name} missing: run import_trees.import_trees() first'
+        materials[slot] = mat
     return materials
 
 
-def import_mesh(name, materials):
+def import_mesh(name, materials, collide=True):
     options = unreal.FbxImportUI()
     options.set_editor_property('import_mesh', True)
     options.set_editor_property('import_as_skeletal', False)
@@ -170,20 +185,16 @@ def import_mesh(name, materials):
     data.set_editor_property('vertex_color_import_option', unreal.VertexColorImportOption.REPLACE)
     mesh = _import(SOURCE / f'{name}.fbx', DEST, options)
     assert isinstance(mesh, unreal.StaticMesh), f'{name}.fbx did not import'
-
-    # Materials by slot name (the Blender material names).
     for index, slot in enumerate(mesh.get_editor_property('static_materials')):
         slot_name = str(slot.get_editor_property('material_slot_name'))
-        key = next((k for k in materials if slot_name == k or slot_name.startswith(k + '_')), None)
+        key = next((k for k in materials if slot_name == k or slot_name.startswith(k + '_') or slot_name.startswith(k + '.')), None)
         assert key, f'{name}: unexpected material slot {slot_name}'
         mesh.set_material(index, materials[key])
-
-    # The ball and the buggy need the real surface (and its per-face physical material), not boxes.
-    body = mesh.get_editor_property('body_setup')
-    body.set_editor_property('collision_trace_flag', unreal.CollisionTraceFlag.CTF_USE_COMPLEX_AS_SIMPLE)
+    if collide:
+        # The ball and the buggy need the real surface (and its per-face physical material), not boxes.
+        body = mesh.get_editor_property('body_setup')
+        body.set_editor_property('collision_trace_flag', unreal.CollisionTraceFlag.CTF_USE_COMPLEX_AS_SIMPLE)
     unreal.EditorAssetLibrary.save_loaded_asset(mesh)
-    size = mesh.get_bounds().box_extent
-    print(f'MESH {name}: {size.x * 2 / M:.0f} x {size.y * 2 / M:.0f} x {size.z * 2 / M:.0f} m')
     return mesh
 
 
@@ -199,110 +210,183 @@ def remove_flat_ground(number):
         path = str(actor.get_folder_path())
         if label == f'Terrain_Hole{number:02d}' and isinstance(actor, unreal.Landscape):
             doomed.append(actor)
-        elif isinstance(actor, unreal.StaticMeshActor) and path == folder and (
-                label in ('Rough', 'Green', 'TeeBox') or label.startswith('Fairway') or label.startswith('Bunker')):
-            doomed.append(actor)
+        elif path == folder and isinstance(actor, unreal.StaticMeshActor) and (
+                label in ('Rough', 'Green', 'TeeBox') or label.startswith(('Fairway', 'Bunker', 'Water', 'TreeTrunk', 'TreeCanopy'))):
+            doomed.append(actor)  # blockout slabs and the placeholder ball trees (the forest replaces them)
         elif number == 1 and label == 'ClubhouseLawn':
             doomed.append(actor)
-        elif path == f'{folder}/Islands' or (number == 1 and label == 'IslandSea'):
+        elif path in (f'{folder}/Islands', f'{folder}/Trees'):
             doomed.append(actor)  # a previous run
     for actor in doomed:
-        print('REMOVE', actor.get_actor_label())
         actors.destroy_actor(actor)
+    print(f'HOLE {number}: removed {len(doomed)} old actors')
 
 
-def place(mesh, label, folder, location=(0, 0, 0)):
-    actor = actors.spawn_actor_from_object(mesh, unreal.Vector(*location), unreal.Rotator(0, 0, 0))
+def place(mesh, label, folder, collide=True):
+    actor = actors.spawn_actor_from_object(mesh, unreal.Vector(0, 0, 0), unreal.Rotator(0, 0, 0))
     actor.set_actor_label(label)
     actor.set_folder_path(folder)
+    if not collide:
+        actor.static_mesh_component.set_collision_enabled(unreal.CollisionEnabled.NO_COLLISION)
+        actor.static_mesh_component.set_editor_property('cast_shadow', False)
     return actor
 
 
-def seat(number, spots):
-    """Move the hole's props onto the island surface using the heights the generator computed."""
+def _v(p, lift=0.0):
+    return unreal.Vector(p[0] * M, p[1] * M, p[2] * M + lift)
+
+
+def place_hole(number, spots):
+    """Move the hole's GolfHole to its island (tee, heading, aim, cup) and seat its tee markers."""
     folder = f'Course/Hole{number:02d}'
     everything = _all()
-    trees = spots['trees']
-    for actor in everything:
-        label = actor.get_actor_label()
-        if str(actor.get_folder_path()) != folder:
-            continue
-        p = actor.get_actor_location()
-        if label.startswith('TreeTrunk') or label.startswith('TreeCanopy') or label.startswith('Tree'):
-            nearest = min(trees, key=lambda t: (t[0] * M - p.x) ** 2 + (t[1] * M - p.y) ** 2)
-            lift = 450 if label.startswith('TreeTrunk') else 1050 if label.startswith('TreeCanopy') else 0
-            actor.set_actor_location(unreal.Vector(p.x, p.y, nearest[2] * M + lift), False, True)
-        elif label.startswith('TeeMarker'):
-            nearest = min(spots['tee_markers'], key=lambda t: (t[1] * M - p.y) ** 2)
-            actor.set_actor_location(unreal.Vector(p.x, p.y, nearest[2] * M + 5), False, True)
-        elif label == f'GolfHole{number:02d}':
-            cup_root = actor.cup_root
-            cup_root.modify()
-            cx, cy, cz = spots['cup']
-            cup_root.set_world_location(unreal.Vector(cx * M, cy * M, cz * M), False, True)
+    golf_hole = next((a for a in everything if a.get_actor_label() == f'GolfHole{number:02d}'), None)
+    assert golf_hole, f'GolfHole{number:02d} not found in the map'
+    golf_hole.modify()
+    golf_hole.set_actor_location_and_rotation(_v(spots['tee'], 1.0), unreal.Rotator(0, 0, spots['yaw']), False, True)
+    ax, ay = spots['aim_local']
+    golf_hole.set_editor_property('aim_point', unreal.Vector(ax * M, ay * M, 0))
+    golf_hole.set_editor_property('par', spots['par'])
+    golf_hole.set_editor_property('hole_name', spots['name'])
+    cup_root = golf_hole.cup_root
+    cup_root.modify()
+    cup_root.set_world_location(_v(spots['cup']), False, True)
+    markers = [a for a in everything if str(a.get_folder_path()) == folder and a.get_actor_label().startswith('TeeMarker')]
+    for actor, spot in zip(markers, spots['tee_markers']):
+        actor.set_actor_location(_v(spot, 5.0), False, True)
     if number == 1:
         for actor in everything:
-            label = actor.get_actor_label()
-            if label == 'Clubhouse':
+            if actor.get_actor_label() == 'Clubhouse':
                 p = actor.get_actor_location()
                 actor.set_actor_location(unreal.Vector(p.x, p.y, spots['clubhouse'][2] * M), False, True)
             elif isinstance(actor, unreal.PlayerStart):
-                x, y, z = spots['player_start']
-                actor.set_actor_location(unreal.Vector(x * M, y * M, z * M + 120), False, True)
+                actor.set_actor_location(_v(spots['player_start'], 120.0), False, True)
 
 
-def add_sea(folder):
+def _tree_mesh(kind):
+    path = f'{TREES}/SM_Tree_{kind}' if not kind.startswith('Bush') else f'{TREES}/SM_{kind}'
+    mesh = unreal.load_asset(path)
+    assert mesh, f'{path} missing: run import_trees.import_trees() first'
+    return mesh
+
+
+def plant_forest(number, spots):
+    """All the hole's trees as instances on one SkyLinksForest actor (the gameplay trees included)."""
+    assert hasattr(unreal, 'SkyLinksForest'), 'SkyLinksForest not found: rebuild the C++ first'
+    folder = f'Course/Hole{number:02d}/Trees'
+    forest = actors.spawn_actor_from_class(unreal.SkyLinksForest, unreal.Vector(0, 0, 0), unreal.Rotator(0, 0, 0))
+    forest.set_actor_label(f'Forest{number:02d}')
+    forest.set_folder_path(folder)
+    by_kind = {}
+    for x, y, z, yaw, scale, kind in spots['forest']:
+        by_kind.setdefault(kind, []).append(unreal.Transform(unreal.Vector(x * M, y * M, z * M), unreal.Rotator(0, 0, yaw),
+                                                             unreal.Vector(scale, scale, scale)))
+    for i, (x, y, z) in enumerate(spots.get('gameplay_trees', [])):
+        by_kind.setdefault('Oak_A' if i % 2 == 0 else 'Oak_B', []).append(
+            unreal.Transform(unreal.Vector(x * M, y * M, z * M - 10), unreal.Rotator(0, 0, i * 97.0), unreal.Vector(1, 1, 1)))
+    total = 0
+    for kind, transforms in by_kind.items():
+        total += forest.add_trees(_tree_mesh(kind), transforms)
+    print(f'HOLE {number}: planted {total} trees and bushes')
+
+
+def apply_islands(number, materials=None):
+    materials = materials or build_materials()
+    spots = json.loads((SOURCE / f'Hole{number:02d}_spots.json').read_text())
+    remove_flat_ground(number)
+    folder = f'Course/Hole{number:02d}/Islands'
+    for part in PARTS:
+        name = f'SM_H{number:02d}_{part}'
+        if not (SOURCE / f'{name}.fbx').is_file():
+            continue
+        collide = part not in NO_COLLISION
+        place(import_mesh(name, materials, collide), f'{part}{number:02d}', folder, collide)
+    place_hole(number, spots)
+    plant_forest(number, spots)
+    print(f'HOLE {number} {spots["name"]} (par {spots["par"]}) placed at z {spots["tee"][2]:+.0f} m')
+
+
+def apply_bridges(materials, links):
+    folder = 'Course/Bridges'
+    for actor in _all():
+        if str(actor.get_folder_path()) == folder:
+            actors.destroy_actor(actor)
+    for bridge in links['bridges']:
+        mesh = import_mesh(bridge['name'], materials)
+        place(mesh, bridge['name'].replace('SM_', ''), folder)
+        print(f"BRIDGE {bridge['name']}: {bridge['span']} m")
+
+
+def add_fog(links):
+    """Cloud-like local fog patches under the bridges and between the islands."""
+    folder = 'Course/Fog'
+    for actor in _all():
+        if str(actor.get_folder_path()) == folder:
+            actors.destroy_actor(actor)
+    if not hasattr(unreal, 'LocalFogVolume'):
+        print('FOG skipped: LocalFogVolume not available in this engine build')
+        return
+    for i, (x, y, z, radius) in enumerate(links['fog']):
+        fog = actors.spawn_actor_from_class(unreal.LocalFogVolume, unreal.Vector(x * M, y * M, z * M), unreal.Rotator(0, 0, 0))
+        fog.set_actor_scale3d(unreal.Vector(radius / 5.0, radius / 5.0, radius / 10.0))  # flattened like a cloud bank
+        fog.set_actor_label(f'CloudFog{i:02d}')
+        fog.set_folder_path(folder)
+        component = fog.get_component_by_class(unreal.LocalFogVolumeComponent)
+        for key, value in (('radial_fog_extinction', 0.35), ('height_fog_extinction', 0.0),
+                           ('fog_albedo', unreal.LinearColor(1, 1, 1, 1)), ('fog_phase_g', 0.3)):
+            try:
+                component.set_editor_property(key, value)
+            except Exception as error:
+                print(f'FOG note: {key}: {error}')
+    print(f"FOG {len(links['fog'])} cloud patches")
+
+
+def ensure_sea():
+    if any(a.get_actor_label() == 'IslandSea' for a in _all()):
+        return
     plane = unreal.load_asset('/Engine/BasicShapes/Plane')
     sea = actors.spawn_actor_from_object(plane, unreal.Vector(0, 0, -25000), unreal.Rotator(0, 0, 0))
     sea.set_actor_scale3d(unreal.Vector(20000, 20000, 1))  # the 1 m engine plane -> 20 km of sea, 250 m down
     sea.static_mesh_component.set_material(0, unreal.load_asset(f'{MAT_DIR}/{SEA}'))
     sea.static_mesh_component.set_collision_enabled(unreal.CollisionEnabled.NO_COLLISION)
     sea.set_actor_label('IslandSea')
-    sea.set_folder_path(folder)
+    sea.set_folder_path('Course/Environment')
 
 
-def apply_islands(number=1):
+def apply_course(holes=HOLES):
     world = unreal.get_editor_subsystem(unreal.UnrealEditorSubsystem).get_editor_world()
     assert world.get_path_name() == f'{MAP_PATH}.Course', f'Open {MAP_PATH} first'
-    spots = json.loads((SOURCE / f'Hole{number:02d}_spots.json').read_text())
     materials = build_materials()
-    sea_material()
-    meshes = {part: import_mesh(f'SM_H{number:02d}_{part}', materials) for part in ('IslandTop', 'IslandRock', 'Floaters')}
-
-    remove_flat_ground(number)
-    folder = f'Course/Hole{number:02d}/Islands'
-    for part, mesh in meshes.items():
-        place(mesh, f'{part}{number:02d}', folder)
-    seat(number, spots)
-    if number == 1:
-        add_sea('Course/Environment')
+    for number in holes:
+        apply_islands(number, materials)
+    links = json.loads((SOURCE / 'Course_links.json').read_text())
+    apply_bridges(materials, links)
+    add_fog(links)
+    ensure_sea()
     unreal.get_editor_subsystem(unreal.LevelEditorSubsystem).save_current_level()
-    print(f'ISLANDS APPLIED hole {number}. Run validate_islands({number}) in a separate call.')
+    print('COURSE APPLIED. Run validate_course() in a separate call.')
 
 
-def validate_islands(number=1):
-    """Trace the ball's view of the islands: expected surface at key spots, nothing in the gaps."""
+def validate_course(holes=HOLES):
+    """Trace each hole's tee and cup from above: the ball should find fairway (tee box) and green."""
     world = unreal.get_editor_subsystem(unreal.UnrealEditorSubsystem).get_editor_world()
-    spots = json.loads((SOURCE / f'Hole{number:02d}_spots.json').read_text())
-    cx, cy, _ = spots['cup']
-    probes = [('tee', 0, 0, 'Fairway'), ('fairway 120 m', 120, 0, 'Fairway'), ('fairway 250 m', 250, 0, 'Fairway'),
-              ('green', cx, cy, 'Green'), ('behind tee', -30, 0, 'Rough'), ('gap after tee', 22, 0, None),
-              ('far left of fairway', 150, -130, None)]
     names = {unreal.PhysicalSurface.SURFACE_TYPE1: 'Fairway', unreal.PhysicalSurface.SURFACE_TYPE2: 'Rough',
-             unreal.PhysicalSurface.SURFACE_TYPE3: 'Bunker', unreal.PhysicalSurface.SURFACE_TYPE4: 'Green'}
+             unreal.PhysicalSurface.SURFACE_TYPE3: 'Bunker', unreal.PhysicalSurface.SURFACE_TYPE4: 'Green',
+             unreal.PhysicalSurface.SURFACE_TYPE5: 'Water'}
     bad = 0
-    for label, x, y, expected in probes:
-        hit = unreal.SystemLibrary.line_trace_single(world, unreal.Vector(x * M, y * M, 3000), unreal.Vector(x * M, y * M, -5000),
-                                                     unreal.TraceTypeQuery.TRACE_TYPE_QUERY1, True, [], unreal.DrawDebugTrace.NONE, True)
-        found = None
-        if hit:
-            t = hit.to_tuple()  # (blocking, overlap, time, distance, location, impact point, ..., phys material at 8)
-            pm = t[8]
-            found = names.get(pm.get_editor_property('surface_type'), str(pm)) if pm else 'no material'
-            z = t[5].z
-        ok = found == expected if expected else (not hit or z < -2000)
-        bad += not ok
-        print(f"{'OK ' if ok else 'BAD'} {label:22s} expected {expected or 'gap'}, found {found}"
-              + (f' at z {z / M:.1f} m' if hit else ''))
-    print(f'VALIDATE hole {number}: {bad} problems')
+    for number in holes:
+        spots = json.loads((SOURCE / f'Hole{number:02d}_spots.json').read_text())
+        for label, spot, expected in (('tee', spots['tee'], 'Fairway'), ('cup', spots['cup'], 'Green')):
+            x, y, z = spot
+            hit = unreal.SystemLibrary.line_trace_single(world, unreal.Vector(x * M, y * M, z * M + 3000),
+                                                         unreal.Vector(x * M, y * M, z * M - 3000),
+                                                         unreal.TraceTypeQuery.TRACE_TYPE_QUERY1, True, [], unreal.DrawDebugTrace.NONE, True)
+            found = None
+            if hit:
+                t = hit.to_tuple()  # (blocking, overlap, time, distance, location, impact point, ..., phys material at 8)
+                found = names.get(t[8].get_editor_property('surface_type'), 'other') if t[8] else 'no material'
+            ok = found == expected
+            bad += not ok
+            print(f"{'OK ' if ok else 'BAD'} hole {number} {label}: expected {expected}, found {found}")
+    print(f'VALIDATE course: {bad} problems')
     return bad

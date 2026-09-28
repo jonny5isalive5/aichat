@@ -76,6 +76,7 @@ void AGolfBall::Launch(const FGolfBallState& State, const FVector& Wind, const F
 void AGolfBall::MulticastLaunch_Implementation(FVector Start, FVector Velocity, FVector SpinAxis, float SpinRate, FVector Wind, FVector CupLocation, float InCupRadius)
 {
 	Sim.Location = Start;
+	FallLimit = Start.Z - GolfPhysics::KillDepth;
 	Sim.Velocity = Velocity;
 	Sim.SpinAxis = SpinAxis;
 	Sim.SpinRate = SpinRate;
@@ -212,7 +213,7 @@ void AGolfBall::StepFlightMode(float Dt)
 		}
 	}
 
-	if (Sim.Location.Z < KillZ)
+	if (Sim.Location.Z < FallLimit)
 	{
 		Finish(EGolfShotResult::OutOfBounds);
 	}

@@ -157,6 +157,7 @@ bool GolfPhysics::PredictCarry(const UWorld* World, FGolfBallState State, const 
 {
 	OutPath.Reset();
 	OutPath.Add(State.Location);
+	const float FallLimit = State.Location.Z - KillDepth;
 
 	const int32 MaxSteps = FMath::CeilToInt(12.f / FixedStep);
 	for (int32 Step = 0; Step < MaxSteps; ++Step)
@@ -175,7 +176,7 @@ bool GolfPhysics::PredictCarry(const UWorld* World, FGolfBallState State, const 
 		{
 			OutPath.Add(State.Location);
 		}
-		if (State.Location.Z < KillZ)
+		if (State.Location.Z < FallLimit)
 		{
 			break;
 		}

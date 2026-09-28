@@ -39,7 +39,8 @@ namespace GolfPhysics
 	constexpr float DragCoefficient = 0.25f;
 	constexpr float SpinDecaySeconds = 5.f;
 	constexpr float FixedStep = 1.f / 120.f;
-	constexpr float KillZ = -5000.f;
+	/** A ball this far below where the shot started has fallen off the islands: out of bounds (cm). */
+	constexpr float KillDepth = 6000.f;
 
 	SKYLINKS_API const TArray<FGolfClub>& GetClubBag();
 	SKYLINKS_API int32 GetPutterIndex();

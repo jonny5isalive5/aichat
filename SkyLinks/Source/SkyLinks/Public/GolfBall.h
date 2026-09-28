@@ -103,6 +103,8 @@ private:
 
 	EMode Mode = EMode::Rest;
 	FGolfBallState Sim;
+	/** Below this height (60 m under the shot's start) the ball has fallen off the islands. */
+	float FallLimit = -6000.f;
 	FVector SimWind = FVector::ZeroVector;
 	FVector Cup = FVector::ZeroVector;
 	float CupRadius = 8.f;
