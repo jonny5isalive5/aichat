@@ -8,6 +8,7 @@
     isl.apply_islands(n)        one hole only (no bridges or fog; its trees are added again, so clear by hand)
     isl.trees_to_foliage()      turn the scripted forests into foliage (Foliage mode > Select moves single trees)
     isl.fab_footbridges()       the Fab bridge on every brook crossing (deck_offset_cm=... to lift / sink it)
+    isl.export_paths()          save footpaths drawn as splines (actors named Path...) for baking into the islands
     isl.update_materials()      rebuild the island materials only (grass paths: Mesh Paint, Blue channel)
     isl.raise_fog(20)           lift every cloud patch 20 m (or lower it with a negative number)
 
@@ -442,6 +443,37 @@ def fab_footbridges(deck_offset_cm=0.0, wood=True, holes=HOLES):
         place_footbridges(number, spots, deck_offset_cm, wood)
         print(f"FOOTBRIDGES hole {number}: {len(spots['footbridges'])}")
     unreal.get_editor_subsystem(unreal.LevelEditorSubsystem).save_current_level()
+
+
+def export_paths(default_width_m=3.0):
+    """Save every footpath drawn in the level to Art/Exports/Islands/Paths.json for the island builder.
+
+    Draw a path: Place Actors > Empty Actor, name it Path... (e.g. Path_H04_a), Details > + Add > Spline, then drag
+    the spline's points over the grass (Alt+drag a point adds the next one). Optional width: add the actor tag
+    'width=4' (metres). Push the json; build_course_islands.py bakes the paths into the island tops (crisp edges)."""
+    paths = []
+    for actor in _all():
+        if not actor.get_actor_label().lower().startswith('path'):
+            continue
+        spline = actor.get_component_by_class(unreal.SplineComponent)
+        if not spline:
+            print(f'PATHS: {actor.get_actor_label()} has no Spline component, skipped')
+            continue
+        width = default_width_m
+        for tag in actor.tags:
+            if str(tag).lower().startswith('width='):
+                width = float(str(tag).split('=')[1])
+        # Sample the curve every metre so bends stay round.
+        length = spline.get_spline_length()
+        steps = max(2, int(length / 100.0) + 1)
+        points = []
+        for i in range(steps + 1):
+            p = spline.get_location_at_distance_along_spline(length * i / steps, unreal.SplineCoordinateSpace.WORLD)
+            points.append([round(p.x / M, 3), round(p.y / M, 3), round(p.z / M, 3)])
+        paths.append({'name': actor.get_actor_label(), 'width': width, 'points': points})
+    out = SOURCE / 'Paths.json'
+    out.write_text(json.dumps({'paths': paths}, indent=1) + '\n')
+    print(f'PATHS: {len(paths)} saved to {out} (commit and push it)')
 
 
 def update_materials():
