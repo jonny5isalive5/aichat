@@ -583,12 +583,12 @@ def build_hole(number, rng):
         radius = math.sqrt(poly.area / math.pi)
         rv, rd, rt = B.underside(ux, poly, fn, radius * 1.7, 700 + i + number * 50)
         verts = np.concatenate([place(number, np.column_stack([vx, fn(vx[:, 0], vx[:, 1])])), place(number, rv)]) - pivot
-        tris = np.concatenate([tx, ut[:, ::-1] + len(vx)])
-        mats = np.concatenate([np.zeros(len(tx), int), np.ones(len(ut), int)])
+        f_tris = np.concatenate([tx, ut[:, ::-1] + len(vx)])
+        f_mats = np.concatenate([np.zeros(len(tx), int), np.ones(len(ut), int)])
         cols = np.concatenate([B.top_colours(vx[:, 0], vx[:, 1], number),
                                moss(B.rock_colours(rv[:, 2], rd, rt, ux[:, 0], ux[:, 1], 700 + i), rv[:, 2], rd, ux[:, 0], ux[:, 1], i)])
         floater_name = f'{name}_Floater{i + 1:02d}'
-        rock_obj = B.make_mesh(floater_name, verts, tris, mats, ['Rough', 'IslandRock'], cols)
+        rock_obj = B.make_mesh(floater_name, verts, f_tris, f_mats, ['Rough', 'IslandRock'], cols)
         ivy = Parts()
         add_vines(ivy, poly, fn, number, rng, density=0.8)
         add_cliff_vines(ivy, rv, ut, rd, poly, number, rng, per_metre=0.5)
@@ -803,7 +803,12 @@ def main():
     if '--check' in args:
         check_course(layouts)
         return
-    for number in wanted:
+    # --links-only: skip the islands (already built) and redo the bridges, fog and previews for the whole course.
+    if '--links-only' in args:
+        layouts = {n: (layout_for(n), None) for n in C.PLACE}
+        layouts = {n: (lay, height_fn(n, lay)) for n, (lay, _) in layouts.items()}
+        wanted = sorted(C.PLACE)
+    for number in (wanted if '--links-only' not in args else []):
         layout, local_h = build_hole(number, random.Random(number * 1009))
         layouts[number] = (layout, local_h)
     check_course(layouts)
