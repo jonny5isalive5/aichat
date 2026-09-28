@@ -56,6 +56,10 @@
 			"Enabled": true
 		},
 		{
+			"Name": "ProceduralVegetationEditor",
+			"Enabled": true
+		},
+		{
 			"Name": "Aura",
 			"Enabled": true,
 			"SupportedTargetPlatforms": [
