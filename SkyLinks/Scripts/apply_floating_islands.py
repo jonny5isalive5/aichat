@@ -7,6 +7,7 @@
                                 tee and cup
     isl.apply_islands(n)        one hole only (no bridges or fog; its trees are added again, so clear by hand)
     isl.trees_to_foliage()      turn the scripted forests into foliage (Foliage mode > Select moves single trees)
+    isl.reimport_props()        re-import the footbridges only (after build_course_islands.py --props-only)
     isl.raise_fog(20)           lift every cloud patch 20 m (or lower it with a negative number)
 
 Needs, from Scripts/import_trees.py, the stylised trees and their M_Tree_Bark / M_Tree_Leaves / M_Tree_Vines
@@ -319,6 +320,16 @@ def trees_to_foliage():
         moved += forest.convert_to_foliage(types)
     unreal.get_editor_subsystem(unreal.LevelEditorSubsystem).save_current_level()
     print(f'TREES: {moved} trees and bushes are now foliage')
+
+
+def reimport_props(holes=HOLES):
+    """Re-import the footbridges (SM_Hnn_Props) in place: the placed actors pick up the new mesh, nothing moves."""
+    materials = build_materials()
+    done = [f'SM_H{n:02d}_Props' for n in holes if (SOURCE / f'SM_H{n:02d}_Props.fbx').is_file()]
+    for name in done:
+        import_mesh(name, materials)
+    unreal.get_editor_subsystem(unreal.LevelEditorSubsystem).save_current_level()
+    print(f'PROPS re-imported: {", ".join(done)}')
 
 
 def raise_fog(meters=20.0):

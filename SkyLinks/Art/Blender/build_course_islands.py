@@ -492,6 +492,17 @@ def footbridge(parts, number, height_local, centre, heading, length, rng):
         t = i / count
         p = a.lerp(b, t) + Vector((0, 0, 0.7 * math.sin(math.pi * t)))
         parts.box(p, flat, across, (0.15, width / 2, 0.06), rng.choice(WOOD))
+    # A solid deck just under the plank tops: the buggy's wheel traces fell through the gaps between planks
+    # onto the brook and read it as water (the buggy stops at water). Runs 1.2 m past each end into the bank.
+    deck = [a - flat * 1.2 - Vector((0, 0, 0.25))] + [a.lerp(b, i / 40) + Vector((0, 0, 0.7 * math.sin(math.pi * i / 40) + 0.05))
+                                                       for i in range(41)] + [b + flat * 1.2 - Vector((0, 0, 0.25))]
+    half = across * (width / 2 - 0.02)
+    top_v = [q for p in deck for q in (tuple(p - half), tuple(p + half))]
+    bottom_v = [tuple(Vector(q) - Vector((0, 0, 0.1))) for q in top_v]
+    quads = [(2 * i, 2 * i + 2, 2 * i + 3, 2 * i + 1) for i in range(len(deck) - 1)]
+    dark = tuple(c * 0.6 for c in WOOD[1])
+    parts._add(top_v, quads, dark, 0, 0.0)
+    parts._add(bottom_v, [q[::-1] for q in quads], dark, 0, 0.0)
     for side in (-1, 1):
         rail = [tuple(a.lerp(b, i / 8) + across * side * width / 2 + Vector((0, 0, 0.7 * math.sin(math.pi * i / 8) + 0.95)))
                 for i in range(9)]
@@ -808,6 +819,21 @@ def main():
         layouts = {n: (layout_for(n), None) for n in C.PLACE}
         layouts = {n: (lay, height_fn(n, lay)) for n, (lay, _) in layouts.items()}
         wanted = sorted(C.PLACE)
+    # --props-only: rebuild just the footbridges (SM_Hnn_Props) of the wanted holes.
+    if '--props-only' in args:
+        for number in wanted:
+            sl.reset_scene()
+            layout = layout_for(number)
+            if layout.get('footbridges'):
+                local_h = height_fn(number, layout)
+                props = Parts()
+                rng = random.Random(number * 1009)
+                for centre, heading, length in layout['footbridges']:
+                    footbridge(props, number, local_h, centre, heading, length, rng)
+                obj = props.mesh(f'SM_H{number:02d}_Props')
+                sl.export_fbx(str(OUT / f'{obj.name}.fbx'), [obj])
+                print(f'PROPS {number}: {len(layout["footbridges"])} footbridges')
+        return
     for number in (wanted if '--links-only' not in args else []):
         layout, local_h = build_hole(number, random.Random(number * 1009))
         layouts[number] = (layout, local_h)
