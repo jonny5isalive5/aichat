@@ -8,7 +8,8 @@ Run inside the editor with the Course map open, e.g. from the Output Log in Pyth
 Replaces /Game/Course/Buildings/SM_Clubhouse (UCX_ boxes become its collision), imports its brick,
 roof-tile, paving and asphalt textures and builds its materials here: the 5.8 FBX importer leaves
 them as the default checkerboard. Then moves the Clubhouse actor to its spot beside the first tee,
-turned so the terrace and practice green face the course, and saves the map.
+turned so the terrace and practice green face the course, hoists the two club flags (a wind-wave
+shader bends them like cloth, cheap enough for phones) and saves the map.
 """
 from pathlib import Path
 
@@ -23,6 +24,9 @@ TEX_DIR = DEST + '/Textures'
 # Same spot as Scripts/build_blockout_course.py: 110 m behind and 45 m left of the first tee, facing the course.
 LOCATION = unreal.Vector(-110 * 100.0, -45 * 100.0, 0.0)
 YAW = -90.0
+# Flagpoles in the clubhouse's Blender frame (metres) and the hoist height: see build_clubhouse.py.
+FLAGPOLES = ((17.5, -9.5), (-18.0, -10.0))
+FLAG_HOIST = 7.8
 
 # Material slot (Blender material name) -> texture or linear colour, roughness, metallic.
 TEXTURED = {'M_CH_Brick': ('T_CH_Brick', 0.9), 'M_CH_RoofTile': ('T_CH_RoofTile', 0.75),
@@ -91,6 +95,88 @@ def build_material(name):
     return mat
 
 
+def _expr(mat, cls, x, y, **props):
+    node = lib.create_material_expression(mat, cls, x, y)
+    for key, value in props.items():
+        node.set_editor_property(key, value)
+    return node
+
+
+def _op(mat, cls, a, b, x, y, a_out='', b_out=''):
+    node = _expr(mat, cls, x, y)
+    lib.connect_material_expressions(a, a_out, node, 'A')
+    lib.connect_material_expressions(b, b_out, node, 'B')
+    return node
+
+
+def _wave(mat, time, u, cycles_per_second, cycles_along, amplitude_cm, y):
+    """sin(time * cps + u * cycles_along) * u * amplitude: pinned at the pole (u = 0), biggest at the free end."""
+    c = lambda v, yy: _expr(mat, unreal.MaterialExpressionConstant, -1500, yy, r=v)  # noqa: E731
+    phase = _op(mat, unreal.MaterialExpressionAdd,
+                _op(mat, unreal.MaterialExpressionMultiply, time, c(cycles_per_second, y), -1300, y),
+                _op(mat, unreal.MaterialExpressionMultiply, u, c(cycles_along, y + 60), -1300, y + 60), -1100, y)
+    sine = _expr(mat, unreal.MaterialExpressionSine, -950, y)
+    lib.connect_material_expressions(phase, '', sine, '')
+    return _op(mat, unreal.MaterialExpressionMultiply, _op(mat, unreal.MaterialExpressionMultiply, sine, u, -800, y),
+               c(amplitude_cm, y + 120), -650, y)
+
+
+def flag_material():
+    """Waving cloth for mobile: the flag bends in a travelling wave in the shader (world position offset)."""
+    mat = _material('M_CH_ClubFlag')
+    mat.set_editor_property('two_sided', True)
+    texture = _task(TEXTURE_SOURCE / 'T_CH_ClubFlag.png', TEX_DIR, 'T_CH_ClubFlag')
+    sample = _expr(mat, unreal.MaterialExpressionTextureSample, -500, -300, texture=texture)
+    lib.connect_material_property(sample, 'RGB', unreal.MaterialProperty.MP_BASE_COLOR)
+    _scalar(mat, 0.7, unreal.MaterialProperty.MP_ROUGHNESS, -100)
+
+    coords = _expr(mat, unreal.MaterialExpressionTextureCoordinate, -1700, 200)
+    u = _expr(mat, unreal.MaterialExpressionComponentMask, -1550, 200, r=True, g=False, b=False, a=False)
+    lib.connect_material_expressions(coords, '', u, '')
+    time = _expr(mat, unreal.MaterialExpressionTime, -1700, 350)
+    swing = _op(mat, unreal.MaterialExpressionAdd, _wave(mat, time, u, 1.3, 1.4, 26.0, 200),
+                _wave(mat, time, u, 2.7, 3.1, 7.0, 500), -500, 300)
+    zero = _expr(mat, unreal.MaterialExpressionConstant, -500, 450, r=0.0)
+    xy = _op(mat, unreal.MaterialExpressionAppendVector, zero, swing, -350, 350)
+    xyz = _op(mat, unreal.MaterialExpressionAppendVector, xy, zero, -200, 350)
+    world = _expr(mat, unreal.MaterialExpressionTransform, -50, 350,
+                  transform_source_type=unreal.MaterialVectorCoordTransformSource.TRANSFORMSOURCE_LOCAL,
+                  transform_type=unreal.MaterialVectorCoordTransform.TRANSFORM_WORLD)
+    lib.connect_material_expressions(xyz, '', world, '')
+    lib.connect_material_property(world, '', unreal.MaterialProperty.MP_WORLD_POSITION_OFFSET)
+    lib.recompile_material(mat)
+    unreal.EditorAssetLibrary.save_loaded_asset(mat)
+    return mat
+
+
+def hoist_flags(clubhouse):
+    options = unreal.FbxImportUI()
+    options.set_editor_property('import_mesh', True)
+    options.set_editor_property('mesh_type_to_import', unreal.FBXImportType.FBXIT_STATIC_MESH)
+    options.set_editor_property('import_materials', False)
+    options.set_editor_property('import_textures', False)
+    options.static_mesh_import_data.set_editor_property('auto_generate_collision', False)
+    flag_mesh = _task(ROOT / 'Art' / 'Exports' / 'SM_ClubFlag.fbx', DEST, 'SM_ClubFlag', options)
+    assert isinstance(flag_mesh, unreal.StaticMesh), 'SM_ClubFlag.fbx did not import'
+    flag_mesh.set_material(0, flag_material())
+    unreal.EditorAssetLibrary.save_loaded_asset(flag_mesh)
+
+    for actor in actors.get_all_level_actors():
+        if actor.get_actor_label().startswith('ClubFlag'):
+            actors.destroy_actor(actor)
+    for index, (px, py) in enumerate(FLAGPOLES, start=1):
+        flag = actors.spawn_actor_from_object(flag_mesh, LOCATION, unreal.Rotator(0, 0, YAW))
+        flag.set_actor_label(f'ClubFlag{index}')
+        flag.set_folder_path('Course/Clubhouse')
+        flag.static_mesh_component.set_collision_enabled(unreal.CollisionEnabled.NO_COLLISION)
+        flag.attach_to_actor(clubhouse, '', unreal.AttachmentRule.KEEP_WORLD, unreal.AttachmentRule.KEEP_WORLD,
+                             unreal.AttachmentRule.KEEP_WORLD, False)
+        # Blender (x, y, z) m -> the clubhouse's Unreal frame (x, -y, z) cm; hoisted on the pole's +X side.
+        flag.set_actor_relative_location(unreal.Vector((px + 0.06) * 100, -py * 100, FLAG_HOIST * 100), False, True)
+        flag.set_actor_relative_rotation(unreal.Rotator(0, 0, 0), False, True)
+    print(f'CLUBHOUSE flags hoisted: {len(FLAGPOLES)}')
+
+
 def import_clubhouse():
     options = unreal.FbxImportUI()
     options.set_editor_property('import_mesh', True)
@@ -125,5 +211,6 @@ def import_clubhouse():
     else:
         clubhouse.static_mesh_component.set_static_mesh(mesh)
     clubhouse.set_actor_location_and_rotation(LOCATION, unreal.Rotator(0, 0, YAW), False, True)
+    hoist_flags(clubhouse)
     unreal.get_editor_subsystem(unreal.LevelEditorSubsystem).save_current_level()
     print('CLUBHOUSE placed and map saved')

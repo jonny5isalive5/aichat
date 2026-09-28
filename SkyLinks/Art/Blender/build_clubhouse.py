@@ -46,6 +46,11 @@ FLOOR1 = 3.3           # first floor level (balcony top)
 EAVE = 6.4
 RIDGE = 9.4
 STAIR_X = -4.6         # centre of the staircase
+# Flagpoles (x, y); the club flags themselves are a separate waving mesh, SM_ClubFlag, hoisted at
+# FLAG_HOIST above the ground on the +X side of each pole (Scripts/import_clubhouse.py places them).
+FLAGPOLES = ((17.5, -9.5), (-18.0, -10.0))
+FLAG_HOIST = 7.8
+FLAG_SIZE = (1.84, 1.1)
 STAIR_W = 2.4
 
 
@@ -195,6 +200,41 @@ def shrub(parts, m, x, y, r, rng):
     parts.append(obj)
 
 
+def club_flag(tex_path):
+    """Flag cloth: a finely divided plane (so the wave shader can bend it), hoist edge at the origin, flying
+    along +X, UV u 0 at the pole to 1 at the free end. Red hoist stripe, green fly (texture)."""
+    length, height = FLAG_SIZE
+    nx, nz = 24, 10
+    verts, faces, uvs = [], [], []
+    for k in range(nz + 1):
+        for i in range(nx + 1):
+            verts.append((length * i / nx, 0.0, height * k / nz))
+    for k in range(nz):
+        for i in range(nx):
+            a = k * (nx + 1) + i
+            faces.append((a, a + 1, a + nx + 2, a + nx + 1))
+    mesh = bpy.data.meshes.new("SM_ClubFlag")
+    mesh.from_pydata(verts, [], faces)
+    uv = mesh.uv_layers.new(name="UVMap")
+    for poly in mesh.polygons:
+        for li in poly.loop_indices:
+            x, _, z = verts[mesh.loops[li].vertex_index]
+            uv.data[li].uv = (x / length, z / height)
+    mat = textured("M_CH_ClubFlag", tex_path, 0.7)
+    mat.use_backface_culling = False
+    mesh.materials.append(mat)
+    obj = bpy.data.objects.new("SM_ClubFlag", mesh)
+    bpy.context.scene.collection.objects.link(obj)
+    return obj
+
+
+def flag_texture(out):
+    rgb = np.zeros((160, 256, 3))
+    rgb[:] = (40, 149, 79)
+    rgb[:, :90] = (218, 48, 48)
+    return _save("T_CH_ClubFlag", rgb, out)
+
+
 # ---------------------------------------------------------------- build
 
 def build_building(m):
@@ -342,10 +382,8 @@ def build_grounds(m, rng):
         parts.append(sl.cylinder("rope", (a, fy, 0.62), (b, fy, 0.62), 0.012, m["rope"], segments=6))
 
     # Flagpoles with the club flag, brick planters with shrubs, shrubs along the right wing.
-    for px, py in ((17.5, -9.5), (-18.0, -10.0)):
+    for px, py in FLAGPOLES:
         parts.append(sl.cylinder("flagpole", (px, py, 0.0), (px, py, 9.0), 0.06, m["white"], segments=10, radius_end=0.035))
-        parts.append(sl.box("club_flag", px + 0.06, px + 1.9, py - 0.01, py + 0.01, 7.8, 8.9, m["clubflag"]))
-        parts.append(sl.box("club_flag_stripe", px + 0.06, px + 0.7, py - 0.012, py + 0.012, 7.8, 8.9, m["flag"]))
     for px, py in ((X1 + 2.0, -10.0), (X0 - 2.0, -11.0), (STAIR_X - 2.6, bottom_y - 1.0), (STAIR_X + 2.6, bottom_y - 1.0)):
         parts.append(sl.box("planter", px - 0.6, px + 0.6, py - 0.6, py + 0.6, 0.0, 0.55, m["brick"]))
         parts.append(sl.box("planter_soil", px - 0.5, px + 0.5, py - 0.5, py + 0.5, 0.5, 0.56, m["soil"]))
@@ -385,6 +423,14 @@ def main():
         box.display_type = "WIRE"
         box.hide_render = True
     sl.export_fbx(os.path.join(out, "SM_Clubhouse.fbx"), [building] + collision)
+    flag = club_flag(flag_texture(out))
+    sl.export_fbx(os.path.join(out, "SM_ClubFlag.fbx"), [flag])
+    # Copies on the poles for the previews only (in the game the shader makes them wave).
+    for px, py in FLAGPOLES:
+        copy = flag.copy()
+        copy.location = (px + 0.06, py, FLAG_HOIST)
+        bpy.context.scene.collection.objects.link(copy)
+    flag.hide_render = True
     bpy.ops.wm.save_as_mainfile(filepath=os.path.join(out, "Clubhouse.blend"))
     tris = sum(len(p.vertices) - 2 for p in building.data.polygons)
     print(f"CLUBHOUSE {tris} triangles, {len(building.data.materials)} materials")
