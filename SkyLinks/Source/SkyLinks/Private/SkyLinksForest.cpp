@@ -2,6 +2,10 @@
 #include "Components/HierarchicalInstancedStaticMeshComponent.h"
 #include "Engine/CollisionProfile.h"
 #include "Engine/StaticMesh.h"
+#include "Engine/World.h"
+#include "EngineUtils.h"
+#include "FoliageType_InstancedStaticMesh.h"
+#include "InstancedFoliageActor.h"
 
 ASkyLinksForest::ASkyLinksForest()
 {
@@ -69,4 +73,67 @@ int32 ASkyLinksForest::GetTreeCount() const
 		Count += Component->GetInstanceCount();
 	}
 	return Count;
+}
+
+int32 ASkyLinksForest::ConvertToFoliage(const TArray<UFoliageType*>& Types)
+{
+#if WITH_EDITOR
+	int32 Moved = 0;
+	TArray<UHierarchicalInstancedStaticMeshComponent*> Existing;
+	GetComponents(Existing);
+	for (UHierarchicalInstancedStaticMeshComponent* Component : Existing)
+	{
+		UFoliageType* const* Found = Types.FindByPredicate([Component](const UFoliageType* Type)
+		{
+			const UFoliageType_InstancedStaticMesh* MeshType = Cast<UFoliageType_InstancedStaticMesh>(Type);
+			return MeshType && MeshType->GetStaticMesh() == Component->GetStaticMesh();
+		});
+		if (!Found)
+		{
+			continue;
+		}
+		// Same behaviour as the forest had: trunks block the ball and the buggy, trees fade out far away.
+		UFoliageType* Type = *Found;
+		Type->Modify();
+		Type->BodyInstance.SetCollisionProfileName(UCollisionProfile::BlockAll_ProfileName);
+		Type->CullDistance = FInt32Interval(static_cast<int32>(CullDistance * 0.8f), static_cast<int32>(CullDistance));
+
+		TArray<FTransform> Transforms;
+		Transforms.Reserve(Component->GetInstanceCount());
+		for (int32 Index = 0; Index < Component->GetInstanceCount(); ++Index)
+		{
+			FTransform Transform;
+			Component->GetInstanceTransform(Index, Transform, true);
+			Transforms.Add(Transform);
+		}
+		AInstancedFoliageActor::AddInstances(this, Type, Transforms);
+		Moved += Transforms.Num();
+	}
+	Destroy();
+	return Moved;
+#else
+	return 0;
+#endif
+}
+
+void ASkyLinksForest::ClearFoliage(UObject* WorldContextObject, const TArray<UFoliageType*>& Types)
+{
+#if WITH_EDITOR
+	UWorld* World = WorldContextObject ? WorldContextObject->GetWorld() : nullptr;
+	if (!World)
+	{
+		return;
+	}
+	for (TActorIterator<AInstancedFoliageActor> It(World); It; ++It)
+	{
+		for (UFoliageType* Type : Types)
+		{
+			if (Type)
+			{
+				UFoliageType* Remove = Type;
+				It->RemoveFoliageType(&Remove, 1);
+			}
+		}
+	}
+#endif
 }
