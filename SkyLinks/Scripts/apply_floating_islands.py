@@ -322,7 +322,17 @@ def trees_to_foliage():
     print(f'TREES: {moved} trees and bushes are now foliage')
 
 
-FAB_BRIDGE = '/Game/Course/Vegetation/Bridge1'   # Fab "Bridge" (TAKOYTO): 2 m wide, 8.6 m long along its Y axis
+# Fab "Bridge" (TAKOYTO): 2 m wide, 8.6 m long along its Y axis. Exported to /Game/Fab/Bridge (with its textures);
+# an earlier export without textures landed in /Game/Course/Vegetation.
+FAB_FOLDERS = ('/Game/Fab/Bridge', '/Game/Course/Vegetation')
+
+
+def _fab(name):
+    for folder in FAB_FOLDERS:
+        asset = unreal.load_asset(f'{folder}/{name}') if unreal.EditorAssetLibrary.does_asset_exist(f'{folder}/{name}') else None
+        if asset:
+            return asset
+    return None
 FOOTBRIDGE_WIDTH = 3.0                           # m, as Art/Blender/build_course_islands.py (so the buggy fits)
 
 
@@ -344,13 +354,12 @@ def footbridge_wood():
     return mat
 
 
-FAB_TEXTURES = '/Game/Course/Vegetation'   # Bridge_BaseColor / Bridge_Normal from the listing's "Additional files" zip
 
 
 def footbridge_fab_material():
     """M_Footbridge_Fab from the Fab textures (Bridge_BaseColor, Bridge_Normal), or None until they're imported."""
-    colour = unreal.load_asset(f'{FAB_TEXTURES}/Bridge_BaseColor')
-    normal = unreal.load_asset(f'{FAB_TEXTURES}/Bridge_Normal')
+    colour = _fab('Bridge_BaseColor')
+    normal = _fab('Bridge_Normal')
     if not isinstance(colour, unreal.Texture2D):
         return None
     for texture in (colour, normal):
@@ -386,7 +395,7 @@ def place_footbridges(number, spots, deck_offset_cm=0.0, wood=True):
             actor.set_actor_hidden_in_game(True)
             actor.static_mesh_component.set_editor_property('visible', False)
             actor.static_mesh_component.set_editor_property('cast_shadow', False)
-    mesh = unreal.load_asset(FAB_BRIDGE)
+    mesh = _fab('Bridge1')
     if not mesh or not spots.get('footbridges'):
         return
     # The Fab bridge's own textures when they've been imported, otherwise the painted-wood stand-in.
