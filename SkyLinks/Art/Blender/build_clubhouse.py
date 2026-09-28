@@ -4,7 +4,7 @@ orange clay-tile hip roof with deep eaves and a dark fascia. Along the left two 
 balcony with white railings sits on brick piers and arches (a loggia underneath); a straight staircase
 comes down from the balcony toward the practice green. The right wing has big upstairs windows, a white
 door, benches and the club sign. In front: a practice putting green with flags and a white stake-and-rope
-fence, flagpoles, planters and shrubs. Behind: a small car park with painted bays and parked cars.
+fence, flagpoles, planters and shrubs. Behind: a small car park with painted bays, kept clear for the buggies.
 
 Run headless (bpy module or Blender 4.2+):
     python Art/Blender/build_clubhouse.py            (or blender --background --python ... -- <out>)
@@ -13,7 +13,7 @@ Writes to SkyLinks/Art/Exports:
     SM_Clubhouse.fbx + ClubhouseTextures/*.png   building and grounds, UCX_ collision for the building
     Clubhouse.blend, Clubhouse_preview_front.png, Clubhouse_preview_aerial.png
 The entrance side faces -Y. Origin is on the ground at the centre of the main block. The grounds span
-about x -19..19, y -31..26 m, so the island pad under it (build_floating_islands.py) is 36 m in radius.
+about x -19..19, y -38..26 m, so the island pad under it (build_floating_islands.py) is 44 m in radius.
 Clears the current scene.
 """
 
@@ -41,7 +41,7 @@ UV_TILE = 2.0  # metres covered by one repeat of every texture below
 # Main block (metres). Left section carries the balcony; the right wing is flush.
 X0, X1, Y0, Y1 = -15.0, 15.0, -5.0, 6.0
 SPLIT = 3.0            # balcony / loggia runs from X0 to here
-FRONT = -7.5           # balcony edge and pier line
+FRONT = -10.0          # front edge of the covered terrace (mezzanine) and its arcade
 FLOOR1 = 3.3           # first floor level (balcony top)
 EAVE = 6.4
 RIDGE = 9.4
@@ -133,7 +133,6 @@ def materials(tex):
         sign=sl.material("M_CH_SignBoard", (0.02, 0.12, 0.06), 0.5),
         gold=sl.material("M_CH_SignText", (0.8, 0.62, 0.25), 0.3, metallic=1.0),
         rope=sl.material("M_CH_Rope", (0.8, 0.8, 0.78), 0.8),
-        tyre=sl.material("M_CH_Tyre", (0.02, 0.02, 0.02), 0.8),
         lines=sl.material("M_CH_LinePaint", (0.9, 0.9, 0.88), 0.6),
     )
 
@@ -196,22 +195,6 @@ def shrub(parts, m, x, y, r, rng):
     parts.append(obj)
 
 
-def car(parts, m, x, y, heading, colour_name, colour):
-    """Simple hatchback: body, cabin with glass, wheels. Nose toward `heading` degrees (0 = +X)."""
-    body_mat = sl.material(colour_name, colour, 0.35, metallic=0.4)
-    pieces = [sl.box("car", -2.0, 2.0, -0.87, 0.87, 0.3, 0.95, body_mat, round_edges=0.12),
-              sl.box("cabin", -1.4, 0.9, -0.8, 0.8, 0.95, 1.45, m["glass"], round_edges=0.1),
-              sl.box("roof", -1.3, 0.8, -0.78, 0.78, 1.42, 1.5, body_mat)]
-    for wx in (-1.3, 1.3):
-        for wy in (-0.8, 0.8):
-            pieces.append(sl.cylinder("wheel", (wx, wy - 0.1, 0.32), (wx, wy + 0.1, 0.32), 0.32, m["tyre"], segments=14))
-    rot = math.radians(heading)
-    for piece in pieces:
-        piece.rotation_euler = (0, 0, rot)
-        piece.location = (x, y, 0)
-    parts.extend(pieces)
-
-
 # ---------------------------------------------------------------- build
 
 def build_building(m):
@@ -238,6 +221,19 @@ def build_building(m):
             continue  # the staircase lands in this bay
         parts.append(arch_spandrel(a + 0.35, b - 0.35, FRONT, FRONT + 0.6, 2.1, FLOOR1 - 0.25, 0.7, m["brick"]))
     parts.append(sl.box("balcony_edge", X0, SPLIT, FRONT - 0.05, FRONT + 0.6, FLOOR1 - 0.45, FLOOR1 - 0.25, m["brick"]))
+    # The arcade wraps round the ends of the projection too.
+    side_piers = [FRONT, (FRONT + Y0) / 2, Y0 - 0.6]
+    for sx in (X0, SPLIT - 0.6):
+        for py in side_piers[1:]:
+            parts.append(sl.box("side_pier", sx, sx + 0.6, py, py + 0.6, 0.0, FLOOR1 - 0.25, m["brick"]))
+        for a, b in zip(side_piers[:-1], side_piers[1:]):
+            arch = arch_spandrel(a + 0.6, b, -(sx + 0.6), -sx, 2.1, FLOOR1 - 0.25, 0.6, m["brick"])
+            arch.rotation_euler = (0, 0, math.pi / 2)
+            parts.append(arch)
+    # Semi-outdoor mezzanine: brick columns carry the roof over the terrace at every pier.
+    for px in piers:
+        parts.append(sl.box("column", px - 0.25, px + 0.25, FRONT, FRONT + 0.5, FLOOR1, EAVE - 0.45, m["brick"]))
+    parts.append(sl.box("terrace_ceiling", X0, SPLIT, FRONT, Y0, EAVE - 0.5, EAVE - 0.45, m["white"]))
     gap0, gap1 = STAIR_X - STAIR_W / 2, STAIR_X + STAIR_W / 2
     railing(parts, m, (X0, FRONT, FLOOR1), (gap0, FRONT, FLOOR1))
     railing(parts, m, (gap1, FRONT, FLOOR1), (SPLIT, FRONT, FLOOR1))
@@ -245,7 +241,8 @@ def build_building(m):
     railing(parts, m, (SPLIT, FRONT, FLOOR1), (SPLIT, Y0, FLOOR1))
     # Tables on the balcony.
     for tx in (-12.5, -9.0, -1.0, 1.5):
-        parts.append(sl.cylinder("table", (tx, -6.3, FLOOR1), (tx, -6.3, FLOOR1 + 0.72), 0.45, m["white"], segments=16))
+        for ty in (-6.6, -8.6):
+            parts.append(sl.cylinder("table", (tx, ty, FLOOR1), (tx, ty, FLOOR1 + 0.72), 0.45, m["white"], segments=16))
 
     # Staircase straight down toward the green: 18 steps of 18 cm, 28 cm treads, brick cheek walls, rails.
     steps = 18
@@ -302,8 +299,9 @@ def build_grounds(m, rng):
     # Paving round the building and a path from the stairs toward the first tee (+Y is the car park).
     parts.append(sl.box("apron", X0 - 3.0, X1 + 3.0, FRONT - 1.0, Y1 + 2.0, 0.0, 0.04, m["paving"]))
     bottom_y = FRONT - 18 * 0.28
-    parts.append(sl.box("stair_path", STAIR_X - 1.6, STAIR_X + 1.6, bottom_y - 3.0, FRONT - 1.0, 0.0, 0.04, m["paving"]))
-    parts.append(sl.box("side_path", X1 + 3.0, X1 + 5.5, -34.0, Y1 + 2.0, 0.0, 0.04, m["paving"]))
+    parts.append(sl.box("terrace_apron", X0 - 1.0, SPLIT + 1.0, FRONT - 1.0, Y0, 0.0, 0.04, m["paving"]))
+    parts.append(sl.box("stair_path", STAIR_X - 1.6, STAIR_X + 1.6, bottom_y - 1.2, FRONT - 1.0, 0.0, 0.04, m["paving"]))
+    parts.append(sl.box("side_path", X1 + 3.0, X1 + 5.5, -38.0, Y1 + 2.0, 0.0, 0.04, m["paving"]))
 
     # Practice putting green: a kidney shape with fringe, cups and short red flags.
     def kidney(scale):
@@ -313,7 +311,7 @@ def build_grounds(m, rng):
             r = 1.0 + 0.18 * math.sin(2 * a + 0.6) + 0.08 * math.cos(3 * a)
             pts.append((math.cos(a) * 13.0 * r * scale, math.sin(a) * 7.0 * r * scale))
         return pts
-    cx, cy = -1.5, -23.5
+    cx, cy = -1.5, -27.0
     for name, pts_scale, z, mat in (("fringe", 1.08, 0.05, m["fringe"]), ("putting_green", 1.0, 0.07, m["putting"])):
         bm_pts = [(cx + px, cy + py) for px, py in kidney(pts_scale)]
         mesh = bpy.data.meshes.new(name)
@@ -326,14 +324,14 @@ def build_grounds(m, rng):
         bpy.context.scene.collection.objects.link(obj)
         obj.data.materials.append(mat)
         parts.append(obj)
-    for fx, fy in ((-9.0, -22.0), (-3.0, -27.5), (3.5, -20.5), (8.0, -25.0), (-1.0, -18.5)):
+    for fx, fy in ((-9.0, -25.5), (-3.0, -31.0), (3.5, -24.0), (8.0, -28.5), (-1.0, -21.5)):
         parts.append(sl.cylinder("cup", (fx, fy, 0.070), (fx, fy, 0.075), 0.06, m["cup"], segments=12))
         parts.append(sl.cylinder("practice_pin", (fx, fy, 0.07), (fx, fy, 1.25), 0.012, m["white"], segments=6))
         parts.append(sl.box("practice_flag", fx, fx + 0.32, fy - 0.004, fy + 0.004, 1.02, 1.24, m["flag"]))
 
     # White stake-and-rope fence between the building and the green.
     xs = np.linspace(-17.0, 13.0, 11)
-    fy = -15.5
+    fy = -16.8
     for x in xs:
         if abs(x - STAIR_X) < 1.8:
             continue
@@ -356,22 +354,13 @@ def build_grounds(m, rng):
     for x in np.arange(4.6, 14.6, 1.25):
         shrub(parts, m, x, Y0 - 1.6, rng.uniform(0.45, 0.6), rng)
 
-    # Car park behind the clubhouse: two rows of ten bays with painted lines, a central aisle.
+    # Car park behind the clubhouse: two rows of ten bays with painted lines (buggy parking), a central aisle.
     parts.append(sl.box("car_park", -16.0, 16.0, 8.5, 25.5, 0.0, 0.05, m["asphalt"]))
     parts.append(sl.box("kerb", -16.2, 16.2, 25.5, 25.8, 0.0, 0.15, m["concrete"]))
     for row_y0, row_y1 in ((8.5, 13.5), (20.5, 25.5)):
         for i in range(11):
             x = -12.5 + i * 2.5
             parts.append(sl.box("bay_line", x - 0.05, x + 0.05, row_y0 + 0.2, row_y1 - 0.2, 0.05, 0.056, m["lines"]))
-    colours = [("M_CH_CarRed", (0.45, 0.02, 0.02)), ("M_CH_CarBlue", (0.02, 0.07, 0.3)),
-               ("M_CH_CarSilver", (0.55, 0.56, 0.58)), ("M_CH_CarBlack", (0.02, 0.02, 0.025)),
-               ("M_CH_CarWhite", (0.8, 0.8, 0.8)), ("M_CH_CarGreen", (0.03, 0.18, 0.08))]
-    taken = [(0, 0), (1, 0), (3, 0), (6, 0), (7, 0), (9, 0), (2, 1), (4, 1), (5, 1), (8, 1)]
-    for index, (bay, row) in enumerate(taken):
-        x = -11.25 + bay * 2.5
-        y, heading = (11.0, 90) if row == 0 else (23.0, -90)
-        name, colour = colours[index % len(colours)]
-        car(parts, m, x, y, heading + rng.uniform(-3, 3), name, colour)
     return parts
 
 
@@ -380,6 +369,7 @@ def collision_boxes():
         sl.box("UCX_SM_Clubhouse_00", X0, X1, Y0, Y1, 0.0, EAVE),
         sl.box("UCX_SM_Clubhouse_01", X0 + 5.5, X1 - 5.5, Y0 + 0.5, Y1 - 0.5, EAVE, RIDGE),
         sl.box("UCX_SM_Clubhouse_02", X0, SPLIT, FRONT, Y0, FLOOR1 - 0.45, FLOOR1 + 1.0),
+        sl.box("UCX_SM_Clubhouse_04", X0 - 0.9, SPLIT + 0.9, FRONT - 0.9, Y0, EAVE - 0.5, RIDGE - 1.0),
         sl.box("UCX_SM_Clubhouse_03", STAIR_X - STAIR_W / 2 - 0.3, STAIR_X + STAIR_W / 2 + 0.3, FRONT - 18 * 0.28, FRONT, 0.0, FLOOR1),
     ]
 
