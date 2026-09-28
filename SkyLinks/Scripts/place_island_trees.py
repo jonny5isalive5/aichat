@@ -1,4 +1,4 @@
-"""Dress a floating-island hole with the Megaplant trees (Content/Megaplant_Library).
+"""Dress a floating-island hole with the stylised Sky Links trees (Scripts/import_trees.py imports them).
 
 Run inside the editor with the Course map open, after apply_floating_islands.apply_islands(n) has run and
 its collision has cooked (a separate call). From the Output Log in Python mode:
@@ -6,7 +6,7 @@ its collision has cooked (a separate call). From the Output Log in Python mode:
     import sys, unreal; sys.path.append(unreal.Paths.project_dir() + "Scripts")
     import place_island_trees; place_island_trees.place_trees(1)
 
-- The hole's gameplay trees (the placeholder trunk + canopy balls) become Megaplant trees; the trunk
+- The hole's gameplay trees (the placeholder trunk + canopy balls) become stylised trees; the trunk
   placeholder stays as invisible collision so the ball still hits the tree.
 - About 35 more trees are scattered by tracing onto the islands: only on rough or on the small floating
   islands, never on the line of play, the stone bridge, the tee or the clubhouse grounds, at least 9 m apart.
