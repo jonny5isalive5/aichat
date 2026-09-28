@@ -8,6 +8,7 @@
     isl.apply_islands(n)        one hole only (no bridges or fog; its trees are added again, so clear by hand)
     isl.trees_to_foliage()      turn the scripted forests into foliage (Foliage mode > Select moves single trees)
     isl.fab_footbridges()       the Fab bridge on every brook crossing (deck_offset_cm=... to lift / sink it)
+    isl.update_materials()      rebuild the island materials only (grass paths: Mesh Paint, Blue channel)
     isl.raise_fog(20)           lift every cloud patch 20 m (or lower it with a negative number)
 
 Needs, from Scripts/import_trees.py, the stylised trees and their M_Tree_Bark / M_Tree_Leaves / M_Tree_Vines
@@ -45,6 +46,7 @@ GRASS = {
     'Bunker':  ('M_Island_Bunker',  (0.42, 0.33, 0.2),    1.0,  0.15, 0.0,  'T_SandDetail',  'PM_Bunker'),
 }
 ROCK = ('M_Island_Rock', 'T_RockDetail', 'PM_Rough')
+PATH_COLOUR = (0.23, 0.16, 0.09)  # painted footpaths (vertex colour B) on the grass: packed earth
 SEA = 'M_Island_Sea'
 PARTS = ('IslandTop', 'IslandRock', 'Vines', 'Water', 'Props')
 NO_COLLISION = ('Vines',)  # hanging ivy: the ball and buggy pass through
@@ -127,7 +129,17 @@ def grass_material(name, colour, roughness, variation, stripes, detail, physical
     texture = _expr(mat, unreal.MaterialExpressionTextureSample, -800, 600,
                     texture=unreal.load_asset(f'{TEXTURE_DEST}/{detail}'),
                     sampler_type=unreal.MaterialSamplerType.SAMPLERTYPE_LINEAR_GRAYSCALE)
-    result = _mul(mat, _mul(mat, base, '', shade, '', -600, 0), '', _mul(mat, stripe, '', texture, 'R', -600, 400), '', -400, 200)
+    grass = _mul(mat, _mul(mat, base, '', shade, '', -600, 0), '', _mul(mat, stripe, '', texture, 'R', -600, 400), '', -400, 200)
+    # Vertex colour B = footpath: paint it in Mesh Paint mode (Blue channel only) to lay dirt paths through the grass.
+    dirt = _expr(mat, unreal.MaterialExpressionConstant3Vector, -800, 800, constant=unreal.LinearColor(*PATH_COLOUR, 1.0))
+    grit = _expr(mat, unreal.MaterialExpressionTextureSample, -800, 950,
+                 texture=unreal.load_asset(f'{TEXTURE_DEST}/T_SandDetail'),
+                 sampler_type=unreal.MaterialSamplerType.SAMPLERTYPE_LINEAR_GRAYSCALE)
+    path = _mul(mat, dirt, '', grit, 'R', -600, 850)
+    result = _expr(mat, unreal.MaterialExpressionLinearInterpolate, -250, 400)
+    lib.connect_material_expressions(grass, '', result, 'A')
+    lib.connect_material_expressions(path, '', result, 'B')
+    lib.connect_material_expressions(vc, 'B', result, 'Alpha')
     lib.connect_material_property(result, '', unreal.MaterialProperty.MP_BASE_COLOR)
     lib.connect_material_property(_const(mat, roughness, -400, 400), '', unreal.MaterialProperty.MP_ROUGHNESS)
     return _finish(mat, physical)
@@ -430,6 +442,12 @@ def fab_footbridges(deck_offset_cm=0.0, wood=True, holes=HOLES):
         place_footbridges(number, spots, deck_offset_cm, wood)
         print(f"FOOTBRIDGES hole {number}: {len(spots['footbridges'])}")
     unreal.get_editor_subsystem(unreal.LevelEditorSubsystem).save_current_level()
+
+
+def update_materials():
+    """Rebuild the island materials only (nothing in the level moves), e.g. after a material change."""
+    build_materials()
+    print('MATERIALS rebuilt')
 
 
 def reimport_props(holes=HOLES):
