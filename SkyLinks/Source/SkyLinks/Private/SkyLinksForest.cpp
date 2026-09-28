@@ -5,6 +5,7 @@
 #include "Engine/World.h"
 #include "EngineUtils.h"
 #include "FoliageType_InstancedStaticMesh.h"
+#include "InstancedFoliage.h"
 #include "InstancedFoliageActor.h"
 
 ASkyLinksForest::ASkyLinksForest()
@@ -98,16 +99,39 @@ int32 ASkyLinksForest::ConvertToFoliage(const TArray<UFoliageType*>& Types)
 		Type->BodyInstance.SetCollisionProfileName(UCollisionProfile::BlockAll_ProfileName);
 		Type->CullDistance = FInt32Interval(static_cast<int32>(CullDistance * 0.8f), static_cast<int32>(CullDistance));
 
-		TArray<FTransform> Transforms;
-		Transforms.Reserve(Component->GetInstanceCount());
+		// The same calls Foliage mode's paint brush makes (the level's foliage actor, the type's info, instances).
+		AInstancedFoliageActor* Foliage = AInstancedFoliageActor::GetInstancedFoliageActorForCurrentLevel(GetWorld(), true);
+		if (!Foliage)
+		{
+			continue;
+		}
+		Foliage->Modify();
+		FFoliageInfo* Info = nullptr;
+		UFoliageType* Settings = Foliage->AddFoliageType(Type, &Info);
+		if (!Info || !Settings)
+		{
+			continue;
+		}
+		TArray<FFoliageInstance> Instances;
+		Instances.Reserve(Component->GetInstanceCount());
 		for (int32 Index = 0; Index < Component->GetInstanceCount(); ++Index)
 		{
 			FTransform Transform;
 			Component->GetInstanceTransform(Index, Transform, true);
-			Transforms.Add(Transform);
+			FFoliageInstance& Instance = Instances.AddDefaulted_GetRef();
+			Instance.Location = Transform.GetLocation();
+			Instance.Rotation = Transform.Rotator();
+			Instance.PreAlignRotation = Instance.Rotation;
+			Instance.DrawScale3D = FVector3f(Transform.GetScale3D());
 		}
-		AInstancedFoliageActor::AddInstances(this, Type, Transforms);
-		Moved += Transforms.Num();
+		TArray<const FFoliageInstance*> Pointers;
+		Pointers.Reserve(Instances.Num());
+		for (const FFoliageInstance& Instance : Instances)
+		{
+			Pointers.Add(&Instance);
+		}
+		Info->AddInstances(Settings, Pointers);
+		Moved += Instances.Num();
 	}
 	Destroy();
 	return Moved;
