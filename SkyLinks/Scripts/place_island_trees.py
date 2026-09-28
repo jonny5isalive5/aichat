@@ -12,8 +12,7 @@ its collision has cooked (a separate call). From the Output Log in Python mode:
   islands, never on the line of play, the stone bridge, the tee or the clubhouse grounds, at least 9 m apart.
 Re-running replaces the previous set (same random seed, so the same layout).
 
-Note: Megaplants are Nanite skeletal trees with dynamic wind, made for PC and consoles. The Android build
-will need a lighter tree (see the handover); this dresses the PC version.
+Uses the stylised, phone-friendly trees (Art/Blender/build_trees.py); their UCX_ trunk box is the collision.
 """
 import json
 import math
@@ -23,12 +22,9 @@ from pathlib import Path
 import unreal
 
 M = 100.0
-LIB = '/Game/Megaplant_Library'
-TREES = [f'{LIB}/Tree_Black_Alder/Tree_Black_Alder_01/SK_Black_Alder_01_{v}' for v in 'ABCD'] + \
-        [f'{LIB}/Tree_European_Aspen/Tree_European_Aspen_01/SK_European_Aspen_01_{v}' for v in 'ABCD'] + \
-        [f'{LIB}/Tree_Goat_Willow/Tree_Goat_Willow_01/SK_Goat_Willow_01_{v}' for v in 'ABCD']
-SMALL = [f'{LIB}/Tree_European_Aspen/Tree_European_Aspen_Sapling_01/SK_Aspen_Sapling_01_{v}' for v in 'ABCD'] + \
-        [f'{LIB}/Tree_Elder/Tree_Elder_01/Tree_Elder_01_{v}' for v in 'ABCD']
+LIB = '/Game/Course/Trees'  # the stylised trees from Scripts/import_trees.py (run that first)
+TREES = [f'{LIB}/SM_Tree_{n}' for n in ('Oak_A', 'Oak_B', 'Poplar', 'Pine', 'Birch')]
+SMALL = [f'{LIB}/SM_Bush_{n}' for n in ('Round', 'Flowering')]
 
 # Where trees must not go, per hole (Unreal metres). Hole 1 plays straight along +x.
 KEEP_CLEAR = {
@@ -74,13 +70,11 @@ def _ground(world, x, y):
 
 def _spawn(path, x, y, z, rng, folder, label, scale):
     mesh = unreal.load_asset(path)
-    assert mesh, f'{path} not found: are the trees in Content/Megaplant_Library?'
+    assert mesh, f'{path} not found: run import_trees.import_trees() first'
     tree = actors.spawn_actor_from_object(mesh, unreal.Vector(x * M, y * M, z - 15), unreal.Rotator(0, 0, rng.uniform(0, 360)))
     tree.set_actor_scale3d(unreal.Vector(scale, scale, scale))
     tree.set_actor_label(label)
     tree.set_folder_path(folder)
-    for component in tree.get_components_by_class(unreal.PrimitiveComponent):
-        component.set_collision_enabled(unreal.CollisionEnabled.NO_COLLISION)
     return tree
 
 
