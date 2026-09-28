@@ -7,7 +7,7 @@
                                 tee and cup
     isl.apply_islands(n)        one hole only (no bridges or fog; its trees are added again, so clear by hand)
     isl.trees_to_foliage()      turn the scripted forests into foliage (Foliage mode > Select moves single trees)
-    isl.reimport_props()        re-import the footbridges only (after build_course_islands.py --props-only)
+    isl.fab_footbridges()       the Fab bridge on every brook crossing (deck_offset_cm=... to lift / sink it)
     isl.raise_fog(20)           lift every cloud patch 20 m (or lower it with a negative number)
 
 Needs, from Scripts/import_trees.py, the stylised trees and their M_Tree_Bark / M_Tree_Leaves / M_Tree_Vines
@@ -218,7 +218,7 @@ def remove_flat_ground(number):
             doomed.append(actor)  # blockout slabs and the placeholder ball trees (the forest replaces them)
         elif number == 1 and label == 'ClubhouseLawn':
             doomed.append(actor)
-        elif path in (f'{folder}/Islands', f'{folder}/Trees', f'{folder}/Islands/Floaters'):
+        elif path in (f'{folder}/Islands', f'{folder}/Trees', f'{folder}/Islands/Floaters', f'{folder}/Footbridges'):
             doomed.append(actor)  # a previous run
     for actor in doomed:
         actors.destroy_actor(actor)
@@ -322,6 +322,52 @@ def trees_to_foliage():
     print(f'TREES: {moved} trees and bushes are now foliage')
 
 
+FAB_BRIDGE = '/Game/Course/Vegetation/Bridge1'   # Fab "Bridge" (TAKOYTO): 2 m wide, 8.6 m long along its Y axis
+FOOTBRIDGE_WIDTH = 3.0                           # m, as Art/Blender/build_course_islands.py (so the buggy fits)
+
+
+def place_footbridges(number, spots, deck_offset_cm=0.0):
+    """The Fab bridge over each brook crossing (looks only), stretched to the span; the Props mesh underneath
+    becomes the invisible flat deck the buggy and ball actually use."""
+    folder = f'Course/Hole{number:02d}/Footbridges'
+    for actor in _all():
+        if str(actor.get_folder_path()) == folder:
+            actors.destroy_actor(actor)
+        elif actor.get_actor_label() == f'Props{number:02d}':
+            actor.set_actor_hidden_in_game(True)
+            actor.static_mesh_component.set_editor_property('visible', False)
+            actor.static_mesh_component.set_editor_property('cast_shadow', False)
+    mesh = unreal.load_asset(FAB_BRIDGE)
+    if not mesh or not spots.get('footbridges'):
+        return
+    box = mesh.get_bounding_box()
+    width_cm, length_cm = box.max.x - box.min.x, box.max.y - box.min.y
+    for i, (x, y, z, yaw, length) in enumerate(spots['footbridges']):
+        # The mesh runs along its Y axis: turn it a quarter so Y follows the crossing; overlap the banks a little.
+        bridge = actors.spawn_actor_from_object(mesh, unreal.Vector(x * M, y * M, z * M + deck_offset_cm), unreal.Rotator(0, 0, yaw - 90.0))
+        bridge.set_actor_scale3d(unreal.Vector(FOOTBRIDGE_WIDTH * M / width_cm, (length + 1.5) * M / length_cm, 1.0))
+        bridge.static_mesh_component.set_collision_enabled(unreal.CollisionEnabled.NO_COLLISION)
+        bridge.set_actor_label(f'Footbridge{number:02d}_{i + 1}')
+        bridge.set_folder_path(folder)
+
+
+def fab_footbridges(deck_offset_cm=0.0, holes=HOLES):
+    """Swap every footbridge for the Fab bridge: re-imports the decks (SM_Hnn_Props), hides them, places the
+    bridges. deck_offset_cm lifts (+) or sinks (-) the Fab bridges if their deck doesn't meet the drive height."""
+    materials = build_materials()
+    for number in holes:
+        spots_path = SOURCE / f'Hole{number:02d}_spots.json'
+        if not spots_path.is_file():
+            continue
+        spots = json.loads(spots_path.read_text())
+        if not spots.get('footbridges'):
+            continue
+        import_mesh(f'SM_H{number:02d}_Props', materials)
+        place_footbridges(number, spots, deck_offset_cm)
+        print(f"FOOTBRIDGES hole {number}: {len(spots['footbridges'])}")
+    unreal.get_editor_subsystem(unreal.LevelEditorSubsystem).save_current_level()
+
+
 def reimport_props(holes=HOLES):
     """Re-import the footbridges (SM_Hnn_Props) in place: the placed actors pick up the new mesh, nothing moves."""
     materials = build_materials()
@@ -389,6 +435,7 @@ def apply_islands(number, materials=None):
         place(import_mesh(name, materials, collide=False), name.replace(f'SM_H{number:02d}_', ''), f'{folder}/Floaters',
               collide=False, shadow=True, location=unreal.Vector(x * M, y * M, z * M))
     place_hole(number, spots)
+    place_footbridges(number, spots)
     plant_forest(number, spots)
     print(f'HOLE {number} {spots["name"]} (par {spots["par"]}) placed at z {spots["tee"][2]:+.0f} m')
 

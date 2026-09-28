@@ -471,45 +471,37 @@ def rope_bridge(deck_parts, parts, a, b, rng, width=2.4, sag_ratio=0.055, leafy=
     return span, sag
 
 
+FOOTBRIDGE_WIDTH = 3.0  # m: the Fab bridge (2 m wide) is stretched to this so the buggy fits
+
+
 def footbridge(parts, number, height_local, centre, heading, length, rng):
-    """A short arched wooden footbridge over a brook (local placement), wide enough for the buggy."""
-    cx, cy = centre
+    """A footbridge over a brook (local placement). The looks come from the Fab bridge mesh placed by
+    Scripts/apply_floating_islands.py; this writes only the flat deck it drives on (hidden in game, it
+    collides) and returns where the bridge goes: world x, y, deck z (m), yaw (deg), length (m)."""
     ang = math.radians(heading)
     d = np.array([math.cos(ang), math.sin(ang)])
     ends = [np.array(centre) - d * length / 2, np.array(centre) + d * length / 2]
     zs = [float(height_local(np.array([e[0]]), np.array([e[1]]))[0]) for e in ends]
     base = C.PLACE[number][2]
+    deck_z = max(zs) + base + 0.08
     wa = C.to_world(number, *ends[0])
     wb = C.to_world(number, *ends[1])
-    a = Vector((float(wa[0]), float(wa[1]), zs[0] + base + 0.05))
-    b = Vector((float(wb[0]), float(wb[1]), zs[1] + base + 0.05))
-    along = (b - a).normalized()
-    flat = Vector((along.x, along.y, 0)).normalized()
+    a = Vector((float(wa[0]), float(wa[1]), deck_z))
+    b = Vector((float(wb[0]), float(wb[1]), deck_z))
+    flat = (b - a).normalized()
     across = Vector((-flat.y, flat.x, 0))
-    width = 3.4
-    count = int(length / 0.35)
-    for i in range(count + 1):
-        t = i / count
-        p = a.lerp(b, t) + Vector((0, 0, 0.7 * math.sin(math.pi * t)))
-        parts.box(p, flat, across, (0.15, width / 2, 0.06), rng.choice(WOOD))
-    # A solid deck just under the plank tops: the buggy's wheel traces fell through the gaps between planks
-    # onto the brook and read it as water (the buggy stops at water). Runs 1.2 m past each end into the bank.
-    deck = [a - flat * 1.2 - Vector((0, 0, 0.25))] + [a.lerp(b, i / 40) + Vector((0, 0, 0.7 * math.sin(math.pi * i / 40) + 0.05))
-                                                       for i in range(41)] + [b + flat * 1.2 - Vector((0, 0, 0.25))]
-    half = across * (width / 2 - 0.02)
+    # Flat across the brook, easing down into each bank over 1.5 m so there's no lip to drive over.
+    deck = [a - flat * 1.5 - Vector((0, 0, deck_z - zs[0] - base + 0.25))] + [a.lerp(b, i / 20) for i in range(21)] \
+        + [b + flat * 1.5 - Vector((0, 0, deck_z - zs[1] - base + 0.25))]
+    half = across * (FOOTBRIDGE_WIDTH / 2)
     top_v = [q for p in deck for q in (tuple(p - half), tuple(p + half))]
     bottom_v = [tuple(Vector(q) - Vector((0, 0, 0.1))) for q in top_v]
     quads = [(2 * i, 2 * i + 2, 2 * i + 3, 2 * i + 1) for i in range(len(deck) - 1)]
-    dark = tuple(c * 0.6 for c in WOOD[1])
-    parts._add(top_v, quads, dark, 0, 0.0)
-    parts._add(bottom_v, [q[::-1] for q in quads], dark, 0, 0.0)
-    for side in (-1, 1):
-        rail = [tuple(a.lerp(b, i / 8) + across * side * width / 2 + Vector((0, 0, 0.7 * math.sin(math.pi * i / 8) + 0.95)))
-                for i in range(9)]
-        parts.tube(rail, 0.06, rng.choice(WOOD), sides=5)
-        for i in range(0, 9, 2):
-            base_p = a.lerp(b, i / 8) + across * side * width / 2 + Vector((0, 0, 0.7 * math.sin(math.pi * i / 8)))
-            parts.tube([tuple(base_p), rail[i]], 0.06, rng.choice(WOOD), sides=5)
+    parts._add(top_v, quads, WOOD[1], 0, 0.0)
+    parts._add(bottom_v, [q[::-1] for q in quads], WOOD[1], 0, 0.0)
+    mid = (a + b) / 2
+    yaw = math.degrees(math.atan2(flat.y, flat.x))
+    return [round(mid.x, 3), round(mid.y, 3), round(deck_z, 3), round(yaw, 2), round(length, 2)]
 
 
 # ---------------------------------------------------------------- forest plan
@@ -618,10 +610,11 @@ def build_hole(number, rng):
         wv = place(number, np.column_stack([wxy, np.full(len(wxy), WATER_LEVEL)]))
         exported.append(B.make_mesh(f'{name}_Water', wv, wtris, np.zeros(len(wtris), int), ['Water'],
                                     np.tile([0.5, 0.0, 0.0], (len(wv), 1))))
+    footbridge_spots = []
     if layout.get('footbridges'):
         props = Parts()
         for centre, heading, length in layout['footbridges']:
-            footbridge(props, number, local_h, centre, heading, length, rng)
+            footbridge_spots.append(footbridge(props, number, local_h, centre, heading, length, rng))
         exported.append(props.mesh(f'{name}_Props'))
 
     for obj in exported:
@@ -640,7 +633,7 @@ def build_hole(number, rng):
              'cup': world(cx, cy), 'tee_markers': [world(1.5, s * 2.5) for s in (-1, 1)],
              'player_start': world(-5.0, 0.0),
              'gameplay_trees': [world(x, y) for x, y in layout['trees']],
-             'forest': forest_plan(number, layout, local_h, rng), 'floaters': floater_spots}
+             'forest': forest_plan(number, layout, local_h, rng), 'floaters': floater_spots, 'footbridges': footbridge_spots}
     if number == 1:
         spots['trees'] = [[x, y, ground(x, y)] for x, y in layout['trees']]
         spots['clubhouse'] = [*B.DESIGNS[1]['clubhouse'], ground(*B.DESIGNS[1]['clubhouse'])]
@@ -828,10 +821,14 @@ def main():
                 local_h = height_fn(number, layout)
                 props = Parts()
                 rng = random.Random(number * 1009)
-                for centre, heading, length in layout['footbridges']:
-                    footbridge(props, number, local_h, centre, heading, length, rng)
+                placed = [footbridge(props, number, local_h, centre, heading, length, rng)
+                          for centre, heading, length in layout['footbridges']]
                 obj = props.mesh(f'SM_H{number:02d}_Props')
                 sl.export_fbx(str(OUT / f'{obj.name}.fbx'), [obj])
+                spots_path = OUT / f'Hole{number:02d}_spots.json'
+                spots = json.loads(spots_path.read_text())
+                spots['footbridges'] = placed
+                spots_path.write_text(json.dumps(spots, indent=1) + '\n')
                 print(f'PROPS {number}: {len(layout["footbridges"])} footbridges')
         return
     for number in (wanted if '--links-only' not in args else []):
