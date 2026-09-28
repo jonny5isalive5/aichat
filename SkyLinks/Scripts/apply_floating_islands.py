@@ -326,7 +326,25 @@ FAB_BRIDGE = '/Game/Course/Vegetation/Bridge1'   # Fab "Bridge" (TAKOYTO): 2 m w
 FOOTBRIDGE_WIDTH = 3.0                           # m, as Art/Blender/build_course_islands.py (so the buggy fits)
 
 
-def place_footbridges(number, spots, deck_offset_cm=0.0):
+def footbridge_wood():
+    """Warm painted-wood material for the Fab bridge when its own textures didn't come through (it shows white)."""
+    path = f'{MAT_DIR}/M_Footbridge_Wood'
+    if unreal.EditorAssetLibrary.does_asset_exist(path):
+        return unreal.load_asset(path)
+    mat = _material('M_Footbridge_Wood')
+    base = _expr(mat, unreal.MaterialExpressionConstant3Vector, -800, -100, constant=unreal.LinearColor(0.34, 0.2, 0.1, 1))
+    texture = _expr(mat, unreal.MaterialExpressionTextureSample, -800, 150,
+                    texture=unreal.load_asset(f'{TEXTURE_DEST}/T_RockDetail'),
+                    sampler_type=unreal.MaterialSamplerType.SAMPLERTYPE_LINEAR_GRAYSCALE)
+    result = _mul(mat, base, '', texture, 'R', -500, 0)
+    lib.connect_material_property(result, '', unreal.MaterialProperty.MP_BASE_COLOR)
+    lib.connect_material_property(_const(mat, 0.85, -500, 250), '', unreal.MaterialProperty.MP_ROUGHNESS)
+    lib.recompile_material(mat)
+    unreal.EditorAssetLibrary.save_loaded_asset(mat)
+    return mat
+
+
+def place_footbridges(number, spots, deck_offset_cm=0.0, wood=True):
     """The Fab bridge over each brook crossing (looks only), stretched to the span; the Props mesh underneath
     becomes the invisible flat deck the buggy and ball actually use."""
     folder = f'Course/Hole{number:02d}/Footbridges'
@@ -347,13 +365,17 @@ def place_footbridges(number, spots, deck_offset_cm=0.0):
         bridge = actors.spawn_actor_from_object(mesh, unreal.Vector(x * M, y * M, z * M + deck_offset_cm), unreal.Rotator(0, 0, yaw - 90.0))
         bridge.set_actor_scale3d(unreal.Vector(FOOTBRIDGE_WIDTH * M / width_cm, (length + 1.5) * M / length_cm, 1.0))
         bridge.static_mesh_component.set_collision_enabled(unreal.CollisionEnabled.NO_COLLISION)
+        if wood:
+            for slot in range(bridge.static_mesh_component.get_num_materials()):
+                bridge.static_mesh_component.set_material(slot, footbridge_wood())
         bridge.set_actor_label(f'Footbridge{number:02d}_{i + 1}')
         bridge.set_folder_path(folder)
 
 
-def fab_footbridges(deck_offset_cm=0.0, holes=HOLES):
+def fab_footbridges(deck_offset_cm=0.0, wood=True, holes=HOLES):
     """Swap every footbridge for the Fab bridge: re-imports the decks (SM_Hnn_Props), hides them, places the
-    bridges. deck_offset_cm lifts (+) or sinks (-) the Fab bridges if their deck doesn't meet the drive height."""
+    bridges. deck_offset_cm lifts (+) or sinks (-) the Fab bridges if their deck doesn't meet the drive height.
+    wood=True paints them with M_Footbridge_Wood; wood=False keeps the Fab material (once its textures import)."""
     materials = build_materials()
     for number in holes:
         spots_path = SOURCE / f'Hole{number:02d}_spots.json'
@@ -363,7 +385,7 @@ def fab_footbridges(deck_offset_cm=0.0, holes=HOLES):
         if not spots.get('footbridges'):
             continue
         import_mesh(f'SM_H{number:02d}_Props', materials)
-        place_footbridges(number, spots, deck_offset_cm)
+        place_footbridges(number, spots, deck_offset_cm, wood)
         print(f"FOOTBRIDGES hole {number}: {len(spots['footbridges'])}")
     unreal.get_editor_subsystem(unreal.LevelEditorSubsystem).save_current_level()
 
