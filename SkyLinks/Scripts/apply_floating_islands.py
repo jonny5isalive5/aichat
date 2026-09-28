@@ -8,6 +8,7 @@
     isl.apply_islands(n)        one hole only (no bridges or fog; its trees are added again, so clear by hand)
     isl.trees_to_foliage()      turn the scripted forests into foliage (Foliage mode > Select moves single trees)
     isl.fab_footbridges()       the Fab bridge on every brook crossing (deck_offset_cm=... to lift / sink it)
+    isl.make_path_decal()       M_PathDecal: drag Decal Actors onto the grass for footpaths (the easy way)
     isl.export_paths()          save footpaths drawn as splines (actors named Path...) for baking into the islands
     isl.reimport_tops([4])      re-import island surfaces only (after paths are baked); nothing else moves
     isl.update_materials()      rebuild the island materials only (grass paths: Mesh Paint, Blue channel)
@@ -475,6 +476,40 @@ def export_paths(default_width_m=3.0):
     out = SOURCE / 'Paths.json'
     out.write_text(json.dumps({'paths': paths}, indent=1) + '\n')
     print(f'PATHS: {len(paths)} saved to {out} (commit and push it)')
+
+
+def make_path_decal():
+    """M_PathDecal: a dirt footpath for Decal Actors. Soft sides and ends, so pieces laid end to end or overlapped
+    blend into one path. Place Actors > Decal Actor, set its Decal Material to this, then scale / rotate it."""
+    mat = _material('M_PathDecal')
+    mat.set_editor_property('material_domain', unreal.MaterialDomain.MD_DEFERRED_DECAL)
+    mat.set_editor_property('blend_mode', unreal.BlendMode.BLEND_TRANSLUCENT)
+    uv = _expr(mat, unreal.MaterialExpressionTextureCoordinate, -1400, 300)
+
+    def fade(channel, x, y, sharp):
+        # 1 in the middle, 0 at the edge: 1 - |2 * uv - 1| ^ sharp
+        mask = _expr(mat, unreal.MaterialExpressionComponentMask, x, y, r=channel == 'R', g=channel == 'G', b=False, a=False)
+        lib.connect_material_expressions(uv, '', mask, '')
+        centred = _add(mat, _mul(mat, mask, '', _const(mat, 2.0, x, y + 60), '', x + 150, y), _const(mat, -1.0, x + 150, y + 60), x + 300, y)
+        dist = _expr(mat, unreal.MaterialExpressionAbs, x + 450, y)
+        lib.connect_material_expressions(centred, '', dist, '')
+        power = _expr(mat, unreal.MaterialExpressionPower, x + 600, y)
+        lib.connect_material_expressions(dist, '', power, 'Base')
+        lib.connect_material_expressions(_const(mat, sharp, x + 450, y + 60), '', power, 'Exp')
+        return _add(mat, _mul(mat, power, '', _const(mat, -1.0, x + 600, y + 60), '', x + 750, y), _const(mat, 1.0, x + 750, y + 60), x + 900, y)
+    across = fade('G', -1400, 450, 4.0)   # soft sides
+    along = fade('R', -1400, 650, 8.0)    # softer only right at the ends
+    opacity = _mul(mat, across, '', along, '', -300, 550)
+    grit = _expr(mat, unreal.MaterialExpressionTextureSample, -800, 0, texture=unreal.load_asset(f'{TEXTURE_DEST}/T_SandDetail'),
+                 sampler_type=unreal.MaterialSamplerType.SAMPLERTYPE_LINEAR_GRAYSCALE)
+    dirt = _expr(mat, unreal.MaterialExpressionConstant3Vector, -800, -150, constant=unreal.LinearColor(*PATH_COLOUR, 1.0))
+    lib.connect_material_property(_mul(mat, dirt, '', grit, 'R', -500, 0), '', unreal.MaterialProperty.MP_BASE_COLOR)
+    lib.connect_material_property(_const(mat, 0.95, -500, 200), '', unreal.MaterialProperty.MP_ROUGHNESS)
+    lib.connect_material_property(opacity, '', unreal.MaterialProperty.MP_OPACITY)
+    lib.recompile_material(mat)
+    unreal.EditorAssetLibrary.save_loaded_asset(mat)
+    print(f'PATH DECAL ready: {MAT_DIR}/M_PathDecal')
+    return mat
 
 
 def reimport_tops(holes=HOLES):
