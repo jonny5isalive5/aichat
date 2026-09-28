@@ -400,7 +400,15 @@ void AGolfGameMode::StartDriving(AGolfPlayerState* Player)
 		}
 		if (AGolfCharacter* Golfer = GetGolfer(Driver))
 		{
-			Golfer->SetActorHiddenInGame(true);
+			// With the climb-in animation the golfer stays in the seat and rides along; without it, hide them.
+			if (Golfer->GetBuggyTransitionDuration(true) > 0.f)
+			{
+				Golfer->MulticastSeatInBuggy(Driver->Buggy);
+			}
+			else
+			{
+				Golfer->SetActorHiddenInGame(true);
+			}
 		}
 		Driver->GetPlayerController()->Possess(Driver->Buggy);
 		ViewAll(Driver->Buggy, 0.2f);

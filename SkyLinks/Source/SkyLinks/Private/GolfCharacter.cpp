@@ -262,13 +262,83 @@ void AGolfCharacter::MulticastBuggyTransition_Implementation(AGolfBuggy* Buggy, 
 	const FVector Local = bEnter ? DriverSeat + EnterStartFromSeat : DriverSeat;
 	const FVector Ground = BuggyFrame.TransformPosition(Local);
 	const float Yaw = Buggy->GetActorRotation().Yaw + (bEnter ? 90.f : 0.f);
+	LeaveBuggy();
 	SetActorLocationAndRotation(Ground + FVector(0.f, 0.f, GetCapsuleComponent()->GetScaledCapsuleHalfHeight()), FRotator(0.f, Yaw, 0.f));
+	BuggyStep = bEnter ? EBuggyStep::Entering : EBuggyStep::Exiting;
+	RiddenBuggy = Buggy;
+	SetSeatDrop(bEnter ? 0.f : SeatDrop);
 
 	bPlayingAction = true;
 	Club->SetVisibility(false);
 	GetMesh()->PlayAnimation(Clip, false);
 	GetMesh()->SetPosition(0.f, false);
 	GetMesh()->SetPlayRate(BuggyAnimRate);
+}
+
+void AGolfCharacter::MulticastSeatInBuggy_Implementation(AGolfBuggy* Buggy)
+{
+	if (!Buggy)
+	{
+		return;
+	}
+	// The climb-in clip has ended on its seated frame; ride along in it rather than vanishing.
+	BuggyStep = EBuggyStep::Seated;
+	RiddenBuggy = Buggy;
+	SetSeatDrop(SeatDrop);
+	SetActorHiddenInGame(false);
+	GetCapsuleComponent()->SetCollisionEnabled(ECollisionEnabled::NoCollision);
+	if (UPrimitiveComponent* Root = Cast<UPrimitiveComponent>(Buggy->GetRootComponent()))
+	{
+		Root->IgnoreActorWhenMoving(this, true);
+	}
+	AttachToActor(Buggy, FAttachmentTransformRules::KeepWorldTransform);
+}
+
+void AGolfCharacter::LeaveBuggy()
+{
+	if (AGolfBuggy* Buggy = RiddenBuggy.Get())
+	{
+		if (UPrimitiveComponent* Root = Cast<UPrimitiveComponent>(Buggy->GetRootComponent()))
+		{
+			Root->IgnoreActorWhenMoving(this, false);
+		}
+	}
+	if (GetAttachParentActor())
+	{
+		DetachFromActor(FDetachmentTransformRules::KeepWorldTransform);
+	}
+	GetCapsuleComponent()->SetCollisionEnabled(ECollisionEnabled::QueryAndPhysics);
+	RiddenBuggy.Reset();
+}
+
+void AGolfCharacter::SetSeatDrop(float Drop)
+{
+	GetMesh()->SetRelativeLocation(FVector(0.f, 0.f, -GetCapsuleComponent()->GetScaledCapsuleHalfHeight() - Drop));
+}
+
+void AGolfCharacter::Tick(float DeltaSeconds)
+{
+	Super::Tick(DeltaSeconds);
+	if (BuggyStep != EBuggyStep::Entering && BuggyStep != EBuggyStep::Exiting)
+	{
+		return;
+	}
+	const UAnimSequence* Clip = (BuggyStep == EBuggyStep::Entering ? EnterBuggyAnim : ExitBuggyAnim).Get();
+	const float Length = Clip ? Clip->GetPlayLength() : 0.f;
+	if (Length <= 0.f)
+	{
+		return;
+	}
+	// Measured on the clips: the hips settle onto the seat at 55-62% of the climb in, and lift off it at
+	// 34-46% of the climb out. Ease the extra drop for the low buggy seat in and out over those spans.
+	const float T = GetMesh()->GetPosition() / Length;
+	SetSeatDrop(BuggyStep == EBuggyStep::Entering
+		? SeatDrop * FMath::SmoothStep(0.5f, 0.62f, T)
+		: SeatDrop * (1.f - FMath::SmoothStep(0.3f, 0.46f, T)));
+	if (BuggyStep == EBuggyStep::Exiting && T >= 1.f)
+	{
+		BuggyStep = EBuggyStep::None;
+	}
 }
 
 float AGolfCharacter::GetImpactDelay(EGolferSwing Swing) const
@@ -373,8 +443,24 @@ void AGolfCharacter::ApplyAddress()
 	const FVector Right = FRotationMatrix(Aim).GetUnitAxis(EAxis::Y);
 	const float HalfHeight = GetCapsuleComponent()->GetScaledCapsuleHalfHeight();
 
+	// Back on foot at the ball: out of the buggy and its low seat.
+	if (BuggyStep != EBuggyStep::None)
+	{
+		LeaveBuggy();
+		BuggyStep = EBuggyStep::None;
+		SetSeatDrop(0.f);
+	}
+
 	// A right-handed golfer stands on the left of the target line, facing the ball.
-	const FVector Feet = BallLocation - Right * StanceDistance - Aim.Vector() * AddressBackOffset - FVector(0.f, 0.f, GolfPhysics::BallRadius);
+	FVector Feet = BallLocation - Right * StanceDistance - Aim.Vector() * AddressBackOffset - FVector(0.f, 0.f, GolfPhysics::BallRadius);
+	// Stand on the ground under the feet, not at the ball's height (on a slope that sinks or floats the golfer).
+	FHitResult Ground;
+	const FCollisionQueryParams Params(SCENE_QUERY_STAT(GolferFeet), true, this);
+	if (GetWorld() && GetWorld()->LineTraceSingleByObjectType(Ground, Feet + FVector(0.f, 0.f, 150.f), Feet - FVector(0.f, 0.f, 150.f),
+		FCollisionObjectQueryParams(ECC_WorldStatic), Params))
+	{
+		Feet.Z = Ground.ImpactPoint.Z;
+	}
 	// The Mixamo golf clips are authored a quarter turn from the body's forward (the buggy clips are not):
 	// with the actor facing down the aim line, the swing faces the ball.
 	SetActorLocationAndRotation(Feet + FVector(0.f, 0.f, HalfHeight), FRotator(0.f, AimYaw, 0.f));

@@ -65,6 +65,12 @@ public:
 	/** Seconds the climb in/out takes (0 while the golfer has no animations). */
 	float GetBuggyTransitionDuration(bool bEnter) const;
 
+	/** Everyone: stay in the driver's seat (last frame of the climb in) and ride along with the buggy. */
+	UFUNCTION(NetMulticast, Reliable)
+	void MulticastSeatInBuggy(AGolfBuggy* Buggy);
+
+	virtual void Tick(float DeltaSeconds) override;
+
 	UPROPERTY(VisibleAnywhere, Category = "Golf")
 	TObjectPtr<USpringArmComponent> CameraArm;
 
@@ -109,6 +115,8 @@ public:
 	UPROPERTY(EditDefaultsOnly, Category = "Golf|Buggy") FVector DriverSeat = FVector(-9.f, -28.f, 0.f);
 	/** Where the enter clip starts, relative to the seat in buggy space (measured from the clip). */
 	UPROPERTY(EditDefaultsOnly, Category = "Golf|Buggy") FVector EnterStartFromSeat = FVector(20.5f, -193.f, 0.f);
+	/** The Mixamo car seat is higher than the buggy's (cushion 68 cm, roof 1.6 m): sink this much when seated. */
+	UPROPERTY(EditDefaultsOnly, Category = "Golf|Buggy") float SeatDrop = 20.f;
 
 	UPROPERTY(EditDefaultsOnly, Category = "Golf|Club") TSoftObjectPtr<UStaticMesh> IronClubAsset;
 	UPROPERTY(EditDefaultsOnly, Category = "Golf|Club") TSoftObjectPtr<UStaticMesh> PutterClubAsset;
@@ -164,4 +172,11 @@ protected:
 	/** True while a swing or reaction is playing, so address updates don't cut it off. */
 	bool bPlayingAction = false;
 	FTimerHandle ClubTimer;
+
+	/** Climbing in or out of the buggy: Tick eases the body down into / up out of the low seat. */
+	enum class EBuggyStep : uint8 { None, Entering, Seated, Exiting };
+	EBuggyStep BuggyStep = EBuggyStep::None;
+	TWeakObjectPtr<AGolfBuggy> RiddenBuggy;
+	void SetSeatDrop(float Drop);
+	void LeaveBuggy();
 };
