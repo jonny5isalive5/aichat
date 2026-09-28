@@ -70,6 +70,7 @@ AGolfCharacter::AGolfCharacter()
 	PuttVictoryAnim = TSoftObjectPtr<UAnimSequence>(Anim(TEXT("A_PuttVictoryLong")));
 	PuttMissAnim = TSoftObjectPtr<UAnimSequence>(Anim(TEXT("A_PuttMiss")));
 	BadShotAnim = TSoftObjectPtr<UAnimSequence>(Anim(TEXT("A_BadShot")));
+	TeeUpAnim = TSoftObjectPtr<UAnimSequence>(Anim(TEXT("A_TeeUp")));
 	EnterBuggyAnim = TSoftObjectPtr<UAnimSequence>(Anim(TEXT("A_EnterBuggy")));
 	ExitBuggyAnim = TSoftObjectPtr<UAnimSequence>(Anim(TEXT("A_ExitBuggy")));
 	IdleAnim = TSoftObjectPtr<UAnimSequence>(Anim(TEXT("A_Idle")));
@@ -175,6 +176,7 @@ UAnimSequence* AGolfCharacter::ReactionAsset(EGolferReaction Reaction) const
 	case EGolferReaction::PuttVictory: return PuttVictoryAnim.LoadSynchronous();
 	case EGolferReaction::PuttMiss:    return PuttMissAnim.LoadSynchronous();
 	case EGolferReaction::BadShot:     return BadShotAnim.LoadSynchronous();
+	case EGolferReaction::TeeUp:       return TeeUpAnim.LoadSynchronous();
 	default:                           return nullptr;
 	}
 }
@@ -390,7 +392,7 @@ float AGolfCharacter::GetReactionDuration(EGolferReaction Reaction) const
 {
 	const UAnimSequence* Clip = bHasBody ? ReactionAsset(Reaction) : nullptr;
 	// Long Mixamo clips are cut short so the round keeps moving (the putt victory runs until the ball is out).
-	const float Cap = Reaction == EGolferReaction::PuttVictory ? 5.f : 4.f;
+	const float Cap = Reaction == EGolferReaction::PuttVictory || Reaction == EGolferReaction::TeeUp ? 5.f : 4.f;
 	return Clip ? FMath::Min(Clip->GetPlayLength(), Cap) : 0.f;
 }
 

@@ -43,6 +43,9 @@ public:
 	/** E: climb out of the buggy you're driving, or into a buggy you're standing next to. */
 	void ToggleBuggy(APlayerController* Player);
 
+	/** How close (cm) to the first tee the host must walk to tee up and start the round with E. */
+	static constexpr float TeeUpReach = 900.f;
+
 	/** Can this player walk and drive freely right now (lobby, round over, or on the way to their ball)? */
 	bool CanRoam(const class AGolfPlayerState* Player) const;
 
@@ -113,6 +116,11 @@ protected:
 	FTimerHandle FlowTimer;
 	FTimerHandle CameraTimer;
 	FTimerHandle StrikeTimer;
+	/** The host is teeing up on the first tee; the round starts when the animation ends. */
+	bool bTeeingUp = false;
+	FTimerHandle TeeUpTimer;
+	void BeginRound();
+
 	/** Golfers climbing into or out of a buggy; their E / PLAY / SKIP presses wait until it finishes. */
 	TSet<TWeakObjectPtr<AGolfPlayerState>> InTransition;
 };

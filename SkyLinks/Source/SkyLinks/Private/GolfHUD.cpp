@@ -28,6 +28,9 @@ namespace Palette
 	const FLinearColor Dim(0.72f, 0.74f, 0.72f, 1.f);
 	const FLinearColor Red(0.9f, 0.22f, 0.18f, 1.f);
 	const FLinearColor Green(0.45f, 0.85f, 0.3f, 1.f);
+	// Landing rings and break arrows: red reads against every shade of grass.
+	const FLinearColor Target(1.f, 0.16f, 0.12f, 1.f);
+	const FLinearColor TargetIdle(1.f, 0.35f, 0.3f, 0.9f);
 }
 
 // ---------------------------------------------------------------- drawing helpers
@@ -139,6 +142,10 @@ void AGolfHUD::DrawHUD()
 		else
 		{
 			DrawMoving(Controller);
+			const TCHAR* Hint = Controller->IsHost() ? TEXT("Pick a buggy (E), then walk or drive to the 1st tee and press E to tee off")
+				: TEXT("Pick a buggy (E)  ·  waiting for the host to tee off on the 1st");
+			Box(FVector2D(Canvas->ClipX * 0.5f - 42.f * U, 2.f * U), FVector2D(84.f * U, 4.5f * U), Palette::Panel);
+			Label(Hint, FVector2D(Canvas->ClipX * 0.5f, 4.2f * U), 2.4f, Palette::Gold, true);
 		}
 		RoundButton(EGolfHudButton::LobbyPanel, FVector2D(Canvas->ClipX * 0.5f, Canvas->ClipY - 6.f * U), 4.5f * U,
 			Controller->IsLobbyPanelHidden() ? TEXT("MENU") : TEXT("WALK"), Palette::PanelSolid);
@@ -251,13 +258,13 @@ void AGolfHUD::DrawLobby(AGolfGameState* State, AGolfPlayerController* Controlle
 	const float ButtonY = Center.Y + 24.f * U;
 	if (NetMode == NM_Standalone)
 	{
-		RoundButton(EGolfHudButton::Start, FVector2D(Center.X - 22.f * U, ButtonY), 8.f * U, TEXT("SOLO"), Palette::PanelSolid);
+		RoundButton(EGolfHudButton::LobbyPanel, FVector2D(Center.X - 22.f * U, ButtonY), 8.f * U, TEXT("SOLO"), Palette::PanelSolid);
 		RoundButton(EGolfHudButton::Host, FVector2D(Center.X, ButtonY), 8.f * U, TEXT("HOST"), Palette::PanelSolid);
 		RoundButton(EGolfHudButton::Join, FVector2D(Center.X + 22.f * U, ButtonY), 8.f * U, TEXT("JOIN"), Palette::PanelSolid);
 	}
 	else if (NetMode == NM_ListenServer)
 	{
-		RoundButton(EGolfHudButton::Start, FVector2D(Center.X - 11.f * U, ButtonY), 8.f * U, TEXT("TEE OFF"), Palette::PanelSolid);
+		RoundButton(EGolfHudButton::LobbyPanel, FVector2D(Center.X - 11.f * U, ButtonY), 8.f * U, TEXT("PLAY"), Palette::PanelSolid);
 		if (Sessions && Sessions->SupportsFriends())
 		{
 			RoundButton(EGolfHudButton::Friends, FVector2D(Center.X + 11.f * U, ButtonY), 8.f * U, TEXT("INVITE"), Palette::PanelSolid);
@@ -368,6 +375,7 @@ void AGolfHUD::DrawPlaying(AGolfGameState* State, AGolfPlayerController* Control
 	}
 	DrawPinMarker(State);
 	DrawHoleCard(State);
+	DrawMiniMap(State, Controller);
 	DrawPlayers(State);
 	DrawWind(State);
 
@@ -431,7 +439,7 @@ void AGolfHUD::DrawLandingView(AGolfGameState* State, AGolfPlayerController* Con
 	// Landing ring (moves as you aim and swipe), and the pin.
 	FVector2D LandingSpot;
 	ToWindow(Controller->GetPreviewLanding(), LandingSpot);
-	Ring(LandingSpot, FMath::Max(250.f * PixelsPerCm, 1.2f * U), Controller->IsSwinging() ? Palette::Green : Palette::White, 0.3f * U);
+	Ring(LandingSpot, FMath::Max(250.f * PixelsPerCm, 1.2f * U), Controller->IsSwinging() ? Palette::Target : Palette::TargetIdle, 0.35f * U);
 	if (State->CurrentHole)
 	{
 		FVector2D Pin;
@@ -447,6 +455,68 @@ void AGolfHUD::DrawLandingView(AGolfGameState* State, AGolfPlayerController* Con
 		}
 	}
 	Label(TEXT("LANDING"), FVector2D(Center.X, Pos.Y + Size.Y - 2.f * U), 2.2f, Palette::Gold, true);
+}
+
+void AGolfHUD::DrawMiniMap(AGolfGameState* State, AGolfPlayerController* Controller)
+{
+	UTextureRenderTarget2D* Picture = Controller->GetMiniMapTexture();
+	if (!Picture || !Picture->GetResource() || !State->CurrentHole)
+	{
+		return;
+	}
+	// Left edge, between the players list and the club disc: the whole hole, tee at the bottom.
+	const float Height = FMath::Min(46.f * U, Canvas->ClipY - 54.f * U);
+	const FVector2D Size(Height * Picture->SizeX / FMath::Max(1, Picture->SizeY), Height);
+	const FVector2D Pos(2.f * U, 25.f * U);
+	const FVector2D Center = Pos + Size * 0.5f;
+	Box(Pos - FVector2D(0.4f * U, 0.4f * U), Size + FVector2D(0.8f * U, 0.8f * U), Palette::PanelSolid);
+	FCanvasTileItem Tile(Pos, Picture->GetResource(), Size, FLinearColor::White);
+	Tile.BlendMode = SE_BLEND_Opaque;
+	Canvas->DrawItem(Tile);
+
+	const float PixelsPerCm = Size.X / Controller->GetMiniMapWidth();
+	const FRotator Up(0.f, Controller->GetMiniMapYaw(), 0.f);
+	const FVector Forward = Up.Vector();
+	const FVector Right = FRotationMatrix(Up).GetUnitAxis(EAxis::Y);
+	const FVector MapCenter = Controller->GetMiniMapCenter();
+	auto ToMap = [&](const FVector& World)
+	{
+		const FVector Offset = World - MapCenter;
+		FVector2D Out = Center + FVector2D(FVector::DotProduct(Offset, Right), -FVector::DotProduct(Offset, Forward)) * PixelsPerCm;
+		Out.X = FMath::Clamp(Out.X, Pos.X, Pos.X + Size.X);
+		Out.Y = FMath::Clamp(Out.Y, Pos.Y, Pos.Y + Size.Y);
+		return Out;
+	};
+
+	// Pin.
+	const FVector2D Pin = ToMap(State->CurrentHole->GetCupLocation());
+	const FLinearColor Yellow(1.f, 0.85f, 0.f, 1.f);
+	Line(Pin, Pin - FVector2D(0.f, 2.4f * U), FLinearColor::White, 0.2f * U);
+	for (int32 Stroke = 0; Stroke <= 5; ++Stroke)
+	{
+		Line(Pin - FVector2D(0.f, 2.4f * U - Stroke * 0.16f * U), Pin + FVector2D(1.6f * U, -1.9f * U), Yellow, 0.25f * U);
+	}
+
+	// Every ball in play; the active player's shot setup (flight line and landing ring) on top.
+	for (APlayerState* Base : State->PlayerArray)
+	{
+		const AGolfPlayerState* Player = Cast<AGolfPlayerState>(Base);
+		if (Player && Player->Ball && Player->bInRound && !Player->bHoledOut && !Player->Ball->IsHidden())
+		{
+			const bool bActive = State->ActivePlayer == Player;
+			Disc(ToMap(Player->Ball->GetActorLocation()), (bActive ? 0.8f : 0.55f) * U, bActive ? Palette::White : Palette::Dim);
+		}
+	}
+	if (Controller->IsMyTurn() && Controller->HasPreview() && !Controller->IsPutting())
+	{
+		const TArray<FVector>& Path = Controller->GetPreviewPath();
+		for (int32 Index = 1; Index < Path.Num(); ++Index)
+		{
+			Line(ToMap(Path[Index - 1]), ToMap(Path[Index]), FLinearColor(1.f, 1.f, 1.f, 0.8f), 0.2f * U);
+		}
+		Ring(ToMap(Controller->GetPreviewLanding()), FMath::Max(1500.f * PixelsPerCm, 0.9f * U),
+			Controller->IsSwinging() ? Palette::Target : Palette::TargetIdle, 0.3f * U);
+	}
 }
 
 void AGolfHUD::DrawPinMarker(AGolfGameState* State)
@@ -577,7 +647,12 @@ void AGolfHUD::DrawWalking(AGolfPlayerController* Controller)
 	Disc(Pad + FVector2D(Stick.X, -Stick.Y) * 7.f * U, 3.2f * U, FLinearColor(1.f, 1.f, 1.f, 0.85f));
 	Label(TEXT("DRAG TO WALK"), Pad + FVector2D(0.f, 12.f * U), 2.4f, Palette::Dim, true);
 
-	if (Controller->GetBuggyInReach())
+	if (Controller->CanTeeUp())
+	{
+		RoundButton(EGolfHudButton::Start, FVector2D(Canvas->ClipX - 16.f * U, Canvas->ClipY - 16.f * U), 8.f * U, TEXT("TEE UP"), FLinearColor(0.1f, 0.4f, 0.12f, 0.9f));
+		Label(TEXT("E"), FVector2D(Canvas->ClipX - 16.f * U, Canvas->ClipY - 5.f * U), 2.4f, Palette::Dim, true);
+	}
+	else if (Controller->GetBuggyInReach())
 	{
 		RoundButton(EGolfHudButton::Buggy, FVector2D(Canvas->ClipX - 16.f * U, Canvas->ClipY - 16.f * U), 8.f * U, TEXT("GET IN"), FLinearColor(0.1f, 0.4f, 0.12f, 0.9f));
 		Label(TEXT("E"), FVector2D(Canvas->ClipX - 16.f * U, Canvas->ClipY - 5.f * U), 2.4f, Palette::Dim, true);
@@ -669,8 +744,7 @@ void AGolfHUD::DrawGreenGrid(AGolfPlayerController* Controller)
 		{
 			continue;
 		}
-		const FLinearColor Color = Percent < 2.f ? FLinearColor(1.f, 0.8f, 0.3f, 0.85f)
-			: FLinearColor(1.f, 0.45f, 0.25f, 0.9f);
+		const FLinearColor Color = Percent < 2.f ? FLinearColor(1.f, 0.35f, 0.3f, 0.8f) : Palette::Target;
 
 		FVector2D From;
 		if (!ToScreen(Points[Index] + FVector(0.f, 0.f, 1.f), From))
@@ -744,7 +818,7 @@ void AGolfHUD::DrawPreview(AGolfPlayerController* Controller)
 		const bool bOnScreen = ToScreen(Landing + FVector(FMath::Cos(Angle), FMath::Sin(Angle), 0.f) * RingRadius + FVector(0.f, 0.f, 1.f), Screen);
 		if (bOnScreen && bHavePrevious)
 		{
-			Line(Previous, Screen, Controller->IsSwinging() ? Palette::Green : Palette::White, 0.4f * U);
+			Line(Previous, Screen, Controller->IsSwinging() ? Palette::Target : Palette::TargetIdle, 0.45f * U);
 		}
 		Previous = Screen;
 		bHavePrevious = bOnScreen;

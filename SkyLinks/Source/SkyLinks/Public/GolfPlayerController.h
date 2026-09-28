@@ -76,6 +76,10 @@ public:
 	/** A buggy close enough to get into with E (mine, or a free one before the round), or null. */
 	AGolfBuggy* GetBuggyInReach() const;
 	FVector2D GetWalkStick() const { return TouchWalk; }
+	/** Lobby, host on foot by the first tee: E tees up and starts the round. */
+	bool CanTeeUp() const;
+	/** Only the host can start the round (listen server's own player, or playing solo). */
+	bool IsHost() const { return GetNetMode() != NM_Client; }
 	bool IsLobbyPanelHidden() const { return bLobbyPanelHidden; }
 	AGolfBuggy* GetMyBuggy() const;
 	float GetDriveSteer() const { return FMath::Clamp(TouchSteer + (IsDriving() ? AimInput : 0.f), -1.f, 1.f); }
@@ -97,6 +101,12 @@ public:
 	FVector GetLandingViewCenter() const { return LandingViewCenter; }
 	float GetLandingViewHeight() const { return LandingViewHeight; }
 	static constexpr float LandingViewFOV = 60.f;
+	/** Overhead picture of the whole current hole (tee at the bottom, green at the top), or null. */
+	UTextureRenderTarget2D* GetMiniMapTexture() const;
+	/** Mini map framing: ground point at its middle, heading that points up the map, width in cm. */
+	FVector GetMiniMapCenter() const { return MiniMapCenter; }
+	float GetMiniMapYaw() const { return MiniMapYaw; }
+	float GetMiniMapWidth() const { return MiniMapWidth; }
 	int32 GetClubIndex() const { return ClubIndex; }
 	float GetClubCarry(int32 Index) const { return ClubCarry.IsValidIndex(Index) ? ClubCarry[Index] : 0.f; }
 	FString GetSpinLabel() const;
@@ -219,5 +229,17 @@ private:
 
 	UPROPERTY(Transient)
 	TObjectPtr<UTextureRenderTarget2D> LandingTarget;
+
+	// Mini map of the hole: captured once per hole (and once more shortly after).
+	void UpdateMiniMap(float DeltaSeconds);
+	UPROPERTY(Transient)
+	TObjectPtr<USceneCaptureComponent2D> MiniMapCapture;
+	UPROPERTY(Transient)
+	TObjectPtr<UTextureRenderTarget2D> MiniMapTarget;
+	TWeakObjectPtr<class AGolfHole> MiniMapHole;
+	FVector MiniMapCenter = FVector::ZeroVector;
+	float MiniMapYaw = 0.f;
+	float MiniMapWidth = 30000.f;
+	float MiniMapRecapture = 0.f;
 	float PerfectFlashTime = -100.f;
 };

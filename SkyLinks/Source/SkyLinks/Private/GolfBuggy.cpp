@@ -319,7 +319,9 @@ bool AGolfBuggy::SampleGround(const FVector& Center, float Yaw, FVector& OutLoca
 	for (int32 Index = 0; Index < 4; ++Index)
 	{
 		FHitResult Hit;
-		const FVector Top(Wheels[Index].X, Wheels[Index].Y, Center.Z + 150.f);
+		// Start just above the wheels, not high overhead: a trace from up high landed on things beside the
+		// track (the top of a bridge's side wall, a tree trunk) and tipped the buggy onto its side.
+		const FVector Top(Wheels[Index].X, Wheels[Index].Y, Center.Z + 45.f);
 		const FVector Bottom(Wheels[Index].X, Wheels[Index].Y, Center.Z - 400.f);
 		if (!World->LineTraceSingleByObjectType(Hit, Top, Bottom, Objects, Params))
 		{
