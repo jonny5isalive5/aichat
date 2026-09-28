@@ -39,6 +39,28 @@ STEEL = 1.0
 
 # ---------------------------------------------------------------- layouts
 
+PATH_EDGE = 0.2  # m: half the soft band along a footpath's border
+
+
+def footpaths(number, land):
+    """Footpaths drawn in the editor (Scripts/apply_floating_islands.py export_paths -> Paths.json) that cross this
+    hole's island, as one local-coordinate polygon kept 1.5 m inside the rim (the rim must match the rock)."""
+    source = OUT / 'Paths.json'
+    if not source.is_file():
+        return None
+    shapes = []
+    for path in json.loads(source.read_text()).get('paths', []):
+        pts = np.array(path['points'], float)
+        lx, ly = C.to_local(number, pts[:, 0], pts[:, 1])
+        if len(pts) >= 2:
+            shapes.append(LineString(np.column_stack([lx, ly])).buffer(path.get('width', 3.0) / 2, 16))
+    if not shapes:
+        return None
+    area = unary_union(shapes).intersection(land.buffer(-1.5))
+    area = shapely.set_precision(area, 0.05)
+    return None if area.is_empty or area.area < 1.0 else area
+
+
 def design_new(number):
     """Island shape and play regions of holes 2-6 (local metres)."""
     h = C.HOLES[number]
@@ -547,10 +569,18 @@ def build_hole(number, rng):
     B.build_materials()
     name = f'SM_H{number:02d}'
 
+    paths = footpaths(number, layout['land'])
+    if paths is not None:
+        # Path borders become mesh edges: a thin band between an inner and an outer outline carries the fade.
+        layout = dict(layout, extra_lines=[paths.buffer(-PATH_EDGE), paths.buffer(PATH_EDGE).intersection(layout['land'].buffer(-1.0))])
     xy, tris, attrs = B.triangulate_top(layout)
     z = local_h(xy[:, 0], xy[:, 1])
+    top_cols = B.top_colours(xy[:, 0], xy[:, 1], number)
+    if paths is not None:
+        inner = paths.buffer(-PATH_EDGE + 0.01)
+        top_cols[:, 2] = shapely.contains_xy(inner, xy[:, 0], xy[:, 1]).astype(float)  # B: 1 on the path
     top = B.make_mesh(f'{name}_IslandTop', place(number, np.column_stack([xy, z])), tris, attrs,
-                      [B.REGION_MATERIAL[i] for i in range(5)], B.top_colours(xy[:, 0], xy[:, 1], number))
+                      [B.REGION_MATERIAL[i] for i in range(5)], top_cols)
 
     land = layout['land']
     uxy, utris = B.triangulate_underside(land, [0.8, 2.0, 4.0, 7.5, 13, 21, 32], 14)

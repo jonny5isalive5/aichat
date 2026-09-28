@@ -262,6 +262,8 @@ def pslg(lines, spacing):
 
 def triangulate_top(layout):
     lines = [LineString(r.coords) for region in layout['regions'].values() for r in polygon_rings(region)]
+    # Extra outlines to keep as mesh edges (footpath borders), so painted-in features get crisp edges.
+    lines += [LineString(r.coords) for g in layout.get('extra_lines', []) for r in polygon_rings(g)]
     vertices, segments = pslg(lines, EDGE_SPACING)
     seeds = []
     for region_id, region in layout['regions'].items():

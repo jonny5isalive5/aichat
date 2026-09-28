@@ -9,6 +9,7 @@
     isl.trees_to_foliage()      turn the scripted forests into foliage (Foliage mode > Select moves single trees)
     isl.fab_footbridges()       the Fab bridge on every brook crossing (deck_offset_cm=... to lift / sink it)
     isl.export_paths()          save footpaths drawn as splines (actors named Path...) for baking into the islands
+    isl.reimport_tops([4])      re-import island surfaces only (after paths are baked); nothing else moves
     isl.update_materials()      rebuild the island materials only (grass paths: Mesh Paint, Blue channel)
     isl.raise_fog(20)           lift every cloud patch 20 m (or lower it with a negative number)
 
@@ -474,6 +475,17 @@ def export_paths(default_width_m=3.0):
     out = SOURCE / 'Paths.json'
     out.write_text(json.dumps({'paths': paths}, indent=1) + '\n')
     print(f'PATHS: {len(paths)} saved to {out} (commit and push it)')
+
+
+def reimport_tops(holes=HOLES):
+    """Re-import only the island surfaces (SM_Hnn_IslandTop), e.g. after footpaths are baked in. The placed
+    actors pick up the new meshes; floaters, trees, bridges and everything you've moved stay as they are."""
+    materials = build_materials()
+    for number in holes:
+        if (SOURCE / f'SM_H{number:02d}_IslandTop.fbx').is_file():
+            import_mesh(f'SM_H{number:02d}_IslandTop', materials)
+    unreal.get_editor_subsystem(unreal.LevelEditorSubsystem).save_current_level()
+    print(f'TOPS re-imported: holes {list(holes)}')
 
 
 def update_materials():
