@@ -255,11 +255,38 @@ void AGolfGameMode::RequestStartRound(APlayerController* Requester)
 	AGolfGameState* State = GetGolfState();
 	const bool bCanStart = State->Phase == EGolfMatchPhase::Lobby || State->Phase == EGolfMatchPhase::RoundOver;
 	// Only the host (the listen server's own player, or the solo player) starts the round.
-	if (!bCanStart || !Requester || !Requester->IsLocalController() || Holes.Num() == 0)
+	if (!bCanStart || bTeeingUp || !Requester || !Requester->IsLocalController() || Holes.Num() == 0)
 	{
 		return;
 	}
 
+	// From the lobby the host walks up to the first tee and tees up (E); the round starts when the tee is in.
+	AGolfPlayerState* Host = Requester->GetPlayerState<AGolfPlayerState>();
+	AGolfCharacter* Golfer = GetGolfer(Host);
+	if (State->Phase == EGolfMatchPhase::Lobby && Golfer)
+	{
+		const FVector Tee = Holes[0]->GetTeeLocation() + FVector(0.f, 0.f, GolfPhysics::BallRadius);
+		if (Requester->GetPawn() != Golfer || FVector::Dist2D(Golfer->GetActorLocation(), Tee) > TeeUpReach)
+		{
+			return;
+		}
+		Golfer->SetAddress(Tee, Holes[0]->GetDefaultAimYaw(Tee));
+		const float Duration = Golfer->GetReactionDuration(EGolferReaction::TeeUp);
+		if (Duration > 0.f)
+		{
+			bTeeingUp = true;
+			Golfer->MulticastPlayReaction(EGolferReaction::TeeUp, Tee);
+			State->MulticastAnnounce(FString::Printf(TEXT("%s TEES UP"), *Host->GetPlayerName()));
+			GetWorldTimerManager().SetTimer(TeeUpTimer, this, &AGolfGameMode::BeginRound, Duration, false);
+			return;
+		}
+	}
+	BeginRound();
+}
+
+void AGolfGameMode::BeginRound()
+{
+	bTeeingUp = false;
 	TeeOrder.Reset();
 	for (APlayerState* Base : GameState->PlayerArray)
 	{

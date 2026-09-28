@@ -5,7 +5,7 @@
     ... --no-render                                        skip the Cycles previews
 
 Per hole n (world coordinates, Unreal metres; Scripts/apply_floating_islands.py places them at the origin):
-  SM_Hnn_IslandTop / IslandRock / Floaters   as hole 1 (build_floating_islands.py), placed, turned and raised
+  SM_Hnn_IslandTop / IslandRock             as hole 1 (build_floating_islands.py), placed, turned and raised
   SM_Hnn_Vines     ivy and roots hanging off every cliff edge (sway in the leaf shader), moss on the rock
   SM_Hnn_Water     ponds and brooks (Water surface: a penalty, and the buggy won't drive in)
   SM_Hnn_Props     wooden footbridges over the brooks (the buggy drives over them)
@@ -45,7 +45,7 @@ def design_new(number):
     fairways = unary_union(h['fairways'])
     (cx, cy), gr = h['green']
     green = Point(cx, cy).buffer(gr, 96)
-    bunkers = [Point(x, y).buffer(r, 64) for x, y, r in h['bunkers']]
+    bunkers = [b if hasattr(b, 'geom_type') else Point(b[0], b[1]).buffer(b[2], 64) for b in h['bunkers']]
     tee = box(-4, -6, 4, 6)
     ponds = list(h['ponds'])
     streams = [C.path(pts, w) for pts, w in h['streams']]
@@ -562,38 +562,45 @@ def build_hole(number, rng):
     rock = B.make_mesh(f'{name}_IslandRock', place(number, rock_v), utris[:, ::-1], np.zeros(len(utris), int),
                        ['IslandRock'], colours)
 
-    # Floaters: hole 1 keeps its hand-placed ones; the others get a ring of small islands.
+    # Floaters: hole 1 keeps its hand-placed ones; the others get a ring of small islands. They hang high above
+    # the hole (background decoration, clear of play) and each is its own mesh with its pivot at its middle,
+    # so they can be moved one by one in the editor.
     floaters = layout['floaters'] if number == 1 else ring_of_floaters(number, land, rng)
-    f_parts = [], [], [], []
-    offset = 0
+    for stale in OUT.glob(f'{name}_Floater*.fbx'):
+        stale.unlink()
+    floater_spots = []
     vines = Parts()
     skip = [(0, 0, 18)]  # keep the tee edge clear
-    for i, (poly, top_z) in enumerate(floaters):
+    for i, (poly, _) in enumerate(floaters):
+        top_z = rng.uniform(50, 120)
         fn = lambda x, y, tz=top_z, s=i, pl=poly: tz + 0.8 * B.fbm(x / 12, y / 12, 3, 500 + s) - 0.6 * (1 - B.smooth(  # noqa: E731
             shapely.distance(pl.exterior, shapely.points(x, y)) / 3))
+        cx, cy = poly.centroid.x, poly.centroid.y
+        wcx, wcy = (float(v) for v in C.to_world(number, cx, cy))
+        pivot = np.array([wcx, wcy, top_z + C.PLACE[number][2]])
         vx, tx = B.triangulate_underside(poly, [], 1.5)
-        f_parts[0].append(place(number, np.column_stack([vx, fn(vx[:, 0], vx[:, 1])])))
-        f_parts[1].append(tx + offset)
-        f_parts[2].append(np.zeros(len(tx), int))
-        f_parts[3].append(B.top_colours(vx[:, 0], vx[:, 1], number))
-        offset += len(vx)
         ux, ut = B.triangulate_underside(poly, [0.8, 2.0, 4.0, 7.0], 6)
         radius = math.sqrt(poly.area / math.pi)
         rv, rd, rt = B.underside(ux, poly, fn, radius * 1.7, 700 + i + number * 50)
-        f_parts[0].append(place(number, rv))
-        f_parts[1].append(ut[:, ::-1] + offset)
-        f_parts[2].append(np.ones(len(ut), int))
-        f_parts[3].append(moss(B.rock_colours(rv[:, 2], rd, rt, ux[:, 0], ux[:, 1], 700 + i), rv[:, 2], rd, ux[:, 0], ux[:, 1], i))
-        offset += len(ux)
-        add_vines(vines, poly, fn, number, rng, density=0.8)
-        add_cliff_vines(vines, rv, ut, rd, poly, number, rng, per_metre=0.5)
-    floater_obj = B.make_mesh(f'{name}_Floaters', np.concatenate(f_parts[0]), np.concatenate(f_parts[1]),
-                              np.concatenate(f_parts[2]), ['Rough', 'IslandRock'], np.concatenate(f_parts[3]))
+        verts = np.concatenate([place(number, np.column_stack([vx, fn(vx[:, 0], vx[:, 1])])), place(number, rv)]) - pivot
+        tris = np.concatenate([tx, ut[:, ::-1] + len(vx)])
+        mats = np.concatenate([np.zeros(len(tx), int), np.ones(len(ut), int)])
+        cols = np.concatenate([B.top_colours(vx[:, 0], vx[:, 1], number),
+                               moss(B.rock_colours(rv[:, 2], rd, rt, ux[:, 0], ux[:, 1], 700 + i), rv[:, 2], rd, ux[:, 0], ux[:, 1], i)])
+        floater_name = f'{name}_Floater{i + 1:02d}'
+        rock_obj = B.make_mesh(floater_name, verts, tris, mats, ['Rough', 'IslandRock'], cols)
+        ivy = Parts()
+        add_vines(ivy, poly, fn, number, rng, density=0.8)
+        add_cliff_vines(ivy, rv, ut, rd, poly, number, rng, per_metre=0.5)
+        ivy.v = [tuple(np.asarray(v, float) - pivot) for v in ivy.v]
+        ivy_obj = ivy.mesh(f'{floater_name}_Ivy', ('TreeBark', 'TreeLeaves', 'Vines')) if ivy.f else None
+        sl.export_fbx(str(OUT / f'{floater_name}.fbx'), [rock_obj, ivy_obj] if ivy.f else [rock_obj])
+        floater_spots.append([floater_name, *[round(float(v), 2) for v in pivot]])
 
     add_vines(vines, land, local_h, number, rng, skip=skip)
     add_cliff_vines(vines, rock_v, utris, dist, land, number, rng)
     vine_obj = vines.mesh(f'{name}_Vines', ('TreeBark', 'TreeLeaves', 'Vines'))
-    exported = [top, rock, floater_obj, vine_obj]
+    exported = [top, rock, vine_obj]
 
     if layout.get('water') is not None:
         wxy, wtris = B.triangulate_underside(layout['water'], [], 6)
@@ -622,7 +629,7 @@ def build_hole(number, rng):
              'cup': world(cx, cy), 'tee_markers': [world(1.5, s * 2.5) for s in (-1, 1)],
              'player_start': world(-5.0, 0.0),
              'gameplay_trees': [world(x, y) for x, y in layout['trees']],
-             'forest': forest_plan(number, layout, local_h, rng)}
+             'forest': forest_plan(number, layout, local_h, rng), 'floaters': floater_spots}
     if number == 1:
         spots['trees'] = [[x, y, ground(x, y)] for x, y in layout['trees']]
         spots['clubhouse'] = [*B.DESIGNS[1]['clubhouse'], ground(*B.DESIGNS[1]['clubhouse'])]
@@ -660,7 +667,7 @@ def world_land(number, layout):
 def build_bridges(layouts, rng):
     """Rope bridge from each hole's green end to the next hole's tee island."""
     bridges = []
-    for n in range(1, 6):
+    for n in range(1, max(C.PLACE)):
         if n not in layouts or n + 1 not in layouts:
             continue
         la, ha = layouts[n]
@@ -769,7 +776,7 @@ def render_course(layouts):
     scene.cycles.use_denoising = True
     scene.render.resolution_x, scene.render.resolution_y = 1600, 1000
     scene.view_settings.view_transform = 'AgX'
-    for label, eye, target, lens in (('course', (-500, 900, 700), (330, 950, -20), 24),
+    for label, eye, target, lens in (('course', (-1500, 900, 1300), (0, 900, -20), 24),
                                      ('closeup', (150, 330, 60), (360, 300, 5), 28)):
         cam_data = bpy.data.cameras.new(label)
         cam_data.lens = lens
@@ -785,11 +792,11 @@ def render_course(layouts):
 
 def main():
     args = sys.argv[sys.argv.index('--') + 1:] if '--' in sys.argv else []
-    wanted = [int(a) for a in args if a.isdigit()] or [1, 2, 3, 4, 5, 6]
+    wanted = [int(a) for a in args if a.isdigit()] or sorted(C.PLACE)
     OUT.mkdir(parents=True, exist_ok=True)
     vine_texture()
     layouts = {}
-    for number in sorted(set(wanted) | {n for w in wanted for n in (w - 1, w + 1) if 1 <= n <= 6}):
+    for number in sorted(set(wanted) | {n for w in wanted for n in (w - 1, w + 1) if n in C.PLACE}):
         layouts[number] = (layout_for(number), None)
     for number in layouts:
         layouts[number] = (layouts[number][0], height_fn(number, layouts[number][0]))

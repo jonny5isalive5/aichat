@@ -2,7 +2,7 @@
 
     import sys, unreal; sys.path.append(unreal.Paths.project_dir() + "Scripts")
     import apply_floating_islands as isl
-    isl.apply_course()          holes 1-6: islands, water, vines, footbridges, trees, rope bridges, fog, sea
+    isl.apply_course()          holes 1-18: islands, water, vines, footbridges, trees, rope bridges, fog, sea
     isl.validate_course()       in a LATER call (collision cooks after the import): what the ball finds at each
                                 tee and cup
     isl.apply_islands(n)        one hole only (no bridges or fog)
@@ -11,7 +11,7 @@ Needs, from Scripts/import_trees.py, the stylised trees and their M_Tree_Bark / 
 materials (the vines and the rope bridges use them too), and the SkyLinksForest C++ class (rebuild first).
 
 Sources (Art/Blender/build_course_islands.py), all in world coordinates, placed at the origin:
-  Art/Exports/Islands/SM_Hnn_{IslandTop,IslandRock,Floaters,Vines,Water,Props}.fbx, Holenn_spots.json
+  Art/Exports/Islands/SM_Hnn_{IslandTop,IslandRock,Vines,Water,Props}.fbx, SM_Hnn_FloaterNN.fbx, Holenn_spots.json
   Art/Exports/Islands/SM_Bridge_nn_mm{,_Rails}.fbx (looks) + SM_Bridge_nn_mm_Guard.fbx (hidden drive slab and walls), Course_links.json (bridges and fog patches)
 Each hole's GolfHole actor is moved to its island: tee, heading, height, aim point, cup, par and name.
 Re-running replaces everything it made; it is safe to run twice.
@@ -30,7 +30,7 @@ MAT_DIR = '/Game/Course/Materials'
 TREES = '/Game/Course/Trees'
 MAP_PATH = '/Game/Maps/Course'
 M = 100.0
-HOLES = range(1, 7)
+HOLES = range(1, 19)
 
 # Slot name in the FBX -> (Unreal material, base colour (linear), roughness, colour variation, mowing stripes,
 # detail texture, physical material). Colour variation and stripes come from the vertex colours (R, G).
@@ -43,7 +43,7 @@ GRASS = {
 }
 ROCK = ('M_Island_Rock', 'T_RockDetail', 'PM_Rough')
 SEA = 'M_Island_Sea'
-PARTS = ('IslandTop', 'IslandRock', 'Floaters', 'Vines', 'Water', 'Props')
+PARTS = ('IslandTop', 'IslandRock', 'Vines', 'Water', 'Props')
 NO_COLLISION = ('Vines',)  # hanging ivy: the ball and buggy pass through
 
 actors = unreal.get_editor_subsystem(unreal.EditorActorSubsystem)
@@ -211,19 +211,19 @@ def remove_flat_ground(number):
         if label == f'Terrain_Hole{number:02d}' and isinstance(actor, unreal.Landscape):
             doomed.append(actor)
         elif path == folder and isinstance(actor, unreal.StaticMeshActor) and (
-                label in ('Rough', 'Green', 'TeeBox') or label.startswith(('Fairway', 'Bunker', 'Water', 'TreeTrunk', 'TreeCanopy'))):
+                label in ('Rough', 'Green', 'TeeBox') or label.startswith(('Fairway', 'Bunker', 'Water', 'Tree'))):
             doomed.append(actor)  # blockout slabs and the placeholder ball trees (the forest replaces them)
         elif number == 1 and label == 'ClubhouseLawn':
             doomed.append(actor)
-        elif path in (f'{folder}/Islands', f'{folder}/Trees'):
+        elif path in (f'{folder}/Islands', f'{folder}/Trees', f'{folder}/Islands/Floaters'):
             doomed.append(actor)  # a previous run
     for actor in doomed:
         actors.destroy_actor(actor)
     print(f'HOLE {number}: removed {len(doomed)} old actors')
 
 
-def place(mesh, label, folder, collide=True, shadow=None):
-    actor = actors.spawn_actor_from_object(mesh, unreal.Vector(0, 0, 0), unreal.Rotator(0, 0, 0))
+def place(mesh, label, folder, collide=True, shadow=None, location=None):
+    actor = actors.spawn_actor_from_object(mesh, location or unreal.Vector(0, 0, 0), unreal.Rotator(0, 0, 0))
     actor.set_actor_label(label)
     actor.set_folder_path(folder)
     if not collide:
@@ -334,6 +334,10 @@ def apply_islands(number, materials=None):
             continue
         collide = part not in NO_COLLISION
         place(import_mesh(name, materials, collide), f'{part}{number:02d}', folder, collide)
+    # Background mini islands, high above the hole: one actor each (pivot in its middle), free to move by hand.
+    for name, x, y, z in spots.get('floaters', []):
+        place(import_mesh(name, materials, collide=False), name.replace(f'SM_H{number:02d}_', ''), f'{folder}/Floaters',
+              collide=False, shadow=True, location=unreal.Vector(x * M, y * M, z * M))
     place_hole(number, spots)
     plant_forest(number, spots)
     print(f'HOLE {number} {spots["name"]} (par {spots["par"]}) placed at z {spots["tee"][2]:+.0f} m')

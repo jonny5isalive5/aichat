@@ -115,6 +115,7 @@ public:
 	UPROPERTY(EditDefaultsOnly, Category = "Golf|Animations") FVector CupPickupOffset = FVector(142.f, 54.f, 0.f);
 	UPROPERTY(EditDefaultsOnly, Category = "Golf|Animations") TSoftObjectPtr<UAnimSequence> PuttMissAnim;
 	UPROPERTY(EditDefaultsOnly, Category = "Golf|Animations") TSoftObjectPtr<UAnimSequence> BadShotAnim;
+	UPROPERTY(EditDefaultsOnly, Category = "Golf|Animations") TSoftObjectPtr<UAnimSequence> TeeUpAnim;
 	UPROPERTY(EditDefaultsOnly, Category = "Golf|Animations") TSoftObjectPtr<UAnimSequence> EnterBuggyAnim;
 	UPROPERTY(EditDefaultsOnly, Category = "Golf|Animations") TSoftObjectPtr<UAnimSequence> ExitBuggyAnim;
 	UPROPERTY(EditDefaultsOnly, Category = "Golf|Animations") TSoftObjectPtr<UAnimSequence> IdleAnim;

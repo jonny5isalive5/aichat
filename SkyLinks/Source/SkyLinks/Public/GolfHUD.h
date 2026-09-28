@@ -82,6 +82,8 @@ private:
 	/** Arrow and distance to my ball, PLAY SHOT / SKIP (only on the way to my ball). */
 	void DrawBallCompass(AGolfPlayerController* Controller, const AActor* From);
 	void DrawPinMarker(AGolfGameState* State);
+	/** Top-down map of the hole on the left with the pin, the balls and the current shot's landing zone. */
+	void DrawMiniMap(AGolfGameState* State, AGolfPlayerController* Controller);
 	void DrawLandingView(AGolfGameState* State, AGolfPlayerController* Controller);
 	void DrawGreenGrid(AGolfPlayerController* Controller);
 	void DrawPreview(AGolfPlayerController* Controller);
