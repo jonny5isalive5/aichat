@@ -32,7 +32,9 @@ enum class EGolfHudButton : uint8
 	Microphone,
 	VoicePanel,
 	VoicePanelBackground,
-	MutePlayer
+	MutePlayer,
+	Buggy,
+	LobbyPanel
 };
 
 /**
@@ -74,6 +76,11 @@ private:
 	void DrawPlayers(AGolfGameState* State);
 	void DrawWind(AGolfGameState* State);
 	void DrawDriving(AGolfPlayerController* Controller);
+	void DrawWalking(AGolfPlayerController* Controller);
+	/** Driving or walking controls, whichever the player is doing. */
+	void DrawMoving(AGolfPlayerController* Controller);
+	/** Arrow and distance to my ball, PLAY SHOT / SKIP (only on the way to my ball). */
+	void DrawBallCompass(AGolfPlayerController* Controller, const AActor* From);
 	void DrawPinMarker(AGolfGameState* State);
 	void DrawLandingView(AGolfGameState* State, AGolfPlayerController* Controller);
 	void DrawGreenGrid(AGolfPlayerController* Controller);

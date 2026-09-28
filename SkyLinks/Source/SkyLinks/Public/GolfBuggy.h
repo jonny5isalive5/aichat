@@ -59,6 +59,9 @@ public:
 	/** How close to the ball the buggy must be before the player can get out and play. */
 	static constexpr float ArriveDistance = 1500.f;
 
+	/** How close (cm, golfer to buggy centre) you must stand to get in with E. */
+	static constexpr float EnterReach = 450.f;
+
 	/** Height of the collision box centre (the actor origin) above the ground. */
 	static constexpr float RideHeight = 85.f;
 

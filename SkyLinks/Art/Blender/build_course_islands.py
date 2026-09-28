@@ -350,6 +350,37 @@ def add_vines(parts, poly, height_local, number, rng, skip=(), density=1.0):
         hang(parts, (float(wx), float(wy)), (ox, oy), z + C.PLACE[number][2], length, rng, leafy)
 
 
+def add_cliff_vines(parts, rock_v, rock_tris, dist, poly, number, rng, per_metre=0.7):
+    """Ivy and roots scattered over the whole underside (not only the rim): strands start on the rock itself,
+    anywhere from just under the lip to deep down the hanging cliffs, and hang free below it (the underside is
+    a height field, so a strand dropping from its surface never runs back into rock)."""
+    corners = rock_v[rock_tris]                               # (n, 3, 3) local metres
+    centre = corners.mean(1)
+    area = 0.5 * np.linalg.norm(np.cross(corners[:, 1] - corners[:, 0], corners[:, 2] - corners[:, 0]), axis=1)
+    d = dist[rock_tris].mean(1)
+    weight = area * np.clip((d - 0.6) / 1.5, 0, 1) * np.exp(-d / 14.0)   # thickest near the lip, thinning inward
+    if weight.sum() <= 0:
+        return
+    count = int(poly.exterior.length * per_metre)
+    picks = np.random.default_rng(rng.randint(0, 2 ** 31)).choice(len(centre), size=count, p=weight / weight.sum())
+    yaw = math.radians(C.PLACE[number][1])
+    for i in picks:
+        a, b, c = corners[i]
+        u, v = rng.random(), rng.random()
+        if u + v > 1:
+            u, v = 1 - u, 1 - v
+        p = a + (b - a) * u + (c - a) * v
+        edge = poly.exterior.interpolate(poly.exterior.project(Point(p[0], p[1])))
+        out = np.array([edge.x - p[0], edge.y - p[1]])
+        out = out / (np.linalg.norm(out) + 1e-9)
+        ox = out[0] * math.cos(yaw) - out[1] * math.sin(yaw)
+        oy = out[0] * math.sin(yaw) + out[1] * math.cos(yaw)
+        wx, wy = C.to_world(number, p[0], p[1])
+        leafy = rng.random() < 0.85
+        length = (rng.uniform(3, 9) if rng.random() < 0.55 else rng.uniform(9, 22)) if leafy else rng.uniform(3, 8)
+        hang(parts, (float(wx), float(wy)), (ox, oy), float(p[2]) + C.PLACE[number][2] + 0.3, length, rng, leafy)
+
+
 # ---------------------------------------------------------------- bridges
 
 WOOD = [(0.42, 0.30, 0.18), (0.36, 0.25, 0.15), (0.48, 0.34, 0.20)]
@@ -357,8 +388,8 @@ ROPE = (0.62, 0.52, 0.34)
 
 
 def rope_bridge(deck_parts, parts, a, b, rng, width=2.4, sag_ratio=0.055, leafy=True, ground=None, guard=None):
-    """Planks on a sagging deck between two anchor points (world x, y, z) into `deck_parts` (collides, so the
-    buggy can cross); rope rails, hangers, log posts and a gate tall enough for the buggy into `parts` (no
+    """Planks on a sagging deck between two anchor points (world x, y, z) into `deck_parts` (looks only: the
+    buggy drives on a smooth slab in `guard`); rope rails, hangers, log posts and a gate tall enough for the buggy into `parts` (no
     collision). ground(x, y) -> island height or None: over land the deck never dips under the grass, so the
     buggy meets no lip at the cliff edge. `guard` gets low walls along both edges (hidden, they only collide)
     so the buggy can't drive off the side."""
@@ -406,10 +437,13 @@ def rope_bridge(deck_parts, parts, a, b, rng, width=2.4, sag_ratio=0.055, leafy=
         parts.tube(rail, 0.05, ROPE, sides=4)
         for i in range(0, steps + 1, 2):
             parts.tube([edge[i], rail[i]], 0.02, ROPE, sides=3)
-            if leafy and rng.random() < 0.35:
-                for k in range(rng.randint(2, 5)):
-                    q = Vector(rail[i]) + Vector((rng.uniform(-0.4, 0.4), rng.uniform(-0.2, 0.2), -k * 0.35))
-                    parts.leaf(q, rng.uniform(0.25, 0.4), rng.choice(VINE_GREENS), 0.4, rng)
+            if leafy and rng.random() < 0.45:
+                # A short strand of ivy trailing off the rope rail, outside the deck.
+                top = Vector(rail[i]) + across * side * 0.05
+                drop = rng.uniform(1.0, 3.2)
+                strand = [tuple(top + across * side * 0.25 * (k / 4) ** 2 - Vector((0, 0, drop * k / 4))) for k in range(5)]
+                w = rng.uniform(0.45, 0.7)
+                parts.ribbon(strand, w, tuple(across * side), (0.9, 0.95, 0.85), 0.5, tile=w * 3.4)
         for end, sign in ((a, 1), (b, -1)):
             post = end + across * side * (width / 2 + 0.2) - flat * sign * 0.6
             parts.tube([tuple(post - Vector((0, 0, 0.8))), tuple(post + Vector((0, 0, 2.95)))], 0.16, rng.choice(WOOD), sides=6)
@@ -418,6 +452,16 @@ def rope_bridge(deck_parts, parts, a, b, rng, width=2.4, sag_ratio=0.055, leafy=
         centre = end - flat * sign * 0.6 + Vector((0, 0, 2.8))  # the buggy's roof clears it
         parts.tube([tuple(centre - across * (width / 2 + 0.4)), tuple(centre + across * (width / 2 + 0.4))], 0.1, rng.choice(WOOD), sides=6)
     if guard is not None:
+        # The smooth surface the buggy actually drives on (the planks are looks only): a thin slab just at
+        # plank-top height, running 1.5 m past each anchor and dipping into the grass so there's no lip.
+        path = [a - flat * 1.5 - Vector((0, 0, 0.2))] + [deck(i / (4 * steps)) + Vector((0, 0, 0.04))
+                                                          for i in range(4 * steps + 1)] + [b + flat * 1.5 - Vector((0, 0, 0.2))]
+        half = across * (width / 2)
+        top_v = [q for p in path for q in (tuple(p - half), tuple(p + half))]
+        bottom_v = [tuple(Vector(q) - Vector((0, 0, 0.08))) for q in top_v]
+        quads = [(2 * i, 2 * i + 2, 2 * i + 3, 2 * i + 1) for i in range(len(path) - 1)]
+        guard._add(top_v, quads, ROPE, 0, 0.0)
+        guard._add(bottom_v, [q[::-1] for q in quads], ROPE, 0, 0.0)
         for side in (-1, 1):
             for i in range(steps):
                 p0, p1 = deck(i / steps), deck((i + 1) / steps)
@@ -542,10 +586,12 @@ def build_hole(number, rng):
         f_parts[3].append(moss(B.rock_colours(rv[:, 2], rd, rt, ux[:, 0], ux[:, 1], 700 + i), rv[:, 2], rd, ux[:, 0], ux[:, 1], i))
         offset += len(ux)
         add_vines(vines, poly, fn, number, rng, density=0.8)
+        add_cliff_vines(vines, rv, ut, rd, poly, number, rng, per_metre=0.5)
     floater_obj = B.make_mesh(f'{name}_Floaters', np.concatenate(f_parts[0]), np.concatenate(f_parts[1]),
                               np.concatenate(f_parts[2]), ['Rough', 'IslandRock'], np.concatenate(f_parts[3]))
 
     add_vines(vines, land, local_h, number, rng, skip=skip)
+    add_cliff_vines(vines, rock_v, utris, dist, land, number, rng)
     vine_obj = vines.mesh(f'{name}_Vines', ('TreeBark', 'TreeLeaves', 'Vines'))
     exported = [top, rock, floater_obj, vine_obj]
 
@@ -641,7 +687,7 @@ def build_bridges(layouts, rng):
         deck, rails, guard = Parts(), Parts(), Parts()
         span, sag = rope_bridge(deck, rails, (ax, ay, za - 0.02), (bx, by, zb - 0.02), rng, ground=ground, guard=guard)
         base = f'SM_Bridge_{n:02d}_{n + 1:02d}'
-        obj, rails_obj, guard_obj = deck.mesh(base), rails.mesh(f'{base}_Rails'), guard.mesh(f'{base}_Guard')
+        obj, rails_obj, guard_obj = deck.mesh(base), rails.mesh(f'{base}_Rails', ('TreeBark', 'TreeLeaves', 'Vines')), guard.mesh(f'{base}_Guard')
         for o in (obj, rails_obj, guard_obj):
             sl.export_fbx(str(OUT / f'{o.name}.fbx'), [o])
         bridges.append(dict(name=obj.name, rails=rails_obj.name, guard=guard_obj.name, a=[ax, ay, za], b=[bx, by, zb],

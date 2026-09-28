@@ -12,8 +12,8 @@ Art/Exports/SM_Club_Iron.fbx, SM_Club_Putter.fbx   Blender clubs (Art/Blender/bu
 
 Animations/Fixed/*.fbx      cleaned swing clips from Art/Blender/fix_swing_clips.py, used instead of the originals
 
-Idle.fbx and Walking.fbx were downloaded on a different Mixamo character (65 bones, other proportions)
-and are skipped until they are re-downloaded on the golfer. Re-running replaces existing assets.
+Idle.fbx and Walking.fbx were downloaded on a different Mixamo character (65 bones, other proportions);
+Art/Blender/retarget_walk_idle.py retargets them onto the golfer (Fixed/). Re-running replaces existing assets.
 """
 from pathlib import Path
 import unreal
@@ -40,9 +40,10 @@ ANIMATIONS = {
     'Silly Dancing celebrate alt1': 'A_CelebrateAlt',
     'Entering Car': 'A_EnterBuggy',
     'Exiting Car': 'A_ExitBuggy',
+    'Walking': 'A_Walk',   # Fixed/ copies retargeted onto the golfer by Art/Blender/retarget_walk_idle.py
+    'Idle': 'A_Idle',
 }
-# Downloaded on another character; import only after re-downloading on the golfer.
-NEEDS_REDOWNLOAD = {'Idle': 'A_Idle', 'Walking': 'A_Walk'}
+NEEDS_REDOWNLOAD = {}
 
 tools = unreal.AssetToolsHelpers.get_asset_tools()
 

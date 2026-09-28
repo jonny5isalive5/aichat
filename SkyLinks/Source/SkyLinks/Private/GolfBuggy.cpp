@@ -272,12 +272,29 @@ void AGolfBuggy::Drive(float DeltaSeconds)
 		return;
 	}
 
+	const FVector Start = GetActorLocation();
 	FHitResult Hit;
 	SetActorLocationAndRotation(Ground, Rotation, true, &Hit);
-	if (Hit.bBlockingHit)
+	if (!Hit.bBlockingHit)
 	{
-		Speed *= -0.2f; // Bumped into a tree or wall.
+		return;
 	}
+	// Glancing blow (a bridge's side, a wall): scrape along it. Head-on (a tree): bounce back.
+	const FVector Normal = FVector(Hit.ImpactNormal.X, Hit.ImpactNormal.Y, 0.f).GetSafeNormal();
+	const FVector Travel = (Forward * FMath::Sign(Speed)).GetSafeNormal2D();
+	if (Normal.IsNearlyZero() || FVector::DotProduct(Travel, -Normal) > 0.6f)
+	{
+		Speed *= -0.2f;
+		return;
+	}
+	const FVector Remaining = FVector::VectorPlaneProject((Ground - Start) * (1.f - Hit.Time), Normal) + Normal * 2.f;
+	FVector SlideGround;
+	FRotator SlideRotation;
+	if (SampleGround(GetActorLocation() + FVector(Remaining.X, Remaining.Y, 0.f), Yaw, SlideGround, SlideRotation, bWater) && !bWater)
+	{
+		SetActorLocationAndRotation(SlideGround, SlideRotation, true);
+	}
+	Speed *= 0.92f;
 }
 
 bool AGolfBuggy::SampleGround(const FVector& Center, float Yaw, FVector& OutLocation, FRotator& OutRotation, bool& bOutWater) const

@@ -16,6 +16,7 @@
 #include "Engine/TextureRenderTarget2D.h"
 #include "Engine/GameInstance.h"
 #include "Engine/World.h"
+#include "EngineUtils.h"
 
 namespace
 {
@@ -46,7 +47,7 @@ void AGolfPlayerController::SetupInputComponent()
 
 	InputComponent->BindKey(EKeys::SpaceBar, IE_Pressed, this, &AGolfPlayerController::OnSwingKeyPressed);
 	InputComponent->BindKey(EKeys::SpaceBar, IE_Released, this, &AGolfPlayerController::OnSwingKeyReleased);
-	InputComponent->BindKey(EKeys::E, IE_Pressed, this, &AGolfPlayerController::OnNextClub);
+	InputComponent->BindKey(EKeys::E, IE_Pressed, this, &AGolfPlayerController::OnUseKey);
 	InputComponent->BindKey(EKeys::Q, IE_Pressed, this, &AGolfPlayerController::OnPrevClub);
 	InputComponent->BindKey(EKeys::R, IE_Pressed, this, &AGolfPlayerController::OnSpinKey);
 	InputComponent->BindKey(EKeys::A, IE_Pressed, this, &AGolfPlayerController::OnAimLeftPressed);
@@ -113,29 +114,108 @@ AGolfBuggy* AGolfPlayerController::GetMyBuggy() const
 
 bool AGolfPlayerController::IsDriving() const
 {
+	return GetPawn() && GetPawn() == GetMyBuggy();
+}
+
+bool AGolfPlayerController::IsWalking() const
+{
+	const AGolfCharacter* Golfer = GetMyGolfer();
+	return Golfer && GetPawn() == Golfer && Golfer->IsRoaming();
+}
+
+bool AGolfPlayerController::IsTravelling() const
+{
 	const AGolfGameState* State = GetGolfState();
-	return State && State->bActiveDriving && State->ActivePlayer == PlayerState && GetPawn() && GetPawn() == GetMyBuggy();
+	return State && State->Phase == EGolfMatchPhase::PlayingHole && State->bActiveDriving && State->ActivePlayer == PlayerState;
+}
+
+AGolfBuggy* AGolfPlayerController::GetBuggyInReach() const
+{
+	const AGolfCharacter* Golfer = GetMyGolfer();
+	const AGolfGameState* State = GetGolfState();
+	if (!IsWalking() || !State)
+	{
+		return nullptr;
+	}
+	// Mirrors AGolfGameMode::FindBuggyToEnter: my own buggy, or before / after a round any nobody has picked.
+	const bool bAnyFree = State->Phase == EGolfMatchPhase::Lobby || State->Phase == EGolfMatchPhase::RoundOver;
+	AGolfBuggy* Best = nullptr;
+	float BestDistance = AGolfBuggy::EnterReach;
+	for (TActorIterator<AGolfBuggy> It(GetWorld()); It; ++It)
+	{
+		AGolfBuggy* Buggy = *It;
+		bool bAllowed = Buggy == GetMyBuggy();
+		if (!bAllowed && bAnyFree)
+		{
+			bAllowed = true;
+			for (const APlayerState* Base : State->PlayerArray)
+			{
+				const AGolfPlayerState* Other = Cast<AGolfPlayerState>(Base);
+				bAllowed &= !(Other && Other->Buggy == Buggy);
+			}
+		}
+		const float Distance = FVector::Dist2D(Buggy->GetActorLocation(), Golfer->GetActorLocation());
+		if (bAllowed && Distance <= BestDistance)
+		{
+			Best = Buggy;
+			BestDistance = Distance;
+		}
+	}
+	return Best;
 }
 
 float AGolfPlayerController::GetDistanceToBall() const
 {
-	const AGolfBuggy* Buggy = GetMyBuggy();
 	const AGolfBall* Ball = GetMyBall();
-	return Buggy && Ball ? FVector::Dist2D(Buggy->GetActorLocation(), Ball->GetRestLocation()) / 100.f : -1.f;
+	return GetPawn() && Ball ? FVector::Dist2D(GetPawn()->GetActorLocation(), Ball->GetRestLocation()) / 100.f : -1.f;
 }
 
-bool AGolfPlayerController::CanPlayShotFromBuggy() const
+bool AGolfPlayerController::CanPlayShot() const
 {
 	const float Meters = GetDistanceToBall();
-	return IsDriving() && Meters >= 0.f && Meters * 100.f <= AGolfBuggy::ArriveDistance;
+	return IsTravelling() && (IsDriving() || IsWalking()) && Meters >= 0.f && Meters * 100.f <= AGolfBuggy::ArriveDistance;
 }
 
 void AGolfPlayerController::OnPlayShotKey()
 {
-	if (CanPlayShotFromBuggy())
+	if (CanPlayShot())
 	{
 		ServerFinishDriving(false);
 	}
+}
+
+void AGolfPlayerController::OnUseKey()
+{
+	if (IsMyTurn())
+	{
+		CycleClub(1); // At the ball, E still changes club.
+	}
+	else if (IsDriving() || GetBuggyInReach())
+	{
+		ServerToggleBuggy();
+	}
+}
+
+void AGolfPlayerController::UpdateWalking()
+{
+	AGolfCharacter* Golfer = GetMyGolfer();
+	if (!Golfer)
+	{
+		return;
+	}
+	// W/S and A/D (the keys also used for throttle and aim), plus the left-thumb stick; relative to the camera.
+	FVector2D Stick(FMath::Clamp(AimInput, -1.f, 1.f) + TouchWalk.X, FMath::Clamp(KeyThrottle, -1.f, 1.f) + TouchWalk.Y);
+	if (Stick.SizeSquared() > 1.f)
+	{
+		Stick.Normalize();
+	}
+	if (Stick.IsNearlyZero(0.05f))
+	{
+		return;
+	}
+	const float Yaw = PlayerCameraManager ? PlayerCameraManager->GetCameraRotation().Yaw : Golfer->GetActorRotation().Yaw;
+	const FRotator Heading(0.f, Yaw, 0.f);
+	Golfer->AddMovementInput(Heading.Vector() * Stick.Y + FRotationMatrix(Heading).GetUnitAxis(EAxis::Y) * Stick.X, 1.f);
 }
 
 float AGolfPlayerController::ViewportHeight() const
@@ -249,6 +329,10 @@ void AGolfPlayerController::Tick(float DeltaSeconds)
 	{
 		const float Pedals = (GasFingers > 0 ? 1.f : 0.f) - (ReverseFingers > 0 ? 1.f : 0.f) + KeyThrottle;
 		GetMyBuggy()->SetDriveInput(Pedals, GetDriveSteer());
+	}
+	else if (IsWalking())
+	{
+		UpdateWalking();
 	}
 
 	const bool bMyTurn = IsMyTurn();
@@ -641,16 +725,22 @@ bool AGolfPlayerController::HandleButton(const FVector2D& Screen, int32 Finger)
 		++ReverseFingers;
 		return true;
 	case EGolfHudButton::PlayShot:
-		if (CanPlayShotFromBuggy())
+		if (CanPlayShot())
 		{
 			ServerFinishDriving(false);
 		}
 		return true;
 	case EGolfHudButton::SkipDrive:
-		if (IsDriving())
+		if (IsTravelling())
 		{
 			ServerFinishDriving(true);
 		}
+		return true;
+	case EGolfHudButton::Buggy:
+		ServerToggleBuggy();
+		return true;
+	case EGolfHudButton::LobbyPanel:
+		bLobbyPanelHidden = !bLobbyPanelHidden;
 		return true;
 	case EGolfHudButton::Club: CycleClub(1); return true;
 	case EGolfHudButton::Spin: CycleSpin(); return true;
@@ -676,6 +766,14 @@ void AGolfPlayerController::OnTouchPressed(ETouchIndex::Type FingerIndex, FVecto
 
 	int32 SizeX = 0, SizeY = 0;
 	GetViewportSize(SizeX, SizeY);
+	if (IsWalking())
+	{
+		if (Screen.X < SizeX * 0.5f)
+		{
+			TouchRoles[Finger] = ETouchRole::Walk; // A floating stick where the thumb went down.
+		}
+		return;
+	}
 	if (IsDriving())
 	{
 		if (Screen.X < SizeX * 0.5f)
@@ -728,6 +826,13 @@ void AGolfPlayerController::OnTouchMoved(ETouchIndex::Type FingerIndex, FVector 
 		}
 		AimLastX = Screen.X;
 		break;
+	case ETouchRole::Walk:
+	{
+		FVector2D Offset = (Screen - TouchStarts[Finger]) / (0.12f * ViewportHeight());
+		Offset.Y = -Offset.Y; // screen up = forward
+		TouchWalk = Offset.SizeSquared() > 1.f ? Offset.GetSafeNormal() : Offset;
+		break;
+	}
 	case ETouchRole::Steer:
 		// Steering is relative to where the thumb went down.
 		TouchSteer = FMath::Clamp((Screen.X - TouchStarts[Finger].X) / (0.15f * ViewportHeight()), -1.f, 1.f);
@@ -753,6 +858,9 @@ void AGolfPlayerController::OnTouchReleased(ETouchIndex::Type FingerIndex, FVect
 	case ETouchRole::Steer:
 		TouchSteer = 0.f;
 		break;
+	case ETouchRole::Walk:
+		TouchWalk = FVector2D::ZeroVector;
+		break;
 	case ETouchRole::Gas:
 		GasFingers = FMath::Max(0, GasFingers - 1);
 		break;
@@ -772,6 +880,14 @@ void AGolfPlayerController::ServerTakeShot_Implementation(const FGolfShotInput& 
 	if (AGolfGameMode* Mode = GetWorld()->GetAuthGameMode<AGolfGameMode>())
 	{
 		Mode->HandleShot(this, Input);
+	}
+}
+
+void AGolfPlayerController::ServerToggleBuggy_Implementation()
+{
+	if (AGolfGameMode* Mode = GetWorld()->GetAuthGameMode<AGolfGameMode>())
+	{
+		Mode->ToggleBuggy(this);
 	}
 }
 

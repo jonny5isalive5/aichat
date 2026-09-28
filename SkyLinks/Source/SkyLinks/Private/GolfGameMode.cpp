@@ -35,6 +35,8 @@ namespace
 	}
 }
 
+const FName AGolfGameMode::BuggyBayTag(TEXT("BuggyBay"));
+
 AGolfGameMode::AGolfGameMode()
 {
 	DefaultPawnClass = AGolfCharacter::StaticClass();
@@ -80,6 +82,27 @@ void AGolfGameMode::BeginPlay()
 	{
 		UE_LOG(LogSkyLinks, Error, TEXT("No GolfHole actors in this level. Run Scripts/build_blockout_course.py or place them by hand."));
 	}
+	SpawnCarPark();
+}
+
+void AGolfGameMode::SpawnCarPark()
+{
+	FActorSpawnParameters Params;
+	Params.SpawnCollisionHandlingOverride = ESpawnActorCollisionHandlingMethod::AlwaysSpawn;
+	for (TActorIterator<AActor> It(GetWorld()); It; ++It)
+	{
+		if (!It->ActorHasTag(BuggyBayTag))
+		{
+			continue;
+		}
+		AGolfBuggy* Buggy = GetWorld()->SpawnActor<AGolfBuggy>(BuggyClass, FTransform(FVector(0.f, 0.f, -100000.f)), Params);
+		if (Buggy)
+		{
+			Buggy->ParkAt(It->GetActorLocation(), It->GetActorRotation().Yaw);
+			CarPark.Add(Buggy);
+		}
+	}
+	UE_LOG(LogSkyLinks, Log, TEXT("Car park: %d buggies"), CarPark.Num());
 }
 
 void AGolfGameMode::PostLogin(APlayerController* NewPlayer)
@@ -101,7 +124,8 @@ void AGolfGameMode::PostLogin(APlayerController* NewPlayer)
 	Player->HoleScores.Init(0, Holes.Num());
 	Player->Golfer = NewPlayer->GetPawn<AGolfCharacter>();
 
-	Player->Buggy = GetWorld()->SpawnActor<AGolfBuggy>(BuggyClass, FTransform(FVector(0.f, 0.f, -100000.f)), Params);
+	// With a car park, players pick their own buggy (E); without one, everyone gets a buggy by the first tee.
+	Player->Buggy = CarPark.Num() > 0 ? nullptr : GetWorld()->SpawnActor<AGolfBuggy>(BuggyClass, FTransform(FVector(0.f, 0.f, -100000.f)), Params);
 	if (Player->Buggy && Holes.Num() > 0)
 	{
 		// Park in the row beside the first tee.
@@ -116,11 +140,10 @@ void AGolfGameMode::PostLogin(APlayerController* NewPlayer)
 	AGolfGameState* State = GetGolfState();
 	if (State->Phase == EGolfMatchPhase::Lobby || State->Phase == EGolfMatchPhase::RoundOver)
 	{
-		// Stand on the first tee while waiting.
-		if (AGolfCharacter* Golfer = GetGolfer(Player); Golfer && Holes.Num() > 0)
+		// Walk around the clubhouse (spawned at the PlayerStart) until the host tees off.
+		if (AGolfCharacter* Golfer = GetGolfer(Player))
 		{
-			const FVector Tee = Holes[0]->GetTeeLocation() + FVector(0.f, 0.f, GolfPhysics::BallRadius);
-			Golfer->SetAddress(Tee, Holes[0]->GetDefaultAimYaw(Tee));
+			Golfer->SetRoaming(true);
 		}
 		State->MulticastAnnounce(FString::Printf(TEXT("%s joined"), *Player->GetPlayerName()));
 	}
@@ -150,7 +173,8 @@ void AGolfGameMode::Logout(AController* Exiting)
 		// Whichever pawn is not possessed would be left behind.
 		for (APawn* Owned : { static_cast<APawn*>(Player->Buggy.Get()), static_cast<APawn*>(Player->Golfer.Get()) })
 		{
-			if (Owned && Owned != Exiting->GetPawn())
+			const bool bCarParkBuggy = Owned && CarPark.Contains(Cast<AGolfBuggy>(Owned));
+			if (Owned && Owned != Exiting->GetPawn() && !bCarParkBuggy)
 			{
 				Owned->Destroy();
 			}
@@ -159,6 +183,7 @@ void AGolfGameMode::Logout(AController* Exiting)
 		Player->Golfer = nullptr;
 		Player->bInRound = false;
 		TeeOrder.Remove(Player);
+		InTransition.Remove(Player);
 
 		AGolfGameState* State = GetGolfState();
 		if (State->ActivePlayer == Player && State->Phase == EGolfMatchPhase::PlayingHole)
@@ -243,6 +268,10 @@ void AGolfGameMode::RequestStartRound(APlayerController* Requester)
 			Player->bInRound = true;
 			Player->HoleScores.Init(0, Holes.Num());
 			TeeOrder.Add(Player);
+			if (!IsValid(Player->Buggy))
+			{
+				AssignBuggy(Player);
+			}
 		}
 	}
 	StartHole(0);
@@ -261,8 +290,7 @@ void AGolfGameMode::StartHole(int32 Index)
 	bShotInFlight = false;
 
 	State->bActiveDriving = false;
-	bBuggyTransition = false;
-	GetWorldTimerManager().ClearTimer(TransitionTimer);
+	InTransition.Reset();
 	const float TeeYaw = Hole->GetDefaultAimYaw(Hole->GetTeeLocation());
 	const FRotator TeeHeading(0.f, TeeYaw, 0.f);
 	const FVector TeeRight = FRotationMatrix(TeeHeading).GetUnitAxis(EAxis::Y);
@@ -274,6 +302,14 @@ void AGolfGameMode::StartHole(int32 Index)
 		Player->bTeedOff = false;
 		Player->Ball->SetActorHiddenInGame(true);
 		PossessGolfer(Player);
+		// Everyone off their feet / out of their buggy and onto the tee (only the first player is shown).
+		if (AGolfCharacter* Golfer = GetGolfer(Player))
+		{
+			const FVector Tee = Hole->GetTeeLocation() + FVector(0.f, 0.f, GolfPhysics::BallRadius);
+			Golfer->SetAddress(Tee, Hole->GetDefaultAimYaw(Tee));
+			Golfer->SetActorHiddenInGame(true);
+			Golfer->SetActorEnableCollision(false);
+		}
 		if (Player->Buggy)
 		{
 			Player->Buggy->ParkAt(Hole->GetTeeLocation() - TeeHeading.Vector() * 1200.f + TeeRight * (Slot * 350.f - 525.f), TeeYaw);
@@ -298,8 +334,7 @@ void AGolfGameMode::StartHole(int32 Index)
 	{
 		if (AGolfCharacter* Golfer = GetGolfer(TeeOrder[0].Get()))
 		{
-			const FVector Tee = Hole->GetTeeLocation() + FVector(0.f, 0.f, GolfPhysics::BallRadius);
-			Golfer->SetAddress(Tee, Hole->GetDefaultAimYaw(Tee));
+			Golfer->SetActorHiddenInGame(false);
 			ViewAll(Golfer, 0.8f);
 		}
 	}
@@ -361,10 +396,12 @@ void AGolfGameMode::BeginTurn(AGolfPlayerState* Player)
 	Ball->SetActorHiddenInGame(false);
 	State->ActivePlayer = Player;
 
-	const bool bBuggyFar = Player->Buggy && FVector::Dist2D(Player->Buggy->GetActorLocation(), Ball->GetRestLocation()) > DriveDistance;
-	if (Player->bTeedOff && bBuggyFar && Player->GetPlayerController())
+	// Off the tee, walk (or drive) to the ball unless the golfer is already standing at it.
+	const AGolfCharacter* Golfer = GetGolfer(Player);
+	const bool bAway = Golfer && FVector::Dist2D(Golfer->GetActorLocation(), Ball->GetRestLocation()) > WalkUpDistance;
+	if (Player->bTeedOff && bAway && Player->GetPlayerController())
 	{
-		StartDriving(Player);
+		StartTravel(Player);
 	}
 	else
 	{
@@ -372,55 +409,204 @@ void AGolfGameMode::BeginTurn(AGolfPlayerState* Player)
 	}
 }
 
-void AGolfGameMode::StartDriving(AGolfPlayerState* Player)
+bool AGolfGameMode::CanRoam(const AGolfPlayerState* Player) const
 {
-	AGolfGameState* State = GetGolfState();
-	State->bActiveDriving = true;
+	const AGolfGameState* State = GetGolfState();
+	if (!Player || !State || !Player->Golfer)
+	{
+		return false;
+	}
+	switch (State->Phase)
+	{
+	case EGolfMatchPhase::Lobby:
+	case EGolfMatchPhase::RoundOver:
+		return true;
+	case EGolfMatchPhase::PlayingHole:
+		return State->ActivePlayer == Player && State->bActiveDriving;
+	default:
+		return false;
+	}
+}
 
+void AGolfGameMode::ViewFor(AGolfPlayerState* Player, AActor* Target, float BlendTime)
+{
+	if (GetGolfState()->Phase == EGolfMatchPhase::PlayingHole)
+	{
+		ViewAll(Target, BlendTime); // Everyone follows the player whose turn it is.
+	}
+	else if (APlayerController* Controller = Player ? Player->GetPlayerController() : nullptr)
+	{
+		Controller->SetViewTargetWithBlend(Target, BlendTime, VTBlend_EaseInOut, 2.f);
+	}
+}
+
+void AGolfGameMode::ShowOnly(AGolfPlayerState* Player)
+{
+	// Hidden golfers also stop colliding, so they can't block the one walking about (or a buggy).
 	for (APlayerState* Base : GameState->PlayerArray)
 	{
 		if (AGolfCharacter* Golfer = GetGolfer(Cast<AGolfPlayerState>(Base)))
 		{
-			Golfer->SetActorHiddenInGame(true);
+			Golfer->SetActorHiddenInGame(Base != Player);
+			Golfer->SetActorEnableCollision(Base == Player);
 		}
 	}
-	ViewAll(Player->Buggy, 0.6f);
-	const float Meters = FVector::Dist2D(Player->Buggy->GetActorLocation(), Player->Ball->GetRestLocation()) / 100.f;
-	State->MulticastAnnounce(FString::Printf(TEXT("%s  ·  DRIVE TO YOUR BALL  ·  %.0f m"), *Player->GetPlayerName(), Meters));
+}
 
-	// Climb in first (seen from behind the buggy), then hand over the controls.
+bool AGolfGameMode::IsBuggyFree(const AGolfBuggy* Buggy) const
+{
+	for (APlayerState* Base : GameState->PlayerArray)
+	{
+		const AGolfPlayerState* Player = Cast<AGolfPlayerState>(Base);
+		if (Player && Player->Buggy == Buggy)
+		{
+			return false;
+		}
+	}
+	return IsValid(Buggy);
+}
+
+AGolfBuggy* AGolfGameMode::FindBuggyToEnter(AGolfPlayerState* Player) const
+{
+	const AGolfCharacter* Golfer = GetGolfer(Player);
+	if (!Golfer)
+	{
+		return nullptr;
+	}
+	TArray<AGolfBuggy*> Candidates;
+	if (IsValid(Player->Buggy))
+	{
+		Candidates.Add(Player->Buggy);
+	}
+	// Before and after a round any free buggy in the car park is up for grabs.
+	if (GetGolfState()->Phase != EGolfMatchPhase::PlayingHole)
+	{
+		for (AGolfBuggy* Buggy : CarPark)
+		{
+			if (IsBuggyFree(Buggy))
+			{
+				Candidates.Add(Buggy);
+			}
+		}
+	}
+	AGolfBuggy* Best = nullptr;
+	float BestDistance = AGolfBuggy::EnterReach;
+	for (AGolfBuggy* Buggy : Candidates)
+	{
+		const float Distance = FVector::Dist2D(Buggy->GetActorLocation(), Golfer->GetActorLocation());
+		if (Distance <= BestDistance)
+		{
+			Best = Buggy;
+			BestDistance = Distance;
+		}
+	}
+	return Best;
+}
+
+void AGolfGameMode::AssignBuggy(AGolfPlayerState* Player)
+{
+	const AGolfCharacter* Golfer = GetGolfer(Player);
+	const FVector From = Golfer ? Golfer->GetActorLocation() : FVector::ZeroVector;
+	AGolfBuggy* Best = nullptr;
+	for (AGolfBuggy* Buggy : CarPark)
+	{
+		if (IsBuggyFree(Buggy) && (!Best || FVector::DistSquared(Buggy->GetActorLocation(), From) < FVector::DistSquared(Best->GetActorLocation(), From)))
+		{
+			Best = Buggy;
+		}
+	}
+	if (!Best)
+	{
+		FActorSpawnParameters Params;
+		Params.SpawnCollisionHandlingOverride = ESpawnActorCollisionHandlingMethod::AlwaysSpawn;
+		Best = GetWorld()->SpawnActor<AGolfBuggy>(BuggyClass, FTransform(FVector(0.f, 0.f, -100000.f)), Params);
+	}
+	Player->Buggy = Best;
+}
+
+void AGolfGameMode::ToggleBuggy(APlayerController* Controller)
+{
+	AGolfPlayerState* Player = Controller ? Controller->GetPlayerState<AGolfPlayerState>() : nullptr;
+	if (!Player || InTransition.Contains(Player) || !CanRoam(Player))
+	{
+		return;
+	}
+	if (IsValid(Player->Buggy) && Controller->GetPawn() == Player->Buggy)
+	{
+		ExitBuggy(Player, false);
+		return;
+	}
+	AGolfCharacter* Golfer = GetGolfer(Player);
+	if (Golfer && Golfer->IsRoaming() && Controller->GetPawn() == Golfer)
+	{
+		if (AGolfBuggy* Buggy = FindBuggyToEnter(Player))
+		{
+			EnterBuggy(Player, Buggy);
+		}
+	}
+}
+
+void AGolfGameMode::StartTravel(AGolfPlayerState* Player)
+{
+	AGolfGameState* State = GetGolfState();
+	State->bActiveDriving = true;
+	ShowOnly(Player);
+	PossessGolfer(Player);
+	if (AGolfCharacter* Golfer = GetGolfer(Player))
+	{
+		Golfer->SetRoaming(true);
+		ViewAll(Golfer, 0.6f);
+		const float Meters = FVector::Dist2D(Golfer->GetActorLocation(), Player->Ball->GetRestLocation()) / 100.f;
+		State->MulticastAnnounce(FString::Printf(TEXT("%s  ·  WALK OR DRIVE TO YOUR BALL  ·  %.0f m"), *Player->GetPlayerName(), Meters));
+	}
+}
+
+void AGolfGameMode::EnterBuggy(AGolfPlayerState* Player, AGolfBuggy* Buggy)
+{
+	APlayerController* Controller = Player->GetPlayerController();
+	AGolfCharacter* Golfer = GetGolfer(Player);
+	if (!Controller || !Golfer || !Buggy)
+	{
+		return;
+	}
+	Player->Buggy = Buggy; // Picked: it's this player's buggy from now on.
+	Buggy->SetOwner(Controller);
+	Golfer->SetRoaming(false);
+	ViewFor(Player, Buggy, 0.6f);
+
+	// Climb in (seen from behind the buggy), then hand over the controls.
 	TWeakObjectPtr<AGolfPlayerState> WeakPlayer = Player;
 	auto TakeWheel = [this, WeakPlayer]()
 	{
-		bBuggyTransition = false;
 		AGolfPlayerState* Driver = WeakPlayer.Get();
-		if (!Driver || !Driver->Buggy || !Driver->GetPlayerController() || !GetGolfState()->bActiveDriving)
+		InTransition.Remove(WeakPlayer);
+		if (!Driver || !IsValid(Driver->Buggy) || !Driver->GetPlayerController() || !CanRoam(Driver))
 		{
 			return;
 		}
-		if (AGolfCharacter* Golfer = GetGolfer(Driver))
+		if (AGolfCharacter* Seated = GetGolfer(Driver))
 		{
 			// With the climb-in animation the golfer stays in the seat and rides along; without it, hide them.
-			if (Golfer->GetBuggyTransitionDuration(true) > 0.f)
+			if (Seated->GetBuggyTransitionDuration(true) > 0.f)
 			{
-				Golfer->MulticastSeatInBuggy(Driver->Buggy);
+				Seated->MulticastSeatInBuggy(Driver->Buggy);
 			}
 			else
 			{
-				Golfer->SetActorHiddenInGame(true);
+				Seated->SetActorHiddenInGame(true);
 			}
 		}
 		Driver->GetPlayerController()->Possess(Driver->Buggy);
-		ViewAll(Driver->Buggy, 0.2f);
+		ViewFor(Driver, Driver->Buggy, 0.2f);
 	};
-	AGolfCharacter* Golfer = GetGolfer(Player);
-	const float Duration = Golfer ? Golfer->GetBuggyTransitionDuration(true) : 0.f;
+	const float Duration = Golfer->GetBuggyTransitionDuration(true);
 	if (Duration > 0.f)
 	{
-		bBuggyTransition = true;
+		InTransition.Add(Player);
 		Golfer->SetActorHiddenInGame(false);
-		Golfer->MulticastBuggyTransition(Player->Buggy, true);
-		GetWorldTimerManager().SetTimer(TransitionTimer, FTimerDelegate::CreateWeakLambda(this, TakeWheel), Duration, false);
+		Golfer->MulticastBuggyTransition(Buggy, true);
+		FTimerHandle Handle;
+		GetWorldTimerManager().SetTimer(Handle, FTimerDelegate::CreateWeakLambda(this, TakeWheel), Duration, false);
 	}
 	else
 	{
@@ -428,53 +614,114 @@ void AGolfGameMode::StartDriving(AGolfPlayerState* Player)
 	}
 }
 
+void AGolfGameMode::ExitBuggy(AGolfPlayerState* Player, bool bThenAddress)
+{
+	AGolfBuggy* Buggy = Player->Buggy;
+	AGolfCharacter* Golfer = GetGolfer(Player);
+	if (!IsValid(Buggy) || !Golfer)
+	{
+		return;
+	}
+	// Stop where it is, hand control back to the golfer and climb out while the camera watches from behind.
+	Buggy->ParkAt(Buggy->GetActorLocation(), Buggy->GetActorRotation().Yaw);
+	PossessGolfer(Player);
+	ViewFor(Player, Buggy, 0.3f);
+
+	TWeakObjectPtr<AGolfPlayerState> WeakPlayer = Player;
+	auto StepOut = [this, WeakPlayer, bThenAddress]()
+	{
+		InTransition.Remove(WeakPlayer);
+		AGolfPlayerState* Returning = WeakPlayer.Get();
+		AGolfCharacter* Walker = GetGolfer(Returning);
+		if (!Returning || !Walker)
+		{
+			return;
+		}
+		if (bThenAddress)
+		{
+			GetGolfState()->bActiveDriving = false;
+			AddressBall(Returning);
+			return;
+		}
+		if (!CanRoam(Returning))
+		{
+			return;
+		}
+		Walker->MulticastStandBesideBuggy(Returning->Buggy);
+		Walker->SetRoaming(true);
+		ViewFor(Returning, Walker, 0.4f);
+	};
+	const float Duration = Golfer->GetBuggyTransitionDuration(false);
+	if (Duration > 0.f)
+	{
+		InTransition.Add(Player);
+		Golfer->SetActorHiddenInGame(false);
+		Golfer->MulticastBuggyTransition(Buggy, false);
+		FTimerHandle Handle;
+		GetWorldTimerManager().SetTimer(Handle, FTimerDelegate::CreateWeakLambda(this, StepOut), Duration, false);
+	}
+	else
+	{
+		StepOut();
+	}
+}
+
 void AGolfGameMode::FinishDriving(APlayerController* Driver, bool bSkip)
 {
 	AGolfGameState* State = GetGolfState();
 	AGolfPlayerState* Player = Driver ? Driver->GetPlayerState<AGolfPlayerState>() : nullptr;
-	if (!Player || !State->bActiveDriving || State->ActivePlayer != Player || !Player->Buggy || bBuggyTransition)
+	if (!Player || State->Phase != EGolfMatchPhase::PlayingHole || !State->bActiveDriving || State->ActivePlayer != Player
+		|| InTransition.Contains(Player) || !Driver->GetPawn())
 	{
 		return;
 	}
 
+	const bool bInBuggy = IsValid(Player->Buggy) && Driver->GetPawn() == Player->Buggy;
 	const FVector BallLocation = Player->Ball->GetRestLocation();
 	if (bSkip)
 	{
-		// Park a few metres back from the ball, off to the side of the line.
-		const float Yaw = State->CurrentHole->GetDefaultAimYaw(BallLocation);
-		const FRotator Heading(0.f, Yaw, 0.f);
-		Player->Buggy->ParkAt(BallLocation - Heading.Vector() * 600.f - FRotationMatrix(Heading).GetUnitAxis(EAxis::Y) * 400.f, Yaw);
+		// Straight to the ball: the buggy parks a few metres back from it, off to the side of the line.
+		if (IsValid(Player->Buggy))
+		{
+			const float Yaw = State->CurrentHole->GetDefaultAimYaw(BallLocation);
+			const FRotator Heading(0.f, Yaw, 0.f);
+			Player->Buggy->ParkAt(BallLocation - Heading.Vector() * 600.f - FRotationMatrix(Heading).GetUnitAxis(EAxis::Y) * 400.f, Yaw);
+		}
 	}
-	else if (FVector::Dist2D(Player->Buggy->GetActorLocation(), BallLocation) > AGolfBuggy::ArriveDistance)
+	else if (FVector::Dist2D(Driver->GetPawn()->GetActorLocation(), BallLocation) > AGolfBuggy::ArriveDistance)
 	{
 		return;
 	}
 
-	// Stop driving now; climb out while everyone watches from behind the buggy, then walk up to the ball.
-	PossessGolfer(Player);
-	ViewAll(Player->Buggy, 0.3f);
-	TWeakObjectPtr<AGolfPlayerState> WeakPlayer = Player;
-	auto StepUp = [this, WeakPlayer]()
+	if (bInBuggy)
 	{
-		bBuggyTransition = false;
-		GetGolfState()->bActiveDriving = false;
-		if (AGolfPlayerState* Returning = WeakPlayer.Get())
-		{
-			AddressBall(Returning);
-		}
-	};
-	AGolfCharacter* Golfer = GetGolfer(Player);
-	const float Duration = Golfer ? Golfer->GetBuggyTransitionDuration(false) : 0.f;
-	if (Duration > 0.f)
-	{
-		bBuggyTransition = true;
-		Golfer->SetActorHiddenInGame(false);
-		Golfer->MulticastBuggyTransition(Player->Buggy, false);
-		GetWorldTimerManager().SetTimer(TransitionTimer, FTimerDelegate::CreateWeakLambda(this, StepUp), Duration, false);
+		ExitBuggy(Player, true); // Climb out, then step up to the ball.
 	}
 	else
 	{
-		StepUp();
+		State->bActiveDriving = false;
+		AddressBall(Player);
+	}
+}
+
+void AGolfGameMode::ReleaseToRoam()
+{
+	for (APlayerState* Base : GameState->PlayerArray)
+	{
+		AGolfPlayerState* Player = Cast<AGolfPlayerState>(Base);
+		AGolfCharacter* Golfer = GetGolfer(Player);
+		if (!Golfer)
+		{
+			continue;
+		}
+		PossessGolfer(Player);
+		Golfer->SetActorHiddenInGame(false);
+		Golfer->SetActorEnableCollision(true);
+		Golfer->SetRoaming(true);
+		if (APlayerController* Controller = Player->GetPlayerController())
+		{
+			Controller->SetViewTargetWithBlend(Golfer, 0.8f);
+		}
 	}
 }
 
@@ -484,13 +731,8 @@ void AGolfGameMode::AddressBall(AGolfPlayerState* Player)
 	AGolfHole* Hole = State->CurrentHole;
 
 	// Only the golfer whose turn it is stands on the course.
-	for (APlayerState* Base : GameState->PlayerArray)
-	{
-		if (AGolfCharacter* Golfer = GetGolfer(Cast<AGolfPlayerState>(Base)))
-		{
-			Golfer->SetActorHiddenInGame(Base != Player);
-		}
-	}
+	ShowOnly(Player);
+	PossessGolfer(Player);
 
 	if (AGolfCharacter* Golfer = GetGolfer(Player))
 	{
@@ -675,6 +917,7 @@ void AGolfGameMode::EndHole()
 		}
 
 		GolfState->Phase = EGolfMatchPhase::RoundOver;
+		ReleaseToRoam();
 		AGolfPlayerState* Winner = nullptr;
 		for (AGolfPlayerState* Player : GetRoundPlayers())
 		{

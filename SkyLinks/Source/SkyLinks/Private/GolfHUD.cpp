@@ -131,7 +131,17 @@ void AGolfHUD::DrawHUD()
 	switch (State->Phase)
 	{
 	case EGolfMatchPhase::Lobby:
-		DrawLobby(State, Controller);
+		// The menu can be put away to walk round the clubhouse and pick a buggy.
+		if (!Controller->IsLobbyPanelHidden() || Controller->IsKeypadOpen())
+		{
+			DrawLobby(State, Controller);
+		}
+		else
+		{
+			DrawMoving(Controller);
+		}
+		RoundButton(EGolfHudButton::LobbyPanel, FVector2D(Canvas->ClipX * 0.5f, Canvas->ClipY - 6.f * U), 4.5f * U,
+			Controller->IsLobbyPanelHidden() ? TEXT("MENU") : TEXT("WALK"), Palette::PanelSolid);
 		break;
 	case EGolfMatchPhase::PlayingHole:
 		DrawPlaying(State, Controller);
@@ -141,7 +151,16 @@ void AGolfHUD::DrawHUD()
 		DrawScorecard(State);
 		break;
 	case EGolfMatchPhase::RoundOver:
-		DrawScorecard(State);
+		if (Controller->IsLobbyPanelHidden())
+		{
+			DrawMoving(Controller);
+		}
+		else
+		{
+			DrawScorecard(State);
+		}
+		RoundButton(EGolfHudButton::LobbyPanel, FVector2D(Canvas->ClipX * 0.5f - 22.f * U, Canvas->ClipY - 12.f * U), 5.f * U,
+			Controller->IsLobbyPanelHidden() ? TEXT("SCORES") : TEXT("WALK"), Palette::PanelSolid);
 		if (Controller->IsLocalController() && GetNetMode() != NM_Client)
 		{
 			RoundButton(EGolfHudButton::Start, FVector2D(Canvas->ClipX * 0.5f, Canvas->ClipY - 12.f * U), 8.f * U, TEXT("AGAIN"), Palette::PanelSolid);
@@ -364,9 +383,18 @@ void AGolfHUD::DrawPlaying(AGolfGameState* State, AGolfPlayerController* Control
 		DrawPowerMeter(Controller);
 		DrawLandingView(State, Controller);
 	}
+	DrawMoving(Controller);
+}
+
+void AGolfHUD::DrawMoving(AGolfPlayerController* Controller)
+{
 	if (Controller->IsDriving())
 	{
 		DrawDriving(Controller);
+	}
+	else if (Controller->IsWalking())
+	{
+		DrawWalking(Controller);
 	}
 }
 
@@ -474,21 +502,19 @@ void AGolfHUD::DrawPinMarker(AGolfGameState* State)
 	}
 }
 
-void AGolfHUD::DrawDriving(AGolfPlayerController* Controller)
+void AGolfHUD::DrawBallCompass(AGolfPlayerController* Controller, const AActor* From)
 {
-	const AGolfBuggy* Buggy = Controller->GetMyBuggy();
 	const AGolfBall* Ball = Controller->GetMyBall();
-	if (!Buggy || !Ball)
+	if (!From || !Ball || !Controller->IsTravelling())
 	{
 		return;
 	}
-
 	// Direction and distance to the ball, top centre. Screen-up is where the camera looks.
 	const FVector2D Compass(Canvas->ClipX * 0.5f, 9.f * U);
 	Disc(Compass, 6.f * U, Palette::Panel);
 	Ring(Compass, 6.f * U, Palette::Trim, 0.3f * U);
-	const FVector ToBall = Ball->GetRestLocation() - Buggy->GetActorLocation();
-	const float CameraYaw = PlayerOwner->PlayerCameraManager ? PlayerOwner->PlayerCameraManager->GetCameraRotation().Yaw : Buggy->GetActorRotation().Yaw;
+	const FVector ToBall = Ball->GetRestLocation() - From->GetActorLocation();
+	const float CameraYaw = PlayerOwner->PlayerCameraManager ? PlayerOwner->PlayerCameraManager->GetCameraRotation().Yaw : From->GetActorRotation().Yaw;
 	const float Bearing = FMath::DegreesToRadians(ToBall.Rotation().Yaw - CameraYaw);
 	const FVector2D Dir(FMath::Sin(Bearing), -FMath::Cos(Bearing));
 	const FVector2D Side(-Dir.Y, Dir.X);
@@ -506,25 +532,55 @@ void AGolfHUD::DrawDriving(AGolfPlayerController* Controller)
 		Line(BallScreen + FVector2D(0.f, 1.4f * U), BallScreen + FVector2D(0.f, 4.f * U), Palette::Green, 0.3f * U);
 	}
 
+	RoundButton(EGolfHudButton::SkipDrive, FVector2D(Canvas->ClipX - 12.f * U, 36.f * U), 4.5f * U, TEXT("SKIP"), Palette::PanelSolid);
+	if (Controller->CanPlayShot())
+	{
+		RoundButton(EGolfHudButton::PlayShot, FVector2D(Canvas->ClipX * 0.5f, Canvas->ClipY - 14.f * U), 9.f * U, TEXT("PLAY SHOT"), FLinearColor(0.1f, 0.45f, 0.15f, 0.95f));
+	}
+	else
+	{
+		Label(TEXT("Get within 15 m of your ball"), FVector2D(Canvas->ClipX * 0.5f, Canvas->ClipY - 5.f * U), 2.6f, Palette::Dim, true);
+	}
+}
+
+void AGolfHUD::DrawDriving(AGolfPlayerController* Controller)
+{
+	const AGolfBuggy* Buggy = Controller->GetMyBuggy();
+	if (!Buggy)
+	{
+		return;
+	}
+	DrawBallCompass(Controller, Buggy);
+
 	// Steering pad on the left: the knob follows the thumb.
 	const FVector2D Pad(18.f * U, Canvas->ClipY - 18.f * U);
 	Box(Pad - FVector2D(12.f * U, 1.f * U), FVector2D(24.f * U, 2.f * U), Palette::Panel);
 	Disc(Pad + FVector2D(Controller->GetDriveSteer() * 11.f * U, 0.f), 3.2f * U, FLinearColor(1.f, 1.f, 1.f, 0.85f));
 	Label(TEXT("DRAG TO STEER"), Pad + FVector2D(0.f, 6.f * U), 2.4f, Palette::Dim, true);
 
-	// Pedals on the right.
+	// Pedals on the right, and the door.
 	RoundButton(EGolfHudButton::Throttle, FVector2D(Canvas->ClipX - 14.f * U, Canvas->ClipY - 16.f * U), 10.f * U, TEXT("GO"), FLinearColor(0.1f, 0.4f, 0.12f, 0.9f));
 	RoundButton(EGolfHudButton::Reverse, FVector2D(Canvas->ClipX - 33.f * U, Canvas->ClipY - 10.f * U), 6.f * U, TEXT("REV"), Palette::PanelSolid);
+	RoundButton(EGolfHudButton::Buggy, FVector2D(Canvas->ClipX - 12.f * U, 50.f * U), 5.f * U, TEXT("GET OUT"), Palette::PanelSolid);
 	Label(FString::Printf(TEXT("%.0f km/h"), FMath::Abs(Buggy->GetSpeed()) * 0.036f), FVector2D(Canvas->ClipX - 14.f * U, Canvas->ClipY - 30.f * U), 3.f, Palette::White, true);
+}
 
-	RoundButton(EGolfHudButton::SkipDrive, FVector2D(Canvas->ClipX - 12.f * U, 36.f * U), 4.5f * U, TEXT("SKIP"), Palette::PanelSolid);
-	if (Controller->CanPlayShotFromBuggy())
+void AGolfHUD::DrawWalking(AGolfPlayerController* Controller)
+{
+	DrawBallCompass(Controller, Controller->GetPawn());
+
+	// Thumb stick on the left: the knob follows the thumb.
+	const FVector2D Pad(18.f * U, Canvas->ClipY - 18.f * U);
+	Disc(Pad, 9.f * U, Palette::Panel);
+	Ring(Pad, 9.f * U, Palette::Trim, 0.3f * U);
+	const FVector2D Stick = Controller->GetWalkStick();
+	Disc(Pad + FVector2D(Stick.X, -Stick.Y) * 7.f * U, 3.2f * U, FLinearColor(1.f, 1.f, 1.f, 0.85f));
+	Label(TEXT("DRAG TO WALK"), Pad + FVector2D(0.f, 12.f * U), 2.4f, Palette::Dim, true);
+
+	if (Controller->GetBuggyInReach())
 	{
-		RoundButton(EGolfHudButton::PlayShot, FVector2D(Canvas->ClipX * 0.5f, Canvas->ClipY - 14.f * U), 9.f * U, TEXT("PLAY SHOT"), FLinearColor(0.1f, 0.45f, 0.15f, 0.95f));
-	}
-	else
-	{
-		Label(TEXT("Drive within 15 m of your ball"), FVector2D(Canvas->ClipX * 0.5f, Canvas->ClipY - 5.f * U), 2.6f, Palette::Dim, true);
+		RoundButton(EGolfHudButton::Buggy, FVector2D(Canvas->ClipX - 16.f * U, Canvas->ClipY - 16.f * U), 8.f * U, TEXT("GET IN"), FLinearColor(0.1f, 0.4f, 0.12f, 0.9f));
+		Label(TEXT("E"), FVector2D(Canvas->ClipX - 16.f * U, Canvas->ClipY - 5.f * U), 2.4f, Palette::Dim, true);
 	}
 }
 

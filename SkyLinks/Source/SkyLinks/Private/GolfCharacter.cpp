@@ -72,6 +72,15 @@ AGolfCharacter::AGolfCharacter()
 	BadShotAnim = TSoftObjectPtr<UAnimSequence>(Anim(TEXT("A_BadShot")));
 	EnterBuggyAnim = TSoftObjectPtr<UAnimSequence>(Anim(TEXT("A_EnterBuggy")));
 	ExitBuggyAnim = TSoftObjectPtr<UAnimSequence>(Anim(TEXT("A_ExitBuggy")));
+	IdleAnim = TSoftObjectPtr<UAnimSequence>(Anim(TEXT("A_Idle")));
+	WalkAnim = TSoftObjectPtr<UAnimSequence>(Anim(TEXT("A_Walk")));
+
+	// Walking between shots: turn toward where you're going (the camera follows behind).
+	UCharacterMovementComponent* Movement = GetCharacterMovement();
+	Movement->bOrientRotationToMovement = false;
+	Movement->RotationRate = FRotator(0.f, 540.f, 0.f);
+	Movement->MaxWalkSpeed = WalkSpeed;
+	Movement->BrakingDecelerationWalking = 1400.f;
 	IronClubAsset = TSoftObjectPtr<UStaticMesh>(Path(TEXT("SM_Club_Iron")));
 	PutterClubAsset = TSoftObjectPtr<UStaticMesh>(Path(TEXT("SM_Club_Putter")));
 }
@@ -82,6 +91,7 @@ void AGolfCharacter::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLi
 	DOREPLIFETIME(AGolfCharacter, BallLocation);
 	DOREPLIFETIME(AGolfCharacter, AimYaw);
 	DOREPLIFETIME(AGolfCharacter, bPuttingStance);
+	DOREPLIFETIME(AGolfCharacter, bRoaming);
 }
 
 void AGolfCharacter::BeginPlay()
@@ -90,6 +100,10 @@ void AGolfCharacter::BeginPlay()
 	GetCharacterMovement()->DisableMovement();
 
 	LoadBody();
+	if (bRoaming)
+	{
+		ApplyRoaming(); // Replicated before BeginPlay on a late joiner.
+	}
 	const bool bHasRealMesh = GetMesh()->GetSkeletalMeshAsset() != nullptr;
 	PlaceholderBody->SetVisibility(!bHasRealMesh);
 	if (!bHasRealMesh)
@@ -104,11 +118,17 @@ void AGolfCharacter::BeginPlay()
 void AGolfCharacter::Restart()
 {
 	Super::Restart();
-	// Possession resets the movement mode; the golfer is placed by code, never walks.
-	GetCharacterMovement()->DisableMovement();
-	if (!bPlayingAction)
+	// Possession resets the movement mode: walking only while roaming, otherwise placed by code.
+	if (bRoaming)
 	{
-		ApplyAddress(); // Not while climbing out of the buggy, or it would snap back to the old spot.
+		ApplyRoaming();
+		return;
+	}
+	GetCharacterMovement()->DisableMovement();
+	// Not while climbing out of the buggy (it would snap back to the old spot), nor before any address exists.
+	if (!bPlayingAction && !BallLocation.IsZero())
+	{
+		ApplyAddress();
 	}
 }
 
@@ -131,6 +151,8 @@ void AGolfCharacter::LoadBody()
 	GetMesh()->SetRelativeScale3D(FVector(GolferScale));
 	GetMesh()->SetAnimationMode(EAnimationMode::AnimationSingleNode);
 	GetMesh()->VisibilityBasedAnimTickOption = EVisibilityBasedAnimTickOption::AlwaysTickPoseAndRefreshBones;
+	IdleAnim.LoadSynchronous();
+	WalkAnim.LoadSynchronous();
 	HoldAddressPose();
 }
 
@@ -165,6 +187,11 @@ void AGolfCharacter::HoldAddressPose()
 		return;
 	}
 	bPlayingAction = false;
+	LocomotionClip.Reset();
+	if (bRoaming)
+	{
+		return; // Walking: Tick plays idle / walk instead.
+	}
 	if (UAnimSequence* Pose = SwingAsset(bPuttingStance ? EGolferSwing::Putt : EGolferSwing::Drive))
 	{
 		GetMesh()->PlayAnimation(Pose, false);
@@ -197,7 +224,7 @@ FName AGolfCharacter::FindBone(const TCHAR* Suffix) const
 void AGolfCharacter::PlaceClub()
 {
 	UStaticMesh* ClubMesh = (bPuttingStance ? PutterClubAsset : IronClubAsset).LoadSynchronous();
-	if (!bHasBody || !ClubMesh)
+	if (!bHasBody || !ClubMesh || bRoaming)
 	{
 		Club->SetVisibility(false);
 		return;
@@ -319,6 +346,10 @@ void AGolfCharacter::SetSeatDrop(float Drop)
 void AGolfCharacter::Tick(float DeltaSeconds)
 {
 	Super::Tick(DeltaSeconds);
+	if (bRoaming)
+	{
+		UpdateLocomotion();
+	}
 	if (BuggyStep != EBuggyStep::Entering && BuggyStep != EBuggyStep::Exiting)
 	{
 		return;
@@ -383,6 +414,10 @@ void AGolfCharacter::MulticastPlayReaction_Implementation(EGolferReaction Reacti
 
 void AGolfCharacter::SetAddress(const FVector& InBallLocation, float InAimYaw, bool bPutting)
 {
+	if (bRoaming)
+	{
+		SetRoaming(false);
+	}
 	bPuttingStance = bPutting;
 	BallLocation = InBallLocation;
 	AimYaw = InAimYaw;
@@ -420,6 +455,10 @@ void AGolfCharacter::ServerSetAim_Implementation(float InAimYaw)
 
 void AGolfCharacter::OnRep_Address()
 {
+	if (bRoaming)
+	{
+		return; // Walking: the player moves the golfer, not the address.
+	}
 	const bool bNewAddress = BallLocation != LastPosedBall || bPuttingStance != bLastPosedPutting;
 	// The aiming player already turned locally; an echo of an older aim from the server would snap
 	// the golfer back and forth. Only take the server's aim when it's a new address.
@@ -480,4 +519,120 @@ void AGolfCharacter::MulticastPlaySwing_Implementation(EGolferSwing Swing)
 		GetMesh()->SetPosition(0.f, false);
 		GetMesh()->SetPlayRate(1.f);
 	}
+}
+
+// ---------------------------------------------------------------- walking
+
+void AGolfCharacter::SetRoaming(bool bRoam)
+{
+	if (!HasAuthority())
+	{
+		return;
+	}
+	bRoaming = bRoam;
+	SetReplicateMovement(bRoam);
+	ApplyRoaming();
+	ForceNetUpdate();
+}
+
+void AGolfCharacter::OnRep_Roaming()
+{
+	ApplyRoaming();
+}
+
+void AGolfCharacter::ApplyRoaming()
+{
+	UCharacterMovementComponent* Movement = GetCharacterMovement();
+	LocomotionClip.Reset();
+	if (!bRoaming)
+	{
+		Movement->StopMovementImmediately();
+		Movement->DisableMovement();
+		Movement->bOrientRotationToMovement = false;
+		CameraArm->bEnableCameraLag = false;
+		CameraArm->bEnableCameraRotationLag = false;
+		CameraArm->SetUsingAbsoluteLocation(true);
+		CameraArm->SetUsingAbsoluteRotation(true);
+		return;
+	}
+
+	// On foot: out of any buggy seat, no club, free to walk.
+	if (BuggyStep != EBuggyStep::None)
+	{
+		LeaveBuggy();
+		BuggyStep = EBuggyStep::None;
+		SetSeatDrop(0.f);
+	}
+	bPlayingAction = false;
+	Club->SetVisibility(false);
+	GetCapsuleComponent()->SetCollisionEnabled(ECollisionEnabled::QueryAndPhysics);
+	Movement->MaxWalkSpeed = WalkSpeed;
+	Movement->bOrientRotationToMovement = true;
+	Movement->SetMovementMode(MOVE_Walking);
+
+	// Follow camera: over the shoulder, trailing the golfer's heading with a little lag.
+	CameraArm->SetUsingAbsoluteLocation(false);
+	CameraArm->SetUsingAbsoluteRotation(false);
+	CameraArm->SetRelativeLocationAndRotation(FVector(0.f, 0.f, 50.f), FRotator(-14.f, 0.f, 0.f));
+	CameraArm->TargetArmLength = 460.f;
+	CameraArm->SocketOffset = FVector(0.f, 0.f, 40.f);
+	CameraArm->bEnableCameraLag = true;
+	CameraArm->CameraLagSpeed = 10.f;
+	CameraArm->bEnableCameraRotationLag = true;
+	CameraArm->CameraRotationLagSpeed = 3.5f;
+	Camera->SetFieldOfView(75.f);
+	UpdateLocomotion();
+}
+
+void AGolfCharacter::UpdateLocomotion()
+{
+	if (!bHasBody || bPlayingAction)
+	{
+		return;
+	}
+	const float Speed = GetVelocity().Size2D();
+	const bool bWalking = Speed > 15.f;
+	UAnimSequence* Clip = (bWalking ? WalkAnim : IdleAnim).Get();
+	if (!Clip)
+	{
+		Clip = WalkAnim.Get() ? WalkAnim.Get() : IdleAnim.Get();
+	}
+	if (!Clip)
+	{
+		return; // Walk / idle not imported yet: the golfer glides in the last pose.
+	}
+	if (LocomotionClip.Get() != Clip)
+	{
+		GetMesh()->PlayAnimation(Clip, true);
+		LocomotionClip = Clip;
+	}
+	// Match the stride to the ground speed so the feet don't skate.
+	GetMesh()->SetPlayRate(Clip == WalkAnim.Get() ? FMath::Clamp(Speed / WalkAnimSpeed, 0.6f, 2.6f) : 1.f);
+}
+
+void AGolfCharacter::MulticastStandBesideBuggy_Implementation(AGolfBuggy* Buggy)
+{
+	if (!Buggy)
+	{
+		return;
+	}
+	// Where the climb-out clip leaves the golfer: by the driver's door, where the climb in starts.
+	const FTransform BuggyFrame(FRotator(0.f, Buggy->GetActorRotation().Yaw, 0.f), Buggy->GetActorLocation() - FVector(0.f, 0.f, AGolfBuggy::RideHeight));
+	FVector Feet = BuggyFrame.TransformPosition(DriverSeat + EnterStartFromSeat);
+	FHitResult Ground;
+	FCollisionQueryParams Params(SCENE_QUERY_STAT(GolferStand), true, this);
+	Params.AddIgnoredActor(Buggy);
+	if (GetWorld()->LineTraceSingleByObjectType(Ground, Feet + FVector(0.f, 0.f, 200.f), Feet - FVector(0.f, 0.f, 300.f),
+		FCollisionObjectQueryParams(ECC_WorldStatic), Params))
+	{
+		Feet.Z = Ground.ImpactPoint.Z;
+	}
+	LeaveBuggy();
+	BuggyStep = EBuggyStep::None;
+	SetSeatDrop(0.f);
+	bPlayingAction = false;
+	LocomotionClip.Reset();
+	SetActorHiddenInGame(false);
+	SetActorLocationAndRotation(Feet + FVector(0.f, 0.f, GetCapsuleComponent()->GetScaledCapsuleHalfHeight() + 2.f),
+		FRotator(0.f, Buggy->GetActorRotation().Yaw - 90.f, 0.f));
 }

@@ -18,8 +18,9 @@ class AGolfGameState;
  * farthest from the cup plays next. Water and out of bounds cost one stroke and replay from the
  * previous spot. A player picks up at double par.
  *
- * Each player has a buggy. Buggies park beside the tee at the start of a hole; when a player's
- * ball is far from their buggy, their turn starts with a drive to the ball.
+ * Players start at the clubhouse and pick a buggy from the car park (E to get in and out). Buggies
+ * park beside the tee at the start of a hole; after the tee shot each turn starts on foot: walk, or
+ * get in the buggy and drive, to the ball and play it (PLAY within 15 m, or SKIP to go straight there).
  */
 UCLASS()
 class SKYLINKS_API AGolfGameMode : public AGameModeBase
@@ -36,8 +37,17 @@ public:
 	void RequestStartRound(APlayerController* Requester);
 	void HandleShot(APlayerController* Shooter, const FGolfShotInput& Input);
 
-	/** The active player arrived at their ball (or chose to skip the drive). */
+	/** The active player is at their ball (on foot or in the buggy) and plays it, or skips the trip there. */
 	void FinishDriving(APlayerController* Driver, bool bSkip);
+
+	/** E: climb out of the buggy you're driving, or into a buggy you're standing next to. */
+	void ToggleBuggy(APlayerController* Player);
+
+	/** Can this player walk and drive freely right now (lobby, round over, or on the way to their ball)? */
+	bool CanRoam(const class AGolfPlayerState* Player) const;
+
+	/** Actor tag on the car park's buggy bays (TargetPoints placed by Scripts/apply_floating_islands.py). */
+	static const FName BuggyBayTag;
 
 	UPROPERTY(EditDefaultsOnly, Category = "Golf")
 	TSubclassOf<AGolfBall> BallClass;
@@ -45,9 +55,9 @@ public:
 	UPROPERTY(EditDefaultsOnly, Category = "Golf")
 	TSubclassOf<AGolfBuggy> BuggyClass;
 
-	/** Turns start with a drive when the buggy is parked further than this from the ball (cm). */
+	/** Turns start on foot when the golfer is further than this from the ball (cm); closer, they step straight up. */
 	UPROPERTY(EditDefaultsOnly, Category = "Golf")
-	float DriveDistance = 3000.f;
+	float WalkUpDistance = 250.f;
 
 	UPROPERTY(EditDefaultsOnly, Category = "Golf")
 	float TurnDelay = 1.8f;
@@ -63,7 +73,23 @@ protected:
 	void StartHole(int32 Index);
 	void NextTurn();
 	void BeginTurn(AGolfPlayerState* Player);
-	void StartDriving(AGolfPlayerState* Player);
+	/** The active player walks (and drives, if they get in their buggy) to their ball. */
+	void StartTravel(AGolfPlayerState* Player);
+	void EnterBuggy(AGolfPlayerState* Player, AGolfBuggy* Buggy);
+	/** Climb out; then walk on (roam) or step up to the ball. */
+	void ExitBuggy(AGolfPlayerState* Player, bool bThenAddress);
+	/** Buggy this player may get into from where they stand (their own, or a free one in the car park). */
+	AGolfBuggy* FindBuggyToEnter(AGolfPlayerState* Player) const;
+	bool IsBuggyFree(const AGolfBuggy* Buggy) const;
+	/** Give a player without a buggy the nearest free one (or a new one if the car park is empty). */
+	void AssignBuggy(AGolfPlayerState* Player);
+	/** Everyone watches during a turn; in the lobby only the player's own camera moves. */
+	void ViewFor(AGolfPlayerState* Player, AActor* Target, float BlendTime);
+	void SpawnCarPark();
+	/** Everyone on foot at the end of a round (or back in the lobby). */
+	void ReleaseToRoam();
+	/** Show (and let collide) only this player's golfer. */
+	void ShowOnly(AGolfPlayerState* Player);
 	void AddressBall(AGolfPlayerState* Player);
 	void PossessGolfer(AGolfPlayerState* Player);
 	void EndHole();
@@ -78,12 +104,15 @@ protected:
 	UPROPERTY()
 	TArray<TObjectPtr<AGolfHole>> Holes;
 
+	/** Buggies parked in the car park bays, free to pick until someone gets in. */
+	UPROPERTY()
+	TArray<TObjectPtr<AGolfBuggy>> CarPark;
+
 	TArray<TWeakObjectPtr<AGolfPlayerState>> TeeOrder;
 	bool bShotInFlight = false;
 	FTimerHandle FlowTimer;
 	FTimerHandle CameraTimer;
 	FTimerHandle StrikeTimer;
-	FTimerHandle TransitionTimer;
-	/** A golfer is climbing into or out of a buggy; ignore drive/skip presses until it finishes. */
-	bool bBuggyTransition = false;
+	/** Golfers climbing into or out of a buggy; their E / PLAY / SKIP presses wait until it finishes. */
+	TSet<TWeakObjectPtr<AGolfPlayerState>> InTransition;
 };

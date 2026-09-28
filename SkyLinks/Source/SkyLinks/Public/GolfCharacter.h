@@ -15,7 +15,8 @@ class AGolfBuggy;
 /**
  * The golfer. Stands addressing the ball; the camera sits low behind the ball looking down the
  * aim line, with the golfer on the left of frame. Its position is derived on every machine from
- * the replicated ball location and aim, so no movement replication is needed.
+ * the replicated ball location and aim. Between shots (and in the lobby) the golfer roams: walks
+ * under the player's control with a follow camera, and movement replicates like any character.
  *
  * The body is the owner's Mixamo-rigged golfer (/Game/Characters/Golfer, imported by
  * Scripts/import_golfer.py). Animations play directly on the mesh (no Anim Blueprint needed):
@@ -71,6 +72,14 @@ public:
 
 	virtual void Tick(float DeltaSeconds) override;
 
+	/** Server: walk freely (on foot, player-controlled) or stand still to be placed by code (address, buggy). */
+	void SetRoaming(bool bRoam);
+	bool IsRoaming() const { return bRoaming; }
+
+	/** Everyone: out of the buggy and standing beside its driver's door (where the climb-out clip ends). */
+	UFUNCTION(NetMulticast, Reliable)
+	void MulticastStandBesideBuggy(AGolfBuggy* Buggy);
+
 	UPROPERTY(VisibleAnywhere, Category = "Golf")
 	TObjectPtr<USpringArmComponent> CameraArm;
 
@@ -108,6 +117,13 @@ public:
 	UPROPERTY(EditDefaultsOnly, Category = "Golf|Animations") TSoftObjectPtr<UAnimSequence> BadShotAnim;
 	UPROPERTY(EditDefaultsOnly, Category = "Golf|Animations") TSoftObjectPtr<UAnimSequence> EnterBuggyAnim;
 	UPROPERTY(EditDefaultsOnly, Category = "Golf|Animations") TSoftObjectPtr<UAnimSequence> ExitBuggyAnim;
+	UPROPERTY(EditDefaultsOnly, Category = "Golf|Animations") TSoftObjectPtr<UAnimSequence> IdleAnim;
+	UPROPERTY(EditDefaultsOnly, Category = "Golf|Animations") TSoftObjectPtr<UAnimSequence> WalkAnim;
+	/** Ground speed (cm/s) the walk clip matches at play rate 1: about two 72 cm steps per 1.4 s cycle. */
+	UPROPERTY(EditDefaultsOnly, Category = "Golf|Animations") float WalkAnimSpeed = 105.f;
+
+	/** On-foot top speed, cm/s (a brisk walk). */
+	UPROPERTY(EditDefaultsOnly, Category = "Golf|Walking") float WalkSpeed = 240.f;
 
 	/** The Mixamo car clips are slow for a golf cart; play them faster. */
 	UPROPERTY(EditDefaultsOnly, Category = "Golf|Buggy") float BuggyAnimRate = 1.5f;
@@ -165,6 +181,16 @@ protected:
 
 	UPROPERTY(ReplicatedUsing = OnRep_Address)
 	bool bPuttingStance = false;
+
+	UPROPERTY(ReplicatedUsing = OnRep_Roaming)
+	bool bRoaming = false;
+
+	UFUNCTION()
+	void OnRep_Roaming();
+	void ApplyRoaming();
+	void UpdateLocomotion();
+	/** Idle or walk clip currently looping while roaming (null when an action or pose owns the mesh). */
+	TWeakObjectPtr<UAnimSequence> LocomotionClip;
 
 	bool bHasBody = false;
 	FVector LastPosedBall = FVector::ZeroVector;

@@ -20,11 +20,12 @@ class AGolfGameState;
  *    marker follows your finger); lift your finger to hit. Drifting left or right while swiping
  *    hooks or slices the shot.
  *  - Tap the club disc to change club, the spin button to cycle spin.
- *  - Driving to your ball: drag on the left half to steer, hold GO / REV on the right.
- *    PLAY SHOT appears once you are close; SKIP drives you there instantly.
+ *  - Walking (lobby, and between shots): drag on the left half to walk; GET IN by a buggy.
+ *  - Driving: drag on the left half to steer, hold GO / REV on the right, GET OUT to climb out.
+ *    PLAY SHOT appears once you are within 15 m of your ball; SKIP takes you there instantly.
  *  - Lobby: HOST gives you a room code; JOIN opens a keypad for a friend's code; INVITE lists friends.
- * Keyboard in the editor: hold Space to charge and release to hit, Q/E club, A/D aim or steer,
- * W/S drive, F play shot, R spin.
+ * Keyboard in the editor: hold Space to charge and release to hit, Q/E club (at the ball), A/D aim or
+ * steer, W/A/S/D walk or drive, E get in / out of a buggy, F play shot, R spin.
  */
 UCLASS()
 class SKYLINKS_API AGolfPlayerController : public APlayerController
@@ -52,6 +53,10 @@ public:
 	UFUNCTION(Server, Reliable)
 	void ServerFinishDriving(bool bSkip);
 
+	/** E: get into the buggy you're standing next to, or out of the one you're driving. */
+	UFUNCTION(Server, Reliable)
+	void ServerToggleBuggy();
+
 	/** Console: host an online (LAN by default) game. */
 	UFUNCTION(Exec)
 	void HostGame();
@@ -62,12 +67,22 @@ public:
 
 	// Read by the HUD.
 	bool IsMyTurn() const;
+	/** In my buggy with the controls (lobby or on the way to my ball). */
 	bool IsDriving() const;
+	/** On foot and free to walk (lobby, or on the way to my ball). */
+	bool IsWalking() const;
+	/** My turn, and I'm on my way to my ball (walking or driving) rather than at it. */
+	bool IsTravelling() const;
+	/** A buggy close enough to get into with E (mine, or a free one before the round), or null. */
+	AGolfBuggy* GetBuggyInReach() const;
+	FVector2D GetWalkStick() const { return TouchWalk; }
+	bool IsLobbyPanelHidden() const { return bLobbyPanelHidden; }
 	AGolfBuggy* GetMyBuggy() const;
 	float GetDriveSteer() const { return FMath::Clamp(TouchSteer + (IsDriving() ? AimInput : 0.f), -1.f, 1.f); }
-	/** Metres from my buggy to my ball, or -1. */
+	/** Metres from me (on foot or in the buggy) to my ball, or -1. */
 	float GetDistanceToBall() const;
-	bool CanPlayShotFromBuggy() const;
+	/** Close enough to my ball to play it (PLAY / F). */
+	bool CanPlayShot() const;
 	AGolfBall* GetMyBall() const;
 	bool IsSwinging() const { return bSwiping || bKeyCharging; }
 	float GetSwingPower() const { return SwingPower; }
@@ -102,7 +117,7 @@ public:
 	static constexpr float FullPowerSwipe = 0.45f;
 
 private:
-	enum class ETouchRole : uint8 { None, Aim, Swipe, Steer, Gas, Reverse };
+	enum class ETouchRole : uint8 { None, Aim, Swipe, Steer, Gas, Reverse, Walk };
 
 	void OnTouchPressed(ETouchIndex::Type FingerIndex, FVector Location);
 	void OnTouchMoved(ETouchIndex::Type FingerIndex, FVector Location);
@@ -114,6 +129,9 @@ private:
 	void OnThrottleBackPressed() { KeyThrottle -= 1.f; }
 	void OnThrottleBackReleased() { KeyThrottle += 1.f; }
 	void OnPlayShotKey();
+	/** E: next club while addressing the ball, otherwise in / out of the buggy. */
+	void OnUseKey();
+	void UpdateWalking();
 
 	void OnSwingKeyPressed();
 	void OnSwingKeyReleased();
@@ -167,7 +185,11 @@ private:
 	int32 GasFingers = 0;
 	int32 ReverseFingers = 0;
 
+	// Walking: the left-thumb stick (-1..1, +Y forward).
+	FVector2D TouchWalk = FVector2D::ZeroVector;
+
 	// Lobby
+	bool bLobbyPanelHidden = false;
 	bool bKeypadOpen = false;
 	FString EnteredCode;
 	bool bFriendsOpen = false;

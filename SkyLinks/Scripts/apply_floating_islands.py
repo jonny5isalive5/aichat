@@ -12,7 +12,7 @@ materials (the vines and the rope bridges use them too), and the SkyLinksForest 
 
 Sources (Art/Blender/build_course_islands.py), all in world coordinates, placed at the origin:
   Art/Exports/Islands/SM_Hnn_{IslandTop,IslandRock,Floaters,Vines,Water,Props}.fbx, Holenn_spots.json
-  Art/Exports/Islands/SM_Bridge_nn_mm.fbx (deck, collides) + SM_Bridge_nn_mm_{Rails,Guard}.fbx, Course_links.json (bridges and fog patches)
+  Art/Exports/Islands/SM_Bridge_nn_mm{,_Rails}.fbx (looks) + SM_Bridge_nn_mm_Guard.fbx (hidden drive slab and walls), Course_links.json (bridges and fog patches)
 Each hole's GolfHole actor is moved to its island: tee, heading, height, aim point, cup, par and name.
 Re-running replaces everything it made; it is safe to run twice.
 """
@@ -222,12 +222,13 @@ def remove_flat_ground(number):
     print(f'HOLE {number}: removed {len(doomed)} old actors')
 
 
-def place(mesh, label, folder, collide=True):
+def place(mesh, label, folder, collide=True, shadow=None):
     actor = actors.spawn_actor_from_object(mesh, unreal.Vector(0, 0, 0), unreal.Rotator(0, 0, 0))
     actor.set_actor_label(label)
     actor.set_folder_path(folder)
     if not collide:
         actor.static_mesh_component.set_collision_enabled(unreal.CollisionEnabled.NO_COLLISION)
+    if shadow is False or (shadow is None and not collide):
         actor.static_mesh_component.set_editor_property('cast_shadow', False)
     return actor
 
@@ -255,12 +256,44 @@ def place_hole(number, spots):
     for actor, spot in zip(markers, spots['tee_markers']):
         actor.set_actor_location(_v(spot, 5.0), False, True)
     if number == 1:
-        for actor in everything:
-            if actor.get_actor_label() == 'Clubhouse':
-                p = actor.get_actor_location()
-                actor.set_actor_location(unreal.Vector(p.x, p.y, spots['clubhouse'][2] * M), False, True)
-            elif isinstance(actor, unreal.PlayerStart):
-                actor.set_actor_location(_v(spots['player_start'], 120.0), False, True)
+        clubhouse = next((a for a in everything if a.get_actor_label() == 'Clubhouse'), None)
+        if clubhouse:
+            p = clubhouse.get_actor_location()
+            clubhouse.set_actor_location(unreal.Vector(p.x, p.y, spots['clubhouse'][2] * M), False, True)
+            setup_car_park(clubhouse, everything)
+        else:
+            for actor in everything:
+                if isinstance(actor, unreal.PlayerStart):
+                    actor.set_actor_location(_v(spots['player_start'], 120.0), False, True)
+
+
+# Car park behind the clubhouse (Art/Blender/build_clubhouse.py, clubhouse-local metres, Blender axes): the row of
+# bays nearest the building spans y 8.5..13.5, bays 2.5 m wide centred on x = -11.25 + 2.5 i; the aisle is y 13.5..20.5.
+CAR_PARK_BAYS = [(-3.75, 11.5), (-1.25, 11.5), (1.25, 11.5), (3.75, 11.5)]
+CAR_PARK_SPAWN = (0.0, 17.0)
+
+
+def setup_car_park(clubhouse, everything):
+    """Buggy bays (TargetPoints tagged BuggyBay: the game parks a free buggy on each) and the PlayerStart in the aisle."""
+    folder = 'Course/Hole01/CarPark'
+    for actor in everything:
+        if str(actor.get_folder_path()) == folder:
+            actors.destroy_actor(actor)
+    frame = clubhouse.get_actor_transform()
+    yaw = clubhouse.get_actor_rotation().yaw
+
+    def world(x, y, lift):
+        # Blender (x, y) -> Unreal clubhouse-local (x, -y), then the clubhouse's own placement.
+        return unreal.MathLibrary.transform_location(frame, unreal.Vector(x * M, -y * M, lift))
+    for i, (x, y) in enumerate(CAR_PARK_BAYS):
+        bay = actors.spawn_actor_from_class(unreal.TargetPoint, world(x, y, 60.0), unreal.Rotator(0, 0, yaw - 90.0))
+        bay.set_actor_label(f'BuggyBay{i + 1}')
+        bay.set_folder_path(folder)
+        bay.set_editor_property('tags', [unreal.Name('BuggyBay')])  # nose out, toward the aisle
+    starts = [a for a in everything if isinstance(a, unreal.PlayerStart)]
+    for start in starts:
+        start.set_actor_location_and_rotation(world(*CAR_PARK_SPAWN, 120.0), unreal.Rotator(0, 0, yaw + 90.0), False, True)
+    print(f'CAR PARK: {len(CAR_PARK_BAYS)} buggy bays, {len(starts)} player start(s) moved to the car park')
 
 
 def _tree_mesh(kind):
@@ -312,14 +345,15 @@ def apply_bridges(materials, links):
         if str(actor.get_folder_path()) == folder:
             actors.destroy_actor(actor)
     for bridge in links['bridges']:
-        mesh = import_mesh(bridge['name'], materials)
-        place(mesh, bridge['name'].replace('SM_', ''), folder)
+        # Planks are looks only (driving over separate planks snags the buggy): no collision.
+        mesh = import_mesh(bridge['name'], materials, collide=False)
+        place(mesh, bridge['name'].replace('SM_', ''), folder, collide=False, shadow=True)
         if bridge.get('rails'):
             # Ropes, posts and gates: no collision, so the buggy can't snag on them.
             rails = import_mesh(bridge['rails'], materials, collide=False)
-            place(rails, bridge['rails'].replace('SM_', ''), folder, collide=False)
+            place(rails, bridge['rails'].replace('SM_', ''), folder, collide=False, shadow=True)
         if bridge.get('guard'):
-            # Low walls along the deck edges: invisible, they only keep the buggy on the bridge.
+            # Invisible: the smooth slab the buggy drives on and low walls along the deck edges.
             guard = place(import_mesh(bridge['guard'], materials), bridge['guard'].replace('SM_', ''), folder)
             guard.set_actor_hidden_in_game(True)
             guard.static_mesh_component.set_editor_property('cast_shadow', False)

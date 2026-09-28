@@ -7,8 +7,7 @@ Run in the editor, Output Log in Python mode:
 
 - Imports Art/Exports/Trees/SM_*.fbx to /Game/Course/Trees (UCX_ trunk boxes become their collision)
 - Builds M_Tree_Bark and M_Tree_Leaves: vertex colours for colour, a detail texture, and a cheap wind sway in
-  the shader (vertex alpha = how much each part moves), so they cost almost nothing on phones; each tree
-  instance gets its own leaf shade
+  the shader; trees stand still (no wind), each tree instance gets its own leaf shade
 - Builds M_Tree_Vines (Art/Textures/T_Vines.png, masked and two-sided) for the islands' hanging ivy
 - Adds two lower LODs to each tree
 - Creates instanced-static-mesh foliage types in /Game/Course/Foliage (FT_Oak_A, FT_Oak_B, FT_Poplar, FT_Pine,
@@ -123,6 +122,11 @@ def tree_material(name, detail, roughness, wind_cm, tint=False, card=None):
     lib.connect_material_property(colour, '', unreal.MaterialProperty.MP_BASE_COLOR)
     lib.connect_material_property(_const(mat, roughness, -1000, 250), '', unreal.MaterialProperty.MP_ROUGHNESS)
 
+    if wind_cm <= 0:
+        # Still: no world position offset at all (moving trees read as bouncing).
+        lib.recompile_material(mat)
+        unreal.EditorAssetLibrary.save_loaded_asset(mat)
+        return mat
     # Wind: a slow sway whose phase drifts across the island (neighbours don't move in lock-step) plus a flutter.
     world = _expr(mat, unreal.MaterialExpressionWorldPosition, -1600, 500)
     time = _expr(mat, unreal.MaterialExpressionTime, -1600, 650)
@@ -138,7 +142,7 @@ def tree_material(name, detail, roughness, wind_cm, tint=False, card=None):
                  _op(mat, unreal.MaterialExpressionMultiply, weight, _const(mat, 0.6, -850, 800), -700, 800), -550, 650)
     flutter = _op(mat, unreal.MaterialExpressionMultiply,
                   _sine(mat, _op(mat, unreal.MaterialExpressionMultiply, time, _const(mat, 2.3, -1000, 950), -850, 950), -700, 950),
-                  _op(mat, unreal.MaterialExpressionMultiply, weight, _const(mat, 0.15, -850, 1050), -700, 1050), -550, 950)
+                  _op(mat, unreal.MaterialExpressionMultiply, weight, _const(mat, 0.0, -850, 1050), -700, 1050), -550, 950)
     xy = _op(mat, unreal.MaterialExpressionAppendVector, sway_x, sway_y, -400, 600)
     xyz = _op(mat, unreal.MaterialExpressionAppendVector, xy, flutter, -250, 700)
     lib.connect_material_property(xyz, '', unreal.MaterialProperty.MP_WORLD_POSITION_OFFSET)
@@ -200,9 +204,9 @@ def _foliage(short, mesh):
 
 
 def import_trees():
-    bark = tree_material('M_Tree_Bark', 'T_RockDetail', 0.9, 6.0)
-    leaves = tree_material('M_Tree_Leaves', 'T_GrassDetail', 0.75, 28.0, tint=True)
-    tree_material('M_Tree_Vines', None, 0.8, 45.0, card=_import_vine_texture())  # the islands' hanging ivy
+    bark = tree_material('M_Tree_Bark', 'T_RockDetail', 0.9, 0.0)
+    leaves = tree_material('M_Tree_Leaves', 'T_GrassDetail', 0.75, 0.0, tint=True)
+    tree_material('M_Tree_Vines', None, 0.8, 18.0, card=_import_vine_texture())  # the islands' hanging ivy, a gentle sway
     made = []
     for fbx in sorted(SOURCE.glob('SM_*.fbx')):
         mesh = _import_mesh(fbx)
