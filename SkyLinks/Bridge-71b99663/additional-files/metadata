@@ -1,0 +1,126 @@
+{
+	"assetNamespace": "fab",
+	"listing":
+	{
+		"averageRating": 0,
+		"createdAt": "",
+		"description": "<p>The model has all the necessary textures for the PBR material. Textures have a resolution of 4096 * 4096</p>",
+		"isAiForbidden": false,
+		"isAiGenerated": false,
+		"lastUpdatedAt": "",
+		"listingType": "3d-model",
+		"media": "https://media.fab.com/image_previews/gallery_images/95ef7300-4803-4378-a06a-1698ae2a42d2/b5f5343a-fd5a-4906-bb0b-0dc533914ed4.jpg",
+		"publishedAt": "2026-07-08T21:53:50.193329Z",
+		"reviewCount": 0,
+		"thumbnail": "https://media.fab.com/image_previews/gallery_images/6dded225-4a14-433d-906a-e652a6729b29/a0cec7d1-8a2d-41a2-9a63-a52fec55f294.jpg",
+		"title": "Bridge",
+		"uid": "71b99663-eed6-40e0-9674-96b218efc974",
+		"updatedAt": "",
+		"user":
+		{
+			"coverImageUrl": "",
+			"profileImageUrl": "https://cdn1.epicgames.com/fab/seller/o-d2f9qyhljh23kdzzjvaupgpb5xs5n6/profile/c2b9e0ab.jpg",
+			"sellerName": "TAK0YT0",
+			"uid": "ae5ca916-5b40-4775-aa75-4d0e75a36413"
+		},
+		"tags": [
+			{
+				"name": "Bridge",
+				"slug": "bridge",
+				"uid": "35664c77-1b5a-4a54-8e91-d766a81e27b3"
+			},
+			{
+				"name": "River",
+				"slug": "river",
+				"uid": "370fa185-c070-454e-980f-e932de44adb2"
+			},
+			{
+				"name": "Crossing",
+				"slug": "crossing",
+				"uid": "71dbfc91-4c30-4fa1-84ff-99416fd80f40"
+			},
+			{
+				"name": "Road",
+				"slug": "road",
+				"uid": "988f4797-e875-45c0-91b2-61a8f40d65a0"
+			}
+		],
+		"category":
+		{
+			"name": "Buildings & Architecture",
+			"path": "buildings-architecture",
+			"slug": "buildings-architecture",
+			"uid": "eec3bdd5-ba7a-45a8-b15d-67462b9630f6"
+		},
+		"assetFormats": [
+			{
+				"assetFormatType":
+				{
+					"name": "FBX",
+					"groupName": "3D Exchange Formats",
+					"code": "fbx",
+					"icon": "cube",
+					"extensions": [
+						"fbx"
+					]
+				}
+			},
+			{
+				"assetFormatType":
+				{
+					"name": "Converted Files",
+					"groupName": "",
+					"code": "converted-files",
+					"icon": "cube",
+					"extensions": [
+						"gltf",
+						"glb",
+						"usdz"
+					]
+				}
+			},
+			{
+				"assetFormatType":
+				{
+					"name": "Additional files",
+					"groupName": "Other Formats",
+					"code": "additional-files",
+					"icon": "file",
+					"extensions": [
+						"zip"
+					]
+				}
+			},
+			{
+				"assetFormatType":
+				{
+					"name": "OBJ",
+					"groupName": "3D Exchange Formats",
+					"code": "obj",
+					"icon": "cube",
+					"extensions": [
+						"obj"
+					]
+				}
+			}
+		],
+		"_PluginMetas":
+		{
+			"apiDataVersion": "0.0.1",
+			"entitlementUid": "",
+			"cacheSize": 0,
+			"downloaded": []
+		}
+	},
+	"target": "",
+	"quality": "",
+	"format": "additional-files",
+	"fileId": "8c11a9fa-7b4d-4ca4-8b2b-63dde8edfb6d",
+	"platformIncluded": "",
+	"distributionPointBaseUrls": [],
+	"distributionMethod": "",
+	"entitlementUid": "",
+	"invertedNormal": false,
+	"isConverted": false,
+	"isQuixel": false
+}
