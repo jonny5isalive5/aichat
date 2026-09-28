@@ -21,7 +21,10 @@ from pathlib import Path
 
 import bpy
 import numpy as np
+import heapq
+
 import shapely
+from shapely import affinity
 from mathutils import Vector
 from shapely.geometry import LineString, MultiPolygon, Point, Polygon, box
 from shapely.ops import nearest_points, unary_union
@@ -42,14 +45,12 @@ STEEL = 1.0
 PATH_EDGE = 0.2  # m: half the soft band along a footpath's border
 
 
-def footpaths(number, land):
+def footpaths(number, land, extra=None):
     """Footpaths drawn in the editor (Scripts/apply_floating_islands.py export_paths -> Paths.json) that cross this
     hole's island, as one local-coordinate polygon kept 1.5 m inside the rim (the rim must match the rock)."""
     source = OUT / 'Paths.json'
-    if not source.is_file():
-        return None
-    shapes = []
-    for path in json.loads(source.read_text()).get('paths', []):
+    shapes = [extra] if extra is not None else []
+    for path in (json.loads(source.read_text()).get('paths', []) if source.is_file() else []):
         pts = np.array(path['points'], float)
         lx, ly = C.to_local(number, pts[:, 0], pts[:, 1])
         if len(pts) >= 2:
@@ -76,6 +77,10 @@ def design_new(number):
     essentials = [fairways.buffer(22), green.buffer(20), tee.buffer(24), woods.buffer(7)]
     essentials += [b.buffer(10) for b in bunkers] + [p.buffer(10) for p in ponds]
     essentials += [LineString(pts).buffer(4) for pts, _ in h['streams']]
+    # Solid grass landings at both ends of every footbridge, so you can walk (and drive) off it onto land.
+    for (fx, fy), heading, length in h['footbridges']:
+        d = np.array([math.cos(math.radians(heading)), math.sin(math.radians(heading))])
+        essentials.append(LineString([np.array((fx, fy)) - d * (length / 2 + 9), np.array((fx, fy)) + d * (length / 2 + 9)]).buffer(6))
     land = unary_union(essentials).buffer(8, 24).buffer(-8, 24)
     land = B.wobble(land, 6.0, 42.0, number * 7 + 1,
                     keep_inside=unary_union([fairways.buffer(8), green.buffer(10), tee.buffer(14)] + [b.buffer(5) for b in bunkers]))
@@ -98,17 +103,219 @@ def design_new(number):
 
 
 def layout_for(number):
-    if number == 1:
-        return B.design_hole(1, B.hole_layouts()[0])
-    return design_new(number)
+    layout = B.design_hole(1, B.hole_layouts()[0]) if number == 1 else design_new(number)
+    return reshape_bunkers(number, layout)
+
+
+# ---------------------------------------------------------------- bunkers
+
+def organic_blob(centre, radius, rng, stretch=(1.0, 1.7), turn=35.0):
+    """A one-off bunker outline: a stretched, lobed, turned blob (sometimes with a second lobe, kidney-like)."""
+    theta = np.linspace(0, 2 * np.pi, 72, endpoint=False)
+    k = [rng.uniform(0.05, 0.18), rng.uniform(0.03, 0.12), rng.uniform(0.0, 0.07)]
+    phase = [rng.uniform(0, 2 * np.pi) for _ in range(3)]
+    rr = 1 + k[0] * np.sin(2 * theta + phase[0]) + k[1] * np.sin(3 * theta + phase[1]) + k[2] * np.sin(5 * theta + phase[2])
+    aspect = rng.uniform(*stretch)
+    pts = np.column_stack([np.cos(theta) * rr * radius * math.sqrt(aspect), np.sin(theta) * rr * radius / math.sqrt(aspect)])
+    blob = Polygon(pts).buffer(0)
+    if rng.random() < 0.3:
+        a = rng.uniform(0, 2 * np.pi)
+        blob = blob.union(Point(math.cos(a) * radius * 0.75, math.sin(a) * radius * 0.5).buffer(radius * rng.uniform(0.45, 0.6), 32))
+    blob = affinity.rotate(blob, rng.uniform(-turn, turn), origin=(0, 0))
+    blob = blob.buffer(0.8, 16).buffer(-0.8, 16)
+    return affinity.translate(blob, centre[0], centre[1])
+
+
+def reshape_bunkers(number, layout):
+    """Owner's brief: bunkers belong on the fairway (the rough is hazard enough), every one a different shape,
+    deeper, some deeper than others. Fairway bunkers move in so most of their sand is on the fairway; greenside
+    bunkers hug the green; big waste bunkers keep their place. Depths go in layout['bunker_depths']."""
+    rng = random.Random(number * 7919)
+    fair, green, land = layout['fairways'], layout['green'], layout['land']
+    gc = green.centroid
+    gr = math.sqrt(green.area / math.pi)
+    cup = Point(*layout['cup'])
+    wet = layout.get('water')
+    safe = land.buffer(-4).difference(layout['tee'].buffer(12)).difference(cup.buffer(6))
+    if wet is not None:
+        safe = safe.difference(wet.buffer(3))
+    bunkers, depths = [], []
+    for b in layout['bunkers']:
+        c = b.centroid
+        r = math.sqrt(b.area / math.pi)
+        if c.distance(green) < 12:
+            r = min(max(r, 3.5), 7.5)
+            d = np.array([c.x - gc.x, c.y - gc.y])
+            d = d / (np.linalg.norm(d) + 1e-9)
+            centre = (gc.x + d[0] * (gr + 0.55 * r), gc.y + d[1] * (gr + 0.55 * r))
+            shape, depth = organic_blob(centre, r, rng, (1.0, 1.5), 90.0), rng.uniform(1.1, 1.9)
+        elif r > 14:
+            shape, depth = organic_blob((c.x, c.y), r, rng, (0.9, 1.3), 20.0), rng.uniform(0.5, 0.9)
+        else:
+            r = min(max(r, 4.0), 10.0)
+            target = fair.buffer(-0.5 * r)
+            if target.is_empty:
+                target = fair
+            centre = (c.x, c.y) if target.contains(c) else nearest_points(target, c)[0].coords[0]
+            shape, depth = organic_blob(centre, r, rng), rng.uniform(0.7, 1.4)
+        shape = shape.intersection(safe)
+        if isinstance(shape, MultiPolygon):
+            shape = max(shape.geoms, key=lambda g: g.area)
+        if shape.is_empty or shape.area < 6 or any(shape.distance(o) < 2.5 for o in bunkers):
+            continue
+        bunkers.append(shapely.set_precision(shape, 0.05))
+        depths.append(round(depth, 2))
+    land_ = layout['land']
+    tee = layout['tee']
+    blocked_water = [wet] if wet is not None else []
+    regions = {
+        B.BUNKER: unary_union(bunkers).intersection(land_) if bunkers else Polygon(),
+        B.GREEN: green.difference(unary_union(bunkers)) if bunkers else green,
+        B.TEE: tee,
+    }
+    regions[B.FAIRWAY] = fair.intersection(land_).difference(unary_union(bunkers + [green, tee] + blocked_water))
+    regions[B.ROUGH] = land_.difference(unary_union([regions[B.BUNKER], regions[B.GREEN], regions[B.FAIRWAY], tee]))
+    regions = {k: v for k, v in regions.items() if not v.is_empty}
+    return dict(layout, bunkers=bunkers, bunker_depths=depths, regions=regions)
+
+
+# ---------------------------------------------------------------- buggy paths
+
+CART_WIDTH = 3.2        # m
+CART_OFFSET = 7.0       # m: the path likes to run this far off the edge of the fairway, in the rough
+ANCHORS = {}            # hole -> {'in': (x, y), 'out': (x, y)} local metres; filled in main() from the bridges
+CAR_PARK_EXIT = (-73.0, -30.0)  # hole 1: the edge of the clubhouse pad nearest the first tee
+SOFT_PATHS = False      # --soft-paths: no path borders in the mesh (fallback if the mesher chokes on them)
+
+
+def _route(cost, xs, ys, start, goal):
+    """Cheapest 8-connected route over the cost grid between two cells (Dijkstra); None if cut off."""
+    ny, nx = cost.shape
+    best = np.full(cost.shape, np.inf)
+    back = {}
+    best[start] = 0.0
+    heap = [(0.0, start)]
+    steps = [(-1, -1, 1.414), (-1, 0, 1), (-1, 1, 1.414), (0, -1, 1), (0, 1, 1), (1, -1, 1.414), (1, 0, 1), (1, 1, 1.414)]
+    while heap:
+        d, (j, i) = heapq.heappop(heap)
+        if (j, i) == goal:
+            break
+        if d > best[j, i]:
+            continue
+        for dj, di, length in steps:
+            jj, ii = j + dj, i + di
+            if 0 <= jj < ny and 0 <= ii < nx and np.isfinite(cost[jj, ii]):
+                nd = d + length * 0.5 * (cost[j, i] + cost[jj, ii])
+                if nd < best[jj, ii]:
+                    best[jj, ii] = nd
+                    back[(jj, ii)] = (j, i)
+                    heapq.heappush(heap, (nd, (jj, ii)))
+    if not np.isfinite(best[goal]):
+        return None, np.inf
+    cells = [goal]
+    while cells[-1] != start:
+        cells.append(back[cells[-1]])
+    cells.reverse()
+    return [(xs[i], ys[j]) for j, i in cells], best[goal]
+
+
+def cart_path(number, layout):
+    """The buggy path (local LineString): from where you arrive (the rope bridge, or the car park on hole 1) past
+    the side of the tee, down one side of the hole in the rough a few metres off the fairway, to the side of
+    the green, and on to the bridge to the next hole. It keeps off greens, tees, bunkers and water (brooks are
+    crossed only on the footbridges) and away from the cliff edge."""
+    land, step = layout['land'], 2.0
+    minx, miny, maxx, maxy = land.bounds
+    xs, ys = np.arange(minx, maxx, step), np.arange(miny, maxy, step)
+    gx, gy = np.meshgrid(xs, ys)
+    px, py = gx.ravel(), gy.ravel()
+    pts = shapely.points(px, py)
+    # Off the cliff edge (a hard 2 m, and it prefers 6 m) but through narrow necks of land where it must.
+    cost = np.where(shapely.contains_xy(land.buffer(-2.0), px, py), 1.0, np.inf)
+    cost = cost + np.where(shapely.distance(land.exterior, pts) < 6.0, 4.0, 0.0)
+    anchors = ANCHORS.get(number, {})
+    for a in anchors.values():
+        near = (np.hypot(px - a[0], py - a[1]) < 7) & shapely.contains_xy(land, px, py)
+        cost[near] = 1.0
+    wet = layout.get('water')
+    if wet is not None:
+        cost[shapely.contains_xy(wet.buffer(1.0), px, py)] = np.inf
+        for (cx, cy), heading, length in layout.get('footbridges', []):
+            d = np.array([math.cos(math.radians(heading)), math.sin(math.radians(heading))])
+            deck = LineString([np.array((cx, cy)) - d * length / 2, np.array((cx, cy)) + d * length / 2])
+            approach = LineString([np.array((cx, cy)) - d * (length / 2 + 10), np.array((cx, cy)) + d * (length / 2 + 10)])
+            cost[shapely.distance(deck, pts) < 1.8] = 1.0  # the deck itself
+            cost[(shapely.distance(approach, pts) < 1.8) & shapely.contains_xy(land, px, py)] = 1.0  # onto the banks
+    fair_d = shapely.distance(layout['fairways'], pts)
+    cost = cost + np.where(fair_d == 0, 6.0, 0.15 * np.clip(np.abs(fair_d - CART_OFFSET), 0, 20))
+    hazards = unary_union([layout['green'].buffer(3), layout['tee'].buffer(3)] + [b.buffer(2.5) for b in layout['bunkers']])
+    cost = cost + np.where(shapely.contains_xy(hazards, px, py), 80.0, 0.0)
+    cost = cost.reshape(gx.shape)
+
+    def cell(p):
+        j = int(np.clip(round((p[1] - miny) / step), 0, len(ys) - 1))
+        i = int(np.clip(round((p[0] - minx) / step), 0, len(xs) - 1))
+        if np.isfinite(cost[j, i]):
+            return (j, i)
+        ok = np.argwhere(np.isfinite(cost))
+        k = np.argmin((ok[:, 0] - j) ** 2 + (ok[:, 1] - i) ** 2)
+        return tuple(ok[k])
+
+    cx, cy = layout['cup']
+    gr = math.sqrt(layout['green'].area / math.pi)
+    u = np.array([cx, cy]) / (math.hypot(cx, cy) + 1e-9)
+    v = np.array([-u[1], u[0]])
+    start = anchors.get('in', (-6.0, 0.0))
+    best = None
+    for side in (-1, 1):
+        tee_side = (-2.0, 13.0 * side)
+        green_side = tuple(np.array([cx, cy]) - u * gr * 0.3 + v * side * (gr + 8))
+        stops = [start, tee_side, green_side] + ([anchors['out']] if 'out' in anchors else [])
+        route, total = [], 0.0
+        for a, b in zip(stops[:-1], stops[1:]):
+            leg, c = _route(cost, xs, ys, cell(a), cell(b))
+            if leg is None:
+                total = np.inf
+                break
+            route += leg if not route else leg[1:]
+            total += c
+        if total < (best[0] if best else np.inf):
+            best = (total, route)
+    if not best or len(best[1]) < 2:
+        return None
+    line = np.array(best[1])
+    for _ in range(3):  # Chaikin smoothing: grid steps become gentle curves
+        q = 0.75 * line[:-1] + 0.25 * line[1:]
+        r = 0.25 * line[:-1] + 0.75 * line[1:]
+        line = np.vstack([line[:1], np.column_stack([q, r]).reshape(-1, 2), line[-1:]])
+    return LineString(line).simplify(0.3)
+
+
+def bunker_relief(x, y, layout):
+    """Height change from the bunkers: a sand floor sunk by each bunker's depth behind a short steep face, and a
+    small grassy lip round the rim, so they read as real hollows."""
+    dz = np.zeros(len(x))
+    pts = shapely.points(x, y)
+    for b, depth in zip(layout['bunkers'], layout.get('bunker_depths', [])):
+        minx, miny, maxx, maxy = b.bounds
+        near = (x > minx - 3) & (x < maxx + 3) & (y > miny - 3) & (y < maxy + 3)
+        if not near.any():
+            continue
+        inside = shapely.contains_xy(b, x[near], y[near])
+        edge = shapely.distance(b.boundary, pts[near])
+        wall = min(2.2, 0.35 * math.sqrt(b.area / math.pi) + 0.8)
+        dz[near] += np.where(inside, -depth * B.smooth(edge / wall), 0.18 * depth * (1 - B.smooth(edge / 1.8)))
+    return dz
 
 
 def height_fn(number, layout):
     """Local surface height (m, relative to the tee) as a function of local x, y."""
-    if number == 1:
-        return lambda x, y: B.top_height(x, y, layout, 1)
-    base = lambda x, y: B.top_height(x, y, layout, number)  # noqa: E731
-    water = layout['water']
+    plain = dict(layout, bunkers=[])  # the old shallow round dips are replaced by bunker_relief
+
+    def base(x, y):
+        x, y = np.asarray(x, float), np.asarray(y, float)
+        return B.top_height(x, y, plain, number) + bunker_relief(x, y, layout)
+    water = layout.get('water')
     if water is None:
         return base
 
@@ -533,7 +740,8 @@ def forest_plan(number, layout, height_local, rng):
     land = layout['land']
     keep_clear = unary_union([layout['fairways'].buffer(6), layout['green'].buffer(9), layout['tee'].buffer(16)]
                              + [b.buffer(3) for b in layout['bunkers']]
-                             + ([layout['water'].buffer(2.5)] if layout.get('water') is not None else []))
+                             + ([layout['water'].buffer(2.5)] if layout.get('water') is not None else [])
+                             + ([layout['paths'].buffer(2.5)] if layout.get('paths') is not None else []))
     mix = C.HOLES[number]['mix'] if number in C.HOLES else {'Oak_A': 3, 'Oak_B': 3, 'Poplar': 1, 'Birch': 2, 'Bush_Round': 2, 'Bush_Flowering': 1}
     kinds, weights = zip(*mix.items())
     woods = layout.get('woods')
@@ -569,8 +777,14 @@ def build_hole(number, rng):
     B.build_materials()
     name = f'SM_H{number:02d}'
 
-    paths = footpaths(number, layout['land'])
-    if paths is not None:
+    cart = cart_path(number, layout)
+    cart_area = None
+    if cart is not None:
+        cart_area = cart.buffer(CART_WIDTH / 2, 12).difference(
+            unary_union([layout['green'].buffer(0.5), layout['tee']] + layout['bunkers']))
+    paths = footpaths(number, layout['land'], cart_area)
+    layout = dict(layout, paths=paths, cart=cart)
+    if paths is not None and not SOFT_PATHS:
         # Path borders become mesh edges: a thin band between an inner and an outer outline carries the fade.
         layout = dict(layout, extra_lines=[paths.buffer(-PATH_EDGE), paths.buffer(PATH_EDGE).intersection(layout['land'].buffer(-1.0))])
     xy, tris, attrs = B.triangulate_top(layout)
@@ -656,16 +870,19 @@ def build_hole(number, rng):
     def world(x, y):
         wx, wy = C.to_world(number, x, y)
         return [round(float(wx), 3), round(float(wy), 3), ground(x, y)]
+    paths_zone = layout['paths'].buffer(4) if layout.get('paths') is not None else None
+    clear_trees = [(x, y) for x, y in layout['trees'] if paths_zone is None or not paths_zone.contains(Point(x, y))]
     cx, cy = layout['cup']
     info = C.HOLES.get(number, dict(name='Harbor Point', par=4, aim=(240, 0)))
     spots = {'hole': number, 'name': info['name'], 'par': info['par'],
              'tee': world(0, 0), 'yaw': C.PLACE[number][1], 'aim_local': list(info['aim']),
              'cup': world(cx, cy), 'tee_markers': [world(1.5, s * 2.5) for s in (-1, 1)],
              'player_start': world(-5.0, 0.0),
-             'gameplay_trees': [world(x, y) for x, y in layout['trees']],
+             'gameplay_trees': [world(x, y) for x, y in clear_trees],
+             'cart_path': [world(x, y) for x, y in (layout['cart'].coords if layout.get('cart') is not None else [])],
              'forest': forest_plan(number, layout, local_h, rng), 'floaters': floater_spots, 'footbridges': footbridge_spots}
     if number == 1:
-        spots['trees'] = [[x, y, ground(x, y)] for x, y in layout['trees']]
+        spots['trees'] = [[x, y, ground(x, y)] for x, y in clear_trees]
         spots['clubhouse'] = [*B.DESIGNS[1]['clubhouse'], ground(*B.DESIGNS[1]['clubhouse'])]
     (OUT / f'Hole{number:02d}_spots.json').write_text(json.dumps(spots, indent=1) + '\n')
     print(f'HOLE {number} {spots["name"]}: top {len(tris)}, rock {len(utris)}, vines {len(vines.f)} faces, '
@@ -698,14 +915,14 @@ def world_land(number, layout):
     return C.world_geom(number, layout['land'])
 
 
-def build_bridges(layouts, rng):
-    """Rope bridge from each hole's green end to the next hole's tee island."""
-    bridges = []
+def bridge_anchor_points(layouts):
+    """Where each rope bridge lands (world metres): {n: (ax, ay, bx, by)} for the bridge from hole n's green end
+    to hole n+1's tee island, 4 m in from each cliff edge so the posts stand on grass."""
+    out = {}
     for n in range(1, max(C.PLACE)):
         if n not in layouts or n + 1 not in layouts:
             continue
-        la, ha = layouts[n]
-        lb, hb = layouts[n + 1]
+        la, lb = layouts[n][0], layouts[n + 1][0]
         wa, wb = world_land(n, la), world_land(n + 1, lb)
         cup = Point(*C.to_world(n, *la['cup']))
         tee = Point(*C.to_world(n + 1, 0, 0))
@@ -714,9 +931,21 @@ def build_bridges(layouts, rng):
         pa, pb = nearest_points(near_a.boundary, near_b.boundary)
         va = np.array([pb.x - pa.x, pb.y - pa.y])
         va /= np.linalg.norm(va)
-        # Step 4 m in from each cliff edge so the posts stand on grass.
-        ax, ay = pa.x - va[0] * 4, pa.y - va[1] * 4
-        bx, by = pb.x + va[0] * 4, pb.y + va[1] * 4
+        out[n] = (pa.x - va[0] * 4, pa.y - va[1] * 4, pb.x + va[0] * 4, pb.y + va[1] * 4)
+    return out
+
+
+def build_bridges(layouts, rng):
+    """Rope bridge from each hole's green end to the next hole's tee island."""
+    bridges = []
+    anchors = bridge_anchor_points(layouts)
+    for n in range(1, max(C.PLACE)):
+        if n not in anchors:
+            continue
+        la, ha = layouts[n]
+        lb, hb = layouts[n + 1]
+        wa, wb = world_land(n, la), world_land(n + 1, lb)
+        ax, ay, bx, by = anchors[n]
         za = float(ha(*[np.array([v]) for v in C.to_local(n, ax, ay)])[0]) + C.PLACE[n][2]
         zb = float(hb(*[np.array([v]) for v in C.to_local(n + 1, bx, by)])[0]) + C.PLACE[n + 1][2]
         def ground(x, y, n=n, ha=ha, hb=hb, wa=wa, wb=wb):
@@ -788,7 +1017,7 @@ def render_course(layouts):
             attr = mat.node_tree.nodes.new('ShaderNodeVertexColor')
             attr.layer_name = 'Col'
             colours = {'Rough': (0.05, 0.13, 0.02), 'Fairway': (0.08, 0.22, 0.03), 'Green': (0.09, 0.27, 0.04),
-                       'TeeBox': (0.08, 0.22, 0.03), 'Bunker': (0.42, 0.33, 0.2), 'Water': (0.02, 0.07, 0.1)}
+                       'TeeBox': (0.08, 0.22, 0.03), 'Bunker': (0.29, 0.21, 0.12), 'Water': (0.02, 0.07, 0.1)}
             key = next((k for k in colours if mat.name.startswith(k)), None)
             if key:
                 mat.node_tree.nodes['Principled BSDF'].inputs['Base Color'].default_value = (*colours[key], 1)
@@ -837,6 +1066,13 @@ def main():
     if '--check' in args:
         check_course(layouts)
         return
+    global SOFT_PATHS
+    SOFT_PATHS = '--soft-paths' in args
+    # Buggy paths start at the bridge you arrive on (the car park on hole 1) and end at the one you leave on.
+    for n, (ax, ay, bx, by) in bridge_anchor_points(layouts).items():
+        ANCHORS.setdefault(n, {})['out'] = tuple(float(v) for v in C.to_local(n, ax, ay))
+        ANCHORS.setdefault(n + 1, {})['in'] = tuple(float(v) for v in C.to_local(n + 1, bx, by))
+    ANCHORS.setdefault(1, {})['in'] = CAR_PARK_EXIT
     # --links-only: skip the islands (already built) and redo the bridges, fog and previews for the whole course.
     if '--links-only' in args:
         layouts = {n: (layout_for(n), None) for n in C.PLACE}

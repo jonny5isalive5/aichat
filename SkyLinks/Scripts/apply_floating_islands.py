@@ -10,6 +10,7 @@
     isl.fab_footbridges()       the Fab bridge on every brook crossing (deck_offset_cm=... to lift / sink it)
     isl.make_path_decal()       M_PathDecal: drag Decal Actors onto the grass for footpaths (the easy way)
     isl.export_paths()          save footpaths drawn as splines (actors named Path...) for baking into the islands
+    isl.refresh_islands()       after an island rebuild: new meshes in place, trees replanted; your floaters stay
     isl.reimport_tops([4])      re-import island surfaces only (after paths are baked); nothing else moves
     isl.update_materials()      rebuild the island materials only (grass paths: Mesh Paint, Blue channel)
     isl.raise_fog(20)           lift every cloud patch 20 m (or lower it with a negative number)
@@ -46,7 +47,7 @@ GRASS = {
     'Fairway': ('M_Island_Fairway', (0.07, 0.2, 0.03),    0.9,  0.25, 0.14, 'T_GrassDetail', 'PM_Fairway'),
     'Green':   ('M_Island_Green',   (0.08, 0.25, 0.035),  0.85, 0.12, 0.0,  'T_GrassDetail', 'PM_Green'),
     'TeeBox':  ('M_Island_TeeBox',  (0.075, 0.21, 0.032), 0.9,  0.1,  0.0,  'T_GrassDetail', 'PM_Fairway'),
-    'Bunker':  ('M_Island_Bunker',  (0.42, 0.33, 0.2),    1.0,  0.15, 0.0,  'T_SandDetail',  'PM_Bunker'),
+    'Bunker':  ('M_Island_Bunker',  (0.29, 0.21, 0.12),   1.0,  0.2,  0.0,  'T_SandDetail',  'PM_Bunker'),  # darker, deeper sand
 }
 ROCK = ('M_Island_Rock', 'T_RockDetail', 'PM_Rough')
 PATH_COLOUR = (0.23, 0.16, 0.09)  # painted footpaths (vertex colour B) on the grass: packed earth
@@ -510,6 +511,32 @@ def make_path_decal():
     unreal.EditorAssetLibrary.save_loaded_asset(mat)
     print(f'PATH DECAL ready: {MAT_DIR}/M_PathDecal')
     return mat
+
+
+def refresh_islands(holes=HOLES):
+    """After a rebuild of the island meshes (new bunkers, buggy paths...): re-import every hole's surface, rock,
+    ivy, water and footbridge deck in place, re-seat the holes, footbridges and rope bridges, and replant the
+    trees (clear of the new paths and bunkers). Your moved floating islands, the fog and the sea stay as they are.
+    Trees you moved or painted with the course's FT_ foliage types are replaced by the fresh planting."""
+    world = unreal.get_editor_subsystem(unreal.UnrealEditorSubsystem).get_editor_world()
+    materials = build_materials()
+    unreal.SkyLinksForest.clear_foliage(world, _foliage_types())
+    for number in holes:
+        spots_path = SOURCE / f'Hole{number:02d}_spots.json'
+        if not spots_path.is_file():
+            continue
+        spots = json.loads(spots_path.read_text())
+        for part in PARTS:
+            name = f'SM_H{number:02d}_{part}'
+            if (SOURCE / f'{name}.fbx').is_file() and unreal.EditorAssetLibrary.does_asset_exist(f'{DEST}/{name}'):
+                import_mesh(name, materials, part not in NO_COLLISION)
+        place_hole(number, spots)
+        place_footbridges(number, spots)
+        plant_forest(number, spots)
+        print(f'HOLE {number} refreshed')
+    apply_bridges(materials, json.loads((SOURCE / 'Course_links.json').read_text()))
+    unreal.get_editor_subsystem(unreal.LevelEditorSubsystem).save_current_level()
+    print('ISLANDS REFRESHED. Run validate_course() in a separate call.')
 
 
 def reimport_tops(holes=HOLES):
