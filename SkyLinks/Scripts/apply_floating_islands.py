@@ -5,7 +5,9 @@
     isl.apply_course()          holes 1-18: islands, water, vines, footbridges, trees, rope bridges, fog, sea
     isl.validate_course()       in a LATER call (collision cooks after the import): what the ball finds at each
                                 tee and cup
-    isl.apply_islands(n)        one hole only (no bridges or fog)
+    isl.apply_islands(n)        one hole only (no bridges or fog; its trees are added again, so clear by hand)
+    isl.trees_to_foliage()      turn the scripted forests into foliage (Foliage mode > Select moves single trees)
+    isl.raise_fog(20)           lift every cloud patch 20 m (or lower it with a negative number)
 
 Needs, from Scripts/import_trees.py, the stylised trees and their M_Tree_Bark / M_Tree_Leaves / M_Tree_Vines
 materials (the vines and the rope bridges use them too), and the SkyLinksForest C++ class (rebuild first).
@@ -296,6 +298,41 @@ def setup_car_park(clubhouse, everything):
     print(f'CAR PARK: {len(CAR_PARK_BAYS)} buggy bays, {len(starts)} player start(s) moved to the car park')
 
 
+FOG_LIFT = 20.0  # m above the heights in Course_links.json: the cloud patches drift up among the islands
+
+
+def _foliage_types():
+    """FT_* foliage types from import_trees (one per tree / bush kind)."""
+    types = [unreal.load_asset(f'/Game/Course/Foliage/{path.split("/")[-1].split(".")[0]}')
+             for path in unreal.EditorAssetLibrary.list_assets('/Game/Course/Foliage', recursive=False)]
+    types = [t for t in types if isinstance(t, unreal.FoliageType)]
+    assert types, '/Game/Course/Foliage is empty: run import_trees.import_trees() first'
+    return types
+
+
+def trees_to_foliage():
+    """Hand every SkyLinksForest's trees to the level's foliage: in Foliage mode (Select tool) each tree can
+    be clicked and moved on its own, and the brush paints more. Instancing (and the fps) stays the same."""
+    types = _foliage_types()
+    moved = 0
+    for forest in [a for a in _all() if isinstance(a, unreal.SkyLinksForest)]:
+        moved += forest.convert_to_foliage(types)
+    unreal.get_editor_subsystem(unreal.LevelEditorSubsystem).save_current_level()
+    print(f'TREES: {moved} trees and bushes are now foliage')
+
+
+def raise_fog(meters=20.0):
+    """Move every cloud patch up (or down) without rebuilding anything else."""
+    count = 0
+    for actor in _all():
+        if str(actor.get_folder_path()) == 'Course/Fog':
+            p = actor.get_actor_location()
+            actor.set_actor_location(unreal.Vector(p.x, p.y, p.z + meters * M), False, True)
+            count += 1
+    unreal.get_editor_subsystem(unreal.LevelEditorSubsystem).save_current_level()
+    print(f'FOG: {count} patches moved {meters:+.0f} m')
+
+
 def _tree_mesh(kind):
     path = f'{TREES}/SM_Tree_{kind}' if not kind.startswith('Bush') else f'{TREES}/SM_{kind}'
     mesh = unreal.load_asset(path)
@@ -320,7 +357,9 @@ def plant_forest(number, spots):
     total = 0
     for kind, transforms in by_kind.items():
         total += forest.add_trees(_tree_mesh(kind), transforms)
-    print(f'HOLE {number}: planted {total} trees and bushes')
+    # Into the level's foliage, so single trees can be moved in Foliage mode (the forest actor goes away).
+    forest.convert_to_foliage(_foliage_types())
+    print(f'HOLE {number}: planted {total} trees and bushes (foliage)')
 
 
 def apply_islands(number, materials=None):
@@ -375,7 +414,8 @@ def add_fog(links):
         print('FOG skipped: LocalFogVolume not available in this engine build')
         return
     for i, (x, y, z, radius) in enumerate(links['fog']):
-        fog = actors.spawn_actor_from_class(unreal.LocalFogVolume, unreal.Vector(x * M, y * M, z * M), unreal.Rotator(0, 0, 0))
+        fog = actors.spawn_actor_from_class(unreal.LocalFogVolume, unreal.Vector(x * M, y * M, (z + FOG_LIFT) * M),
+                                            unreal.Rotator(0, 0, 0))
         fog.set_actor_scale3d(unreal.Vector(radius / 5.0, radius / 5.0, radius / 10.0))  # flattened like a cloud bank
         fog.set_actor_label(f'CloudFog{i:02d}')
         fog.set_folder_path(folder)
@@ -405,6 +445,8 @@ def apply_course(holes=HOLES):
     world = unreal.get_editor_subsystem(unreal.UnrealEditorSubsystem).get_editor_world()
     assert world.get_path_name() == f'{MAP_PATH}.Course', f'Open {MAP_PATH} first'
     materials = build_materials()
+    # Replanting every hole: clear the old foliage trees first (they'd double up otherwise).
+    unreal.SkyLinksForest.clear_foliage(world, _foliage_types())
     for number in holes:
         apply_islands(number, materials)
     links = json.loads((SOURCE / 'Course_links.json').read_text())
