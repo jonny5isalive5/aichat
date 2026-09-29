@@ -75,6 +75,8 @@ def design_new(number):
     woods = unary_union(h['woods']) if h['woods'] else Point(0, 0).buffer(0.01)
 
     essentials = [fairways.buffer(22), green.buffer(20), tee.buffer(24), woods.buffer(7)]
+    if h.get('stadium'):
+        essentials.append(green.buffer(STADIUM_FRONT + STADIUM_TIERS * 1.1 + 12))  # room round the 18th green for the stands
     essentials += [b.buffer(10) for b in bunkers] + [p.buffer(10) for p in ponds]
     essentials += [LineString(pts).buffer(4) for pts, _ in h['streams']]
     # Solid grass landings at both ends of every footbridge, so you can walk (and drive) off it onto land.
@@ -83,7 +85,7 @@ def design_new(number):
         essentials.append(LineString([np.array((fx, fy)) - d * (length / 2 + 9), np.array((fx, fy)) + d * (length / 2 + 9)]).buffer(6))
     land = unary_union(essentials).buffer(8, 24).buffer(-8, 24)
     land = B.wobble(land, 6.0, 42.0, number * 7 + 1,
-                    keep_inside=unary_union([fairways.buffer(8), green.buffer(10), tee.buffer(14)] + [b.buffer(5) for b in bunkers]))
+                    keep_inside=unary_union([fairways.buffer(8), green.buffer(10 if not h.get('stadium') else STADIUM_FRONT + STADIUM_TIERS * 1.1 + 8), tee.buffer(14)] + [b.buffer(5) for b in bunkers]))
     if isinstance(land, MultiPolygon):
         land = max(land.geoms, key=lambda g: g.area)
 
@@ -99,7 +101,7 @@ def design_new(number):
     regions[B.ROUGH] = land.difference(unary_union([regions[B.BUNKER], regions[B.GREEN], regions[B.FAIRWAY], tee]))
     return dict(land=land, main=land, regions=regions, fairways=fairways, green=green, bunkers=bunkers, tee=tee,
                 cup=(cx, cy), pads=[((-14, 0), 9)], water=wet, woods=woods, streams=streams, ponds=ponds,
-                footbridges=h['footbridges'], trees=[], floaters=[], landform=h.get('landform'))
+                footbridges=h['footbridges'], trees=[], floaters=[], landform=h.get('landform'), stadium=h.get('stadium', False))
 
 
 def layout_for(number):
@@ -262,8 +264,13 @@ def cart_path(number, layout):
             cost[(shapely.distance(approach, pts) < 1.8) & shapely.contains_xy(land, px, py)] = 1.0  # onto the banks
     fair_d = shapely.distance(layout['fairways'], pts)
     cost = cost + np.where(fair_d == 0, 6.0, 0.15 * np.clip(np.abs(fair_d - CART_OFFSET), 0, 20))
-    hazards = unary_union([layout['green'].buffer(3), layout['tee'].buffer(3)] + [b.buffer(2.5) for b in layout['bunkers']])
+    hazards = unary_union([layout['green'].buffer(6), layout['tee'].buffer(4)] + [b.buffer(4) for b in layout['bunkers']])
     cost = cost + np.where(shapely.contains_xy(hazards, px, py), 80.0, 0.0)
+    if layout.get('stadium'):
+        cost[shapely.contains_xy(stadium_zone(layout), px, py)] = np.inf
+    # ...and it keeps a respectful distance from greens and bunkers where it has room.
+    clearance = unary_union([layout['green'].buffer(12)] + [b.buffer(7) for b in layout['bunkers']])
+    cost = cost + np.where(shapely.contains_xy(clearance, px, py), 3.0, 0.0)
     cost = cost.reshape(gx.shape)
 
     def cell(p):
@@ -283,7 +290,7 @@ def cart_path(number, layout):
     best = None
     for side in (-1, 1):
         tee_side = (-2.0, 13.0 * side)
-        green_side = tuple(np.array([cx, cy]) - u * gr * 0.3 + v * side * (gr + 8))
+        green_side = tuple(np.array([cx, cy]) - u * gr * 0.3 + v * side * (gr + 11))
         stops = [start, tee_side, green_side] + ([anchors['out']] if 'out' in anchors else [])
         route, total = [], 0.0
         for a, b in zip(stops[:-1], stops[1:]):
@@ -323,12 +330,22 @@ def hole_paths(number, layout):
     return cart, paths
 
 
-def bunker_relief(x, y, layout):
-    """Height change from the bunkers: a sand floor sunk by each bunker's depth behind a short steep face, and a
-    small grassy lip round the rim, so they read as real hollows."""
-    dz = np.zeros(len(x))
-    pts = shapely.points(x, y)
+def bunker_floors(layout, ground):
+    """Each bunker's floor is dug into the slope rather than draped over it; this is the mean height of its rim."""
+    floors = []
     for b, depth in zip(layout['bunkers'], layout.get('bunker_depths', [])):
+        ring = b.exterior
+        rim = np.array([ring.interpolate(i / 64, normalized=True).coords[0] for i in range(64)])
+        floors.append(float(np.mean(ground(rim[:, 0], rim[:, 1]))))
+    return floors
+
+
+def bunker_relief(x, y, h, layout, floors):
+    """The bunkers cut into the ground h: inside, a steep face dropping to the level sand floor (tall on the uphill
+    side, short on the downhill side); outside, a small grassy lip round the rim, so they read as real hollows."""
+    h = h.copy()
+    pts = shapely.points(x, y)
+    for b, depth, floor in zip(layout['bunkers'], layout.get('bunker_depths', []), floors):
         minx, miny, maxx, maxy = b.bounds
         near = (x > minx - 3) & (x < maxx + 3) & (y > miny - 3) & (y < maxy + 3)
         if not near.any():
@@ -338,8 +355,12 @@ def bunker_relief(x, y, layout):
         wall = min(2.2, 0.35 * math.sqrt(b.area / math.pi) + 0.8)
         # Grass lip: zero on the sand's edge, rising to a crest ~0.6 m out and easing back into the turf by 2.4 m.
         lip = 0.2 * depth * np.sin(np.pi * np.clip(edge / 2.4, 0, 1)) ** 1.5
-        dz[near] += np.where(inside, -depth * B.smooth(edge / wall), lip)
-    return dz
+        w = B.smooth(edge / wall)
+        # Nearly level sand (a third of the slope left in it), always at least 40% of the depth below the grass:
+        # a clear cut face on the uphill side, a low lip on the downhill side.
+        sand = np.minimum(0.35 * h[near] + 0.65 * floor - depth, h[near] - 0.4 * depth)
+        h[near] = np.where(inside, h[near] * (1 - w) + sand * w, h[near] + lip)
+    return h
 
 
 # Each hole's big shape, in turn round the course so neighbours differ: how the ground falls from tee to green.
@@ -383,6 +404,7 @@ def landform(number, layout):
     wall_left, wall_right = BANKS * spec.get('wall_left', 3.0), BANKS * spec.get('wall_right', 3.0)
     green_lift = spec.get('green', 0.0)
     fair, green, tee = layout['fairways'], layout['green'], layout['tee']
+    land_edge = layout['land'].exterior
     water = layout.get('water')
 
     def shape(x, y):
@@ -391,21 +413,25 @@ def landform(number, layout):
         pts = shapely.points(x, y)
         h = profile(t) + camber * np.clip(lat, -35, 35)
         fd = shapely.distance(fair, pts)
-        h = h + np.where(lat > 0, wall_right, wall_left) * B.smooth((fd - 2) / 16)
+        # Banks and humps ease off toward the cliff edge, so the rim stays gentle where it meets the rock.
+        rim = B.smooth(shapely.distance(land_edge, pts) / 14)
+        h = h + np.where(lat > 0, wall_right, wall_left) * B.smooth((fd - 2) / 16) * rim
         # Rolling ground: broad swales and humps down the fairway too, not just in the rough.
-        h = h + 1.4 * B.fbm(x / 45, y / 45, 3, number + 300)
+        h = h + 1.4 * B.fbm(x / 45, y / 45, 3, number + 300) * rim
         return h, pts
 
     water_level = 0.0
     if water is not None:
         wx, wy = np.asarray(water.exterior.coords).T if water.geom_type == 'Polygon' else \
             np.concatenate([np.asarray(g.exterior.coords) for g in water.geoms]).T
-        water_level = min(float(np.mean(shape(wx, wy)[0])), -0.3)
+        water_level = float(np.mean(shape(wx, wy)[0]))
+        if water.distance(tee) < 40:
+            water_level = min(water_level, -0.4)  # water just off the tee lies below it
     layout['water_offset'] = water_level
     clat = -cx * uy + cy * ux
     green_level = float(profile(1.0) + camber * np.clip(clat, -35, 35) + green_lift)
-    if water is not None:
-        green_level = max(green_level, water_level + 0.8)
+    if water is not None and water.distance(green) < 30:
+        green_level = max(green_level, water_level + 0.8)  # a green beside water stands above it
 
     def fn(x, y):
         x, y = np.asarray(x, float), np.asarray(y, float)
@@ -423,15 +449,50 @@ def landform(number, layout):
     return fn
 
 
+def path_bed(local_h, cart):
+    """Set the buggy path into the ground: level across its width (cut into slopes like a terrace) and sunk a
+    little below the grass, with soft shoulders either side."""
+    if cart is None:
+        return local_h
+    half = CART_WIDTH / 2
+
+    def fn(x, y):
+        x, y = np.asarray(x, float), np.asarray(y, float)
+        h = local_h(x, y)
+        pts = shapely.points(x, y)
+        d = shapely.distance(cart, pts)
+        near = d < half + 2.5
+        if not near.any():
+            return h
+        along = shapely.line_locate_point(cart, pts[near])
+        centre = shapely.get_coordinates(shapely.line_interpolate_point(cart, along))
+        level = local_h(centre[:, 0], centre[:, 1]) - 0.12
+        w = 1 - B.smooth((d[near] - half) / 2.5)
+        h = h.copy()
+        h[near] = h[near] * (1 - w) + level * w
+        return h
+    return fn
+
+
 def height_fn(number, layout):
     """Local surface height (m, relative to the tee) as a function of local x, y."""
     plain = dict(layout, bunkers=[])  # the old shallow round dips are replaced by bunker_relief
     land_shape = landform(number, layout)
     level = layout['water_offset']
 
+    def ground(x, y):
+        x, y = np.asarray(x, float), np.asarray(y, float)
+        return B.top_height(x, y, plain, number) + land_shape(x, y)
+    floors = bunker_floors(layout, ground)
+    cx, cy = layout['cup']
+    cup_level = float(ground(np.array([cx]), np.array([cy]))[0])
+
     def base(x, y):
         x, y = np.asarray(x, float), np.asarray(y, float)
-        return B.top_height(x, y, plain, number) + land_shape(x, y) + bunker_relief(x, y, layout)
+        h = bunker_relief(x, y, ground(x, y), layout, floors)
+        # A level patch round the hole so the cup sits flush on a sloping green.
+        w = 1 - B.smooth((np.hypot(x - cx, y - cy) - 0.6) / 1.6)
+        return h * (1 - w) + cup_level * w
     water = layout.get('water')
     if water is None:
         return base
@@ -858,7 +919,8 @@ def forest_plan(number, layout, height_local, rng):
     keep_clear = unary_union([layout['fairways'].buffer(6), layout['green'].buffer(9), layout['tee'].buffer(16)]
                              + [b.buffer(3) for b in layout['bunkers']]
                              + ([layout['water'].buffer(2.5)] if layout.get('water') is not None else [])
-                             + ([layout['paths'].buffer(2.5)] if layout.get('paths') is not None else []))
+                             + ([layout['paths'].buffer(2.5)] if layout.get('paths') is not None else [])
+                             + ([stadium_zone(layout)] if layout.get('stadium') else []))
     mix = C.HOLES[number]['mix'] if number in C.HOLES else {'Oak_A': 3, 'Oak_B': 3, 'Poplar': 1, 'Birch': 2, 'Bush_Round': 2, 'Bush_Flowering': 1}
     kinds, weights = zip(*mix.items())
     woods = layout.get('woods')
@@ -887,6 +949,134 @@ def forest_plan(number, layout, height_local, rng):
 
 # ---------------------------------------------------------------- build one hole
 
+STADIUM_FRONT = 14.0   # m beyond the green's edge where the first row of seats starts
+STADIUM_TIERS = 9
+
+
+def stadium_zone(layout):
+    """Ground the 18th-green stands, hospitality box and leaderboard take up (local), or None."""
+    if not layout.get('stadium'):
+        return None
+    gr = math.sqrt(layout['green'].area / math.pi)
+    outer = Point(*layout['cup']).buffer(gr + STADIUM_FRONT + STADIUM_TIERS * 1.1 + 4)
+    return outer.difference(Point(*layout['cup']).buffer(gr + STADIUM_FRONT - 1.5))
+
+
+def build_stadium(parts, number, layout, local_h, rng):
+    """The finale: a horseshoe grandstand behind the 18th green packed with a colourful crowd, flags along the
+    top, a glass-fronted hospitality box on one side and a big leaderboard on the other, and a timber sleeper
+    wall holding the pond in front of the green. Material 0 is vertex-coloured, 1 glass / screens."""
+    cx, cy = layout['cup']
+    gr = math.sqrt(layout['green'].area / math.pi)
+    base = C.PLACE[number][2]
+    yaw = math.radians(C.PLACE[number][1])
+
+    def world(x, y, z):
+        wx, wy = C.to_world(number, x, y)
+        return Vector((float(wx), float(wy), float(z) + base))
+
+    def ground(x, y):
+        return float(local_h(np.array([float(x)]), np.array([float(y)]))[0])
+
+    def wdir(dx, dy):
+        c, s_ = math.cos(yaw), math.sin(yaw)
+        return Vector((dx * c - dy * s_, dx * s_ + dy * c, 0.0)).normalized()
+
+    concrete, facade, blue = (0.72, 0.72, 0.7), (0.93, 0.94, 0.95), (0.05, 0.22, 0.62)
+    shirts = [(0.85, 0.12, 0.1), (0.1, 0.3, 0.8), (0.95, 0.95, 0.95), (0.95, 0.75, 0.1), (0.1, 0.55, 0.25),
+              (0.9, 0.45, 0.65), (0.2, 0.2, 0.22), (0.95, 0.5, 0.1), (0.4, 0.7, 0.95)]
+    skins = [(0.93, 0.76, 0.62), (0.75, 0.55, 0.4), (0.45, 0.3, 0.2), (0.98, 0.85, 0.72)]
+    r0 = gr + STADIUM_FRONT
+    tread, rise = 1.1, 0.55
+    a_from, a_to, step = -105.0, 105.0, 5.0      # degrees round the green, 0 = straight behind it
+    angles = np.arange(a_from, a_to + 0.01, step)
+    for a0, a1 in zip(angles[:-1], angles[1:]):
+        am = math.radians((a0 + a1) / 2)
+        seg = math.radians(step) * r0
+        # The stands stand on the lowest ground under this slice; they are built up level from there.
+        gx, gy = cx + math.cos(am) * (r0 + 5), cy + math.sin(am) * (r0 + 5)
+        floor = min(ground(cx + math.cos(am) * r, cy + math.sin(am) * r) for r in (r0, r0 + 5, r0 + 10)) - 0.5
+        top = max(ground(cx + math.cos(am) * r0, cy + math.sin(am) * r0), floor + 0.5)
+        radial = wdir(math.cos(am), math.sin(am))
+        tangent = wdir(-math.sin(am), math.cos(am))
+        for k in range(STADIUM_TIERS):
+            r = r0 + (k + 0.5) * tread
+            seat_top = top + 0.4 + k * rise
+            mid = world(cx + math.cos(am) * r, cy + math.sin(am) * r, (floor + seat_top) / 2)
+            parts.box(tuple(mid), tangent, radial, (seg * r / r0 / 2 + 0.02, tread / 2, (seat_top - floor) / 2), concrete)
+            # The crowd: a seated spectator every 0.6 m (body, head), all sorts of shirts.
+            count = int(seg * r / r0 / 0.62)
+            for i in range(count):
+                if rng.random() < 0.08:
+                    continue
+                t = (i + 0.5) / count - 0.5
+                px, py = cx + math.cos(am) * (r + 0.15), cy + math.sin(am) * (r + 0.15)
+                pos = world(px, py, seat_top) + tangent * t * seg * r / r0
+                shirt = rng.choice(shirts)
+                parts.box(tuple(pos + Vector((0, 0, 0.35))), tangent, radial, (0.2, 0.14, 0.35), shirt)
+                parts.box(tuple(pos + Vector((0, 0, 0.84))), tangent, radial, (0.1, 0.1, 0.12), rng.choice(skins))
+        # Back wall: white, a blue band with the event's boards, flags on poles every other slice.
+        rb = r0 + STADIUM_TIERS * tread + 0.3
+        wall_top = top + 0.4 + STADIUM_TIERS * rise + 2.2
+        mid = world(cx + math.cos(am) * rb, cy + math.sin(am) * rb, (floor + wall_top) / 2)
+        parts.box(tuple(mid), tangent, radial, (seg * rb / r0 / 2 + 0.03, 0.3, (wall_top - floor) / 2), facade)
+        band = world(cx + math.cos(am) * (rb - 0.32), cy + math.sin(am) * (rb - 0.32), wall_top - 0.9)
+        parts.box(tuple(band), tangent, radial, (seg * rb / r0 / 2, 0.02, 0.6), blue)
+        # Front wall of the stands facing the green: blue hoardings.
+        front = world(cx + math.cos(am) * (r0 - 0.1), cy + math.sin(am) * (r0 - 0.1), top + 0.1)
+        parts.box(tuple(front), tangent, radial, (seg / 2 + 0.02, 0.1, 0.55), blue)
+        if int(round(a0 / step)) % 2 == 0:
+            pole = world(cx + math.cos(am) * rb, cy + math.sin(am) * rb, wall_top)
+            parts.tube([tuple(pole), tuple(pole + Vector((0, 0, 4.5)))], 0.06, (0.9, 0.9, 0.9))
+            parts.box(tuple(pole + Vector((0, 0, 4.0)) + tangent * 0.7), tangent, Vector((0, 0, 1)).cross(tangent),
+                      (0.7, 0.45, 0.02), rng.choice([(0.05, 0.22, 0.62), (0.95, 0.95, 0.95), (0.85, 0.12, 0.1)]))
+
+    def building(angle, radius, size, frame, glass_band):
+        am = math.radians(angle)
+        x, y = cx + math.cos(am) * radius, cy + math.sin(am) * radius
+        radial = wdir(math.cos(am), math.sin(am))
+        tangent = wdir(-math.sin(am), math.cos(am))
+        g = min(ground(x + dx, y + dy) for dx in (-4, 4) for dy in (-4, 4)) - 0.4
+        half = (size[0] / 2, size[1] / 2, size[2] / 2)
+        parts.box(tuple(world(x, y, g + half[2])), tangent, radial, half, frame)
+        return x, y, g, am, radial, tangent
+
+    # Hospitality box on the left: white, two storeys of dark glass looking at the green, a blue roof band.
+    x, y, g, am, radial, tangent = building(a_from - 14, r0 + 6, (20, 8, 7.5), facade, True)
+    for level in (1.9, 5.2):
+        glass = world(x - math.cos(am) * 4.05, y - math.sin(am) * 4.05, g + level)
+        parts.box(tuple(glass), tangent, radial, (9.2, 0.05, 1.3), (0.05, 0.08, 0.12), mat=1)
+    parts.box(tuple(world(x, y, g + 7.6)), tangent, radial, (10.2, 4.2, 0.35), blue)
+    # Leaderboard on the right: a tall white frame with a dark screen and rows of names and scores.
+    x, y, g, am, radial, tangent = building(a_to + 14, r0 + 4, (11, 1.2, 9), facade, False)
+    face = -radial
+    screen = world(x - math.cos(am) * 0.62, y - math.sin(am) * 0.62, g + 5.2)
+    parts.box(tuple(screen), tangent, radial, (4.8, 0.03, 3.2), (0.03, 0.05, 0.12), mat=1)
+    parts.box(tuple(world(x, y, g + 9.3)), tangent, radial, (5.6, 0.7, 0.4), blue)
+    # The live standings are drawn on the screen in game (ASkyLinksLeaderboard): where the screen is and which way
+    # it faces (world metres, yaw in degrees).
+    front = world(x - math.cos(am) * 0.7, y - math.sin(am) * 0.7, g + 5.2)
+    layout['leaderboard'] = [round(front.x, 2), round(front.y, 2), round(front.z, 2), round(math.degrees(math.atan2(face.y, face.x)), 1)]
+
+    # Timber sleeper wall where the pond meets the green bank: planks from below the water to the top of the bank.
+    water = layout.get('water')
+    if water is not None:
+        ring = water.exterior if water.geom_type == 'Polygon' else max(water.geoms, key=lambda g_: g_.area).exterior
+        level = WATER_LEVEL + layout.get('water_offset', 0.0)
+        n = int(ring.length / 0.26)
+        pts = [ring.interpolate(i / n, normalized=True) for i in range(n + 1)]
+        for p, q in zip(pts[:-1], pts[1:]):
+            mx, my = (p.x + q.x) / 2, (p.y + q.y) / 2
+            if math.hypot(mx - cx, my - cy) > gr + 22:
+                continue   # only the stretch facing the green
+            top = ground(mx, my) + 0.25
+            along = wdir(q.x - p.x, q.y - p.y)
+            out = Vector((0, 0, 1)).cross(along)
+            mid = world(mx, my, (level - 0.6 + top) / 2)
+            shade = rng.uniform(0.8, 1.1)
+            parts.box(tuple(mid), along, out, (0.14, 0.09, (top - level + 0.6) / 2), (0.36 * shade, 0.24 * shade, 0.14 * shade))
+
+
 def surface_uvs(layout, xy):
     """Per-vertex data for the surface materials.
     UV1 'Hole': hole-local metres (x down the hole from the tee, y across) for mowing stripes.
@@ -901,7 +1091,15 @@ def surface_uvs(layout, xy):
             if not poly.is_empty:
                 rings.append(poly.exterior)
     edge_d = shapely.distance(unary_union(rings), pts)
-    return [('Hole', xy), ('Edges', np.column_stack([np.minimum(bunker_d, 10.0), np.minimum(edge_d, 10.0)]))]
+    # UV3 'Path': signed metres to the buggy path's edge (negative on it). The path outline is in the mesh, so the
+    # zero line of this runs exactly along it: the material draws a clean edge there whatever the triangles do.
+    paths = layout.get('paths')
+    if paths is not None and not paths.is_empty:
+        sd = shapely.distance(paths.boundary, pts) * np.where(shapely.contains_xy(paths, xy[:, 0], xy[:, 1]), -1.0, 1.0)
+    else:
+        sd = np.full(len(xy), 10.0)
+    return [('Hole', xy), ('Edges', np.column_stack([np.minimum(bunker_d, 10.0), np.minimum(edge_d, 10.0)])),
+            ('Path', np.column_stack([np.clip(sd, -10.0, 10.0), np.zeros(len(xy))]))]
 
 
 def build_hole(number, rng):
@@ -916,6 +1114,7 @@ def build_hole(number, rng):
     if paths is not None and not SOFT_PATHS:
         # Path border plus a second outline 0.3 m out: the dirt fades to grass across that thin, even band.
         layout = dict(layout, extra_lines=[paths, paths.buffer(0.3, 8)])
+    local_h = path_bed(local_h, cart)
     xy, tris, attrs = B.triangulate_top(layout)
     z = local_h(xy[:, 0], xy[:, 1])
     top_cols = B.top_colours(xy[:, 0], xy[:, 1], number)
@@ -966,7 +1165,7 @@ def build_hole(number, rng):
         floater_name = f'{name}_Floater{i + 1:02d}'
         far = np.full((len(verts), 2), 10.0)  # no bunkers or fairways on a floater: plain rough
         rock_obj = B.make_mesh(floater_name, verts, f_tris, f_mats, ['Rough', 'IslandRock'], cols,
-                               extra_uvs=[('Hole', np.zeros((len(verts), 2))), ('Edges', far)])
+                               extra_uvs=[('Hole', np.zeros((len(verts), 2))), ('Edges', far), ('Path', far)])
         ivy = Parts()
         add_vines(ivy, poly, fn, number, rng, density=0.8)
         add_cliff_vines(ivy, rv, ut, rd, poly, number, rng, per_metre=0.5)
@@ -991,6 +1190,10 @@ def build_hole(number, rng):
         for centre, heading, length in layout['footbridges']:
             footbridge_spots.append(footbridge(props, number, local_h, centre, heading, length, rng))
         exported.append(props.mesh(f'{name}_Props'))
+    if layout.get('stadium'):
+        stands = Parts()
+        build_stadium(stands, number, layout, local_h, random.Random(number * 31))
+        exported.append(stands.mesh(f'{name}_Stadium', mats=('IslandRock', 'Water')))
 
     for obj in exported:
         sl.export_fbx(str(OUT / f'{obj.name}.fbx'), [obj])
@@ -1013,7 +1216,7 @@ def build_hole(number, rng):
              'land_outline': [[round(float(v), 2) for v in C.to_world(number, x, y)] for x, y in
                               layout['land'].buffer(3).simplify(1.0).exterior.coords],
              'cart_path': [world(x, y) for x, y in (layout['cart'].coords if layout.get('cart') is not None else [])],
-             'forest': forest_plan(number, layout, local_h, rng), 'floaters': floater_spots, 'footbridges': footbridge_spots}
+             'forest': forest_plan(number, layout, local_h, rng), 'floaters': floater_spots, 'footbridges': footbridge_spots, 'leaderboard': layout.get('leaderboard')}
     if number == 1:
         spots['trees'] = [[x, y, ground(x, y)] for x, y in clear_trees]
         spots['clubhouse'] = [*B.DESIGNS[1]['clubhouse'], ground(*B.DESIGNS[1]['clubhouse'])]
@@ -1186,7 +1389,7 @@ def render_course(layouts):
         bpy.ops.render.render(write_still=True)
 
 
-def settle_heights(grade=0.2):
+def settle_heights(grade=0.1):
     """The landforms move each green well above or below its tee, so re-seat every island's height along the chain
     (hole 1 stays put): each rope bridge from a green to the next tee climbs or falls at most `grade`."""
     layouts = {n: layout_for(n) for n in C.PLACE}

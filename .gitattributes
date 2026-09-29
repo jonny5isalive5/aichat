@@ -1,1 +1,10 @@
+# Text files are stored with LF and checked out with the machine's own line endings, so a Windows copy
+# never shows every file as "changed" (and a pull can't swap new code for an old copy line by line).
+* text=auto
 *.bat text eol=crlf
+*.uasset binary
+*.umap binary
+*.fbx binary
+*.png binary
+*.jpg binary
+*.glb binary

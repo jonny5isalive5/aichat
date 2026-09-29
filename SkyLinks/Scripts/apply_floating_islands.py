@@ -11,7 +11,9 @@
     isl.make_path_decal()       M_PathDecal: drag Decal Actors onto the grass for footpaths (the easy way)
     isl.export_paths()          save footpaths drawn as splines (actors named Path...) for baking into the islands
     isl.refresh_islands()       after an island rebuild: new meshes in place, trees replanted; your floaters stay
+    isl.refresh_remaining()     the same, a few holes per run, crash-proof: run it until it says ALL DONE
     isl.reimport_tops([4])      re-import island surfaces only (after paths are baked); nothing else moves
+    isl.lift_floaters()         lift floating islands that hang too low over a hole (lift_floaters(60) for higher)
     isl.update_materials()      rebuild the island materials only (grass paths: Mesh Paint, Blue channel)
     isl.update_surfaces()       new island surfaces + materials only (nothing in the level moves)
     isl.tune_look()             tame the bright exposure, richer colours (tune_look(-1.5) darker, (-0.5) brighter)
@@ -56,7 +58,7 @@ GRASS = {
 ROCK = ('M_Island_Rock', 'T_RockDetail', 'PM_Rough')
 PATH_COLOUR = (0.23, 0.16, 0.09)  # painted footpaths (vertex colour B) on the grass: packed earth
 SEA = 'M_Island_Sea'
-PARTS = ('IslandTop', 'IslandRock', 'Vines', 'Water', 'Props')
+PARTS = ('IslandTop', 'IslandRock', 'Vines', 'Water', 'Props', 'Stadium')
 NO_COLLISION = ('Vines',)  # hanging ivy: the ball and buggy pass through
 
 actors = unreal.get_editor_subsystem(unreal.EditorActorSubsystem)
@@ -150,7 +152,7 @@ float cut = 1 - smoothstep(1.0, 2.2, E.y);
 c = lerp(c, float3(0.050, 0.140, 0.022) * (0.8 + 0.3 * D), cut * 0.75);
 c *= 1 - 0.3 * (1 - smoothstep(0.0, 0.7, E.x));
 c *= Tint.rgb;
-return lerp(c, float3(0.23, 0.16, 0.09) * (0.75 + 0.3 * D), VC.b);
+return lerp(c, float3(0.23, 0.16, 0.09) * (0.75 + 0.3 * D), smoothstep(0.1, -0.06, P.x + (D - 0.8) * 0.25) * saturate(VC.b * 3.0));
 """,
     'fairway': """
 float3 c = float3(0.058, 0.165, 0.026);
@@ -162,7 +164,7 @@ c *= lerp(1 - Stripes, 1 + Stripes, s);
 c *= 1 - 0.08 * (1 - smoothstep(0.3, 0.9, E.y));
 c = lerp(c, float3(0.035, 0.095, 0.015) * (0.6 + 0.6 * R), (1 - smoothstep(0.0, 0.6, E.x)) * 0.7);
 c *= Tint.rgb;
-return lerp(c, float3(0.23, 0.16, 0.09) * (0.75 + 0.3 * D), VC.b);
+return lerp(c, float3(0.23, 0.16, 0.09) * (0.75 + 0.3 * D), smoothstep(0.1, -0.06, P.x + (D - 0.8) * 0.25) * saturate(VC.b * 3.0));
 """,
     'green': """
 float3 c = float3(0.070, 0.215, 0.034);
@@ -183,7 +185,7 @@ c *= (0.9 + 0.2 * M3) * (0.8 + 0.3 * D);
 float s = smoothstep(0.4, 0.6, abs(frac(H.x / 4.0) - 0.5) * 2);
 c *= lerp(1 - Stripes, 1 + Stripes, s);
 c *= Tint.rgb;
-return lerp(c, float3(0.23, 0.16, 0.09) * (0.75 + 0.3 * D), VC.b);
+return lerp(c, float3(0.23, 0.16, 0.09) * (0.75 + 0.3 * D), smoothstep(0.1, -0.06, P.x + (D - 0.8) * 0.25) * saturate(VC.b * 3.0));
 """,
     'bunker': """
 float3 c = SC * (0.9 + 0.2 * M3);
@@ -255,6 +257,7 @@ def _surface_inputs(mat, kind):
         'VC': (_expr(mat, unreal.MaterialExpressionVertexColor, -1350, 400), ''),
         'H': (_expr(mat, unreal.MaterialExpressionTextureCoordinate, -1350, 550, coordinate_index=1), ''),
         'E': (_expr(mat, unreal.MaterialExpressionTextureCoordinate, -1350, 650, coordinate_index=2), ''),
+        'P': (_expr(mat, unreal.MaterialExpressionTextureCoordinate, -1350, 700, coordinate_index=3), ''),
         'N': (_expr(mat, unreal.MaterialExpressionVertexNormalWS, -1350, 750), ''),
         'Tint': (_expr(mat, unreal.MaterialExpressionVectorParameter, -1350, 850, parameter_name='Tint',
                        default_value=unreal.LinearColor(*SURFACE_TINT[kind], 1.0)), ''),
@@ -524,6 +527,20 @@ def _v(p, lift=0.0):
     return unreal.Vector(p[0] * M, p[1] * M, p[2] * M + lift)
 
 
+def place_leaderboard(number, spot, everything):
+    """The live leaderboard (SkyLinksLeaderboard C++ actor) on the stadium's screen beside the 18th green."""
+    if not hasattr(unreal, 'SkyLinksLeaderboard'):
+        print('LEADERBOARD skipped: rebuild the C++ first (Build.bat)')
+        return
+    for actor in everything:
+        if actor.get_actor_label() == 'Leaderboard':
+            actors.destroy_actor(actor)
+    x, y, z, yaw = spot
+    board = actors.spawn_actor_from_class(unreal.SkyLinksLeaderboard, unreal.Vector(x * M, y * M, z * M), unreal.Rotator(0, 0, yaw))
+    board.set_actor_label('Leaderboard')
+    board.set_folder_path(f'Course/Hole{number:02d}')
+
+
 def place_hole(number, spots):
     """Move the hole's GolfHole to its island (tee, heading, aim, cup) and seat its tee markers."""
     folder = f'Course/Hole{number:02d}'
@@ -542,6 +559,8 @@ def place_hole(number, spots):
     markers = [a for a in everything if str(a.get_folder_path()) == folder and a.get_actor_label().startswith('TeeMarker')]
     for actor, spot in zip(markers, spots['tee_markers']):
         actor.set_actor_location(_v(spot, 5.0), False, True)
+    if spots.get('leaderboard'):
+        place_leaderboard(number, spots['leaderboard'], everything)
     if number == 1:
         clubhouse = next((a for a in everything if a.get_actor_label() == 'Clubhouse'), None)
         if clubhouse:
@@ -784,7 +803,7 @@ def make_path_decal():
 KEEP_TREES = set()  # holes whose trees the owner arranged by hand: refresh_islands leaves their foliage alone
 
 
-def refresh_islands(holes=HOLES):
+def refresh_islands(holes=HOLES, bridges=True):
     """After a rebuild of the island meshes (new bunkers, buggy paths...): re-import every hole's surface, rock,
     ivy, water and footbridge deck in place, re-seat the holes, footbridges and rope bridges, and replant the
     trees island by island (clear of the new paths and bunkers). Holes in KEEP_TREES (hole 1, arranged by hand)
@@ -799,8 +818,12 @@ def refresh_islands(holes=HOLES):
         spots = json.loads(spots_path.read_text())
         for part in PARTS:
             name = f'SM_H{number:02d}_{part}'
-            if (SOURCE / f'{name}.fbx').is_file() and unreal.EditorAssetLibrary.does_asset_exist(f'{DEST}/{name}'):
-                import_mesh(name, materials, part not in NO_COLLISION)
+            if not (SOURCE / f'{name}.fbx').is_file():
+                continue
+            is_new = not unreal.EditorAssetLibrary.does_asset_exist(f'{DEST}/{name}')
+            mesh = import_mesh(name, materials, part not in NO_COLLISION)
+            if is_new:  # a part this island didn't have before (the 18th's stadium): put it in the level too
+                place(mesh, f'{part}{number:02d}', f'Course/Hole{number:02d}/Islands', part not in NO_COLLISION)
         place_hole(number, spots)
         place_footbridges(number, spots)
         if number in KEEP_TREES or not spots.get('land_outline'):
@@ -812,9 +835,41 @@ def refresh_islands(holes=HOLES):
         plant_forest(number, spots)
         print(f'HOLE {number} refreshed: {removed} old trees out, new ones planted')
         unreal.SystemLibrary.collect_garbage()  # free each hole's imports before the next (big batches ran out of memory)
-    apply_bridges(materials, json.loads((SOURCE / 'Course_links.json').read_text()))
+    if bridges:
+        apply_bridges(materials, json.loads((SOURCE / 'Course_links.json').read_text()))
     unreal.get_editor_subsystem(unreal.LevelEditorSubsystem).save_current_level()
     print('ISLANDS REFRESHED. Run validate_course() in a separate call.')
+
+
+def _surface_tag(number):
+    import hashlib
+    text = (SOURCE / f'Hole{number:02d}_spots.json').read_text()
+    return 'Surface:' + hashlib.md5(text.encode()).hexdigest()[:10]
+
+
+def refresh_remaining(per_run=3):
+    """Crash-proof refresh: does the next few holes that aren't up to date yet (each is saved as soon as it is
+    done and marked on its GolfHole), then stops. Run it again, and again, until it says ALL DONE; after a crash just
+    reopen the editor and run it again - it carries on where it got to. The rope bridges go in on the last run."""
+    everything = _all()
+    pending = []
+    for number in HOLES:
+        golf_hole = next((a for a in everything if a.get_actor_label() == f'GolfHole{number:02d}'), None)
+        if golf_hole and _surface_tag(number) not in [str(t) for t in golf_hole.tags]:
+            pending.append((number, golf_hole))
+    if not pending:
+        apply_bridges(build_materials(), json.loads((SOURCE / 'Course_links.json').read_text()))
+        unreal.get_editor_subsystem(unreal.LevelEditorSubsystem).save_current_level()
+        print('ALL DONE: every hole is up to date and the rope bridges are in. Run validate_course() next.')
+        return
+    for number, golf_hole in pending[:per_run]:
+        refresh_islands([number], bridges=False)
+        golf_hole.modify()
+        golf_hole.set_editor_property('tags', [t for t in golf_hole.tags if not str(t).startswith('Surface:')] + [unreal.Name(_surface_tag(number))])
+        unreal.get_editor_subsystem(unreal.LevelEditorSubsystem).save_current_level()
+        unreal.SystemLibrary.collect_garbage()
+    left = len(pending) - min(per_run, len(pending))
+    print(f'REFRESHED holes {[n for n, _ in pending[:per_run]]}. {left} still to do: run isl.refresh_remaining() again.')
 
 
 def reimport_tops(holes=HOLES):
@@ -865,6 +920,51 @@ def tune_look(exposure=-1.0, saturation=1.15, contrast=1.05):
     volume.set_editor_property('settings', settings)
     unreal.get_editor_subsystem(unreal.LevelEditorSubsystem).save_current_level()
     print(f'LOOK set: exposure {exposure}, saturation {saturation}, contrast {contrast}')
+
+
+def lift_floaters(clearance=45.0):
+    """After the holes changed height, lift any floating island that now hangs too close over a course: each one's
+    underside ends up at least `clearance` metres above the ground below it. Ones already high enough don't move
+    (nor sideways, so your hand placement stays)."""
+    world = unreal.get_editor_subsystem(unreal.UnrealEditorSubsystem).get_editor_world()
+    lifted = 0
+    for actor in _all():
+        if not str(actor.get_folder_path()).endswith('/Floaters'):
+            continue
+        origin, extent = actor.get_actor_bounds(False)
+        bottom = unreal.Vector(origin.x, origin.y, origin.z - extent.z - 10)
+        hit = unreal.SystemLibrary.line_trace_single(world, bottom, bottom - unreal.Vector(0, 0, 200000),
+                                                     unreal.TraceTypeQuery.TRACE_TYPE_QUERY1, True, [actor],
+                                                     unreal.DrawDebugTrace.NONE, True)
+        if not hit:
+            continue
+        parts = hit.to_tuple()
+        if not parts[0]:
+            continue
+        gap = parts[3] / M
+        if gap < clearance:
+            p = actor.get_actor_location()
+            actor.set_actor_location(unreal.Vector(p.x, p.y, p.z + (clearance - gap) * M), False, True)
+            lifted += 1
+    unreal.get_editor_subsystem(unreal.LevelEditorSubsystem).save_current_level()
+    print(f'FLOATERS: {lifted} lifted to at least {clearance:.0f} m above the course')
+
+
+def finish_course():
+    """Everything after an island rebuild, in one go: new materials, every island refreshed (each saved as it is
+    done, so after a crash just run this again and it carries on), floating islands lifted clear, bridges in,
+    course checked and saved."""
+    update_materials()
+    for _ in range(len(HOLES) + 2):
+        pending = [n for n in HOLES if (lambda g: g and _surface_tag(n) not in [str(t) for t in g.tags])(
+            next((a for a in _all() if a.get_actor_label() == f'GolfHole{n:02d}'), None))]
+        refresh_remaining(per_run=2)
+        if not pending:
+            break
+    lift_floaters()
+    validate_course()
+    unreal.get_editor_subsystem(unreal.LevelEditorSubsystem).save_current_level()
+    print('COURSE FINISHED: all islands refreshed, floaters lifted, course checked and saved.')
 
 
 def update_materials():
