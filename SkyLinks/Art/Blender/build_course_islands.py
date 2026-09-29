@@ -262,8 +262,11 @@ def cart_path(number, layout):
             cost[(shapely.distance(approach, pts) < 1.8) & shapely.contains_xy(land, px, py)] = 1.0  # onto the banks
     fair_d = shapely.distance(layout['fairways'], pts)
     cost = cost + np.where(fair_d == 0, 6.0, 0.15 * np.clip(np.abs(fair_d - CART_OFFSET), 0, 20))
-    hazards = unary_union([layout['green'].buffer(3), layout['tee'].buffer(3)] + [b.buffer(2.5) for b in layout['bunkers']])
+    hazards = unary_union([layout['green'].buffer(6), layout['tee'].buffer(4)] + [b.buffer(4) for b in layout['bunkers']])
     cost = cost + np.where(shapely.contains_xy(hazards, px, py), 80.0, 0.0)
+    # ...and it keeps a respectful distance from greens and bunkers where it has room.
+    clearance = unary_union([layout['green'].buffer(12)] + [b.buffer(7) for b in layout['bunkers']])
+    cost = cost + np.where(shapely.contains_xy(clearance, px, py), 3.0, 0.0)
     cost = cost.reshape(gx.shape)
 
     def cell(p):
@@ -283,7 +286,7 @@ def cart_path(number, layout):
     best = None
     for side in (-1, 1):
         tee_side = (-2.0, 13.0 * side)
-        green_side = tuple(np.array([cx, cy]) - u * gr * 0.3 + v * side * (gr + 8))
+        green_side = tuple(np.array([cx, cy]) - u * gr * 0.3 + v * side * (gr + 11))
         stops = [start, tee_side, green_side] + ([anchors['out']] if 'out' in anchors else [])
         route, total = [], 0.0
         for a, b in zip(stops[:-1], stops[1:]):

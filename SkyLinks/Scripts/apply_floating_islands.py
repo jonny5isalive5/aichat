@@ -13,6 +13,7 @@
     isl.refresh_islands()       after an island rebuild: new meshes in place, trees replanted; your floaters stay
     isl.refresh_remaining()     the same, a few holes per run, crash-proof: run it until it says ALL DONE
     isl.reimport_tops([4])      re-import island surfaces only (after paths are baked); nothing else moves
+    isl.lift_floaters()         lift floating islands that hang too low over a hole (lift_floaters(60) for higher)
     isl.update_materials()      rebuild the island materials only (grass paths: Mesh Paint, Blue channel)
     isl.update_surfaces()       new island surfaces + materials only (nothing in the level moves)
     isl.tune_look()             tame the bright exposure, richer colours (tune_look(-1.5) darker, (-0.5) brighter)
@@ -151,7 +152,7 @@ float cut = 1 - smoothstep(1.0, 2.2, E.y);
 c = lerp(c, float3(0.050, 0.140, 0.022) * (0.8 + 0.3 * D), cut * 0.75);
 c *= 1 - 0.3 * (1 - smoothstep(0.0, 0.7, E.x));
 c *= Tint.rgb;
-return lerp(c, float3(0.23, 0.16, 0.09) * (0.75 + 0.3 * D), VC.b);
+return lerp(c, float3(0.23, 0.16, 0.09) * (0.75 + 0.3 * D), smoothstep(0.4, 0.6, VC.b + (D - 0.8) * 0.9));
 """,
     'fairway': """
 float3 c = float3(0.058, 0.165, 0.026);
@@ -163,7 +164,7 @@ c *= lerp(1 - Stripes, 1 + Stripes, s);
 c *= 1 - 0.08 * (1 - smoothstep(0.3, 0.9, E.y));
 c = lerp(c, float3(0.035, 0.095, 0.015) * (0.6 + 0.6 * R), (1 - smoothstep(0.0, 0.6, E.x)) * 0.7);
 c *= Tint.rgb;
-return lerp(c, float3(0.23, 0.16, 0.09) * (0.75 + 0.3 * D), VC.b);
+return lerp(c, float3(0.23, 0.16, 0.09) * (0.75 + 0.3 * D), smoothstep(0.4, 0.6, VC.b + (D - 0.8) * 0.9));
 """,
     'green': """
 float3 c = float3(0.070, 0.215, 0.034);
@@ -184,7 +185,7 @@ c *= (0.9 + 0.2 * M3) * (0.8 + 0.3 * D);
 float s = smoothstep(0.4, 0.6, abs(frac(H.x / 4.0) - 0.5) * 2);
 c *= lerp(1 - Stripes, 1 + Stripes, s);
 c *= Tint.rgb;
-return lerp(c, float3(0.23, 0.16, 0.09) * (0.75 + 0.3 * D), VC.b);
+return lerp(c, float3(0.23, 0.16, 0.09) * (0.75 + 0.3 * D), smoothstep(0.4, 0.6, VC.b + (D - 0.8) * 0.9));
 """,
     'bunker': """
 float3 c = SC * (0.9 + 0.2 * M3);
@@ -898,6 +899,34 @@ def tune_look(exposure=-1.0, saturation=1.15, contrast=1.05):
     volume.set_editor_property('settings', settings)
     unreal.get_editor_subsystem(unreal.LevelEditorSubsystem).save_current_level()
     print(f'LOOK set: exposure {exposure}, saturation {saturation}, contrast {contrast}')
+
+
+def lift_floaters(clearance=45.0):
+    """After the holes changed height, lift any floating island that now hangs too close over a course: each one's
+    underside ends up at least `clearance` metres above the ground below it. Ones already high enough don't move
+    (nor sideways, so your hand placement stays)."""
+    world = unreal.get_editor_subsystem(unreal.UnrealEditorSubsystem).get_editor_world()
+    lifted = 0
+    for actor in _all():
+        if not str(actor.get_folder_path()).endswith('/Floaters'):
+            continue
+        origin, extent = actor.get_actor_bounds(False)
+        bottom = unreal.Vector(origin.x, origin.y, origin.z - extent.z - 10)
+        hit = unreal.SystemLibrary.line_trace_single(world, bottom, bottom - unreal.Vector(0, 0, 200000),
+                                                     unreal.TraceTypeQuery.TRACE_TYPE_QUERY1, True, [actor],
+                                                     unreal.DrawDebugTrace.NONE, True)
+        if not hit:
+            continue
+        parts = hit.to_tuple()
+        if not parts[0]:
+            continue
+        gap = parts[3] / M
+        if gap < clearance:
+            p = actor.get_actor_location()
+            actor.set_actor_location(unreal.Vector(p.x, p.y, p.z + (clearance - gap) * M), False, True)
+            lifted += 1
+    unreal.get_editor_subsystem(unreal.LevelEditorSubsystem).save_current_level()
+    print(f'FLOATERS: {lifted} lifted to at least {clearance:.0f} m above the course')
 
 
 def update_materials():
