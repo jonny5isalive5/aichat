@@ -824,7 +824,7 @@ bool AGolfPlayerController::HandleButton(const FVector2D& Screen, int32 Finger)
 	case EGolfHudButton::LobbyPanel:
 		bLobbyPanelHidden = !bLobbyPanelHidden;
 		return true;
-	case EGolfHudButton::Club: CycleClub(1); return true;
+	case EGolfHudButton::Club: CycleClub(Payload != 0 ? Payload : 1); return true;
 	case EGolfHudButton::Spin: CycleSpin(); return true;
 	default:
 		return false;

@@ -102,6 +102,8 @@ private:
 	void Label(const FString& Text, const FVector2D& Position, float Height, const FLinearColor& Color, bool bCenter);
 	/** Panel heading: small spaced capitals over a hairline rule with a bright lead-in segment. */
 	void Heading(const FString& Text, const FVector2D& Position, float Width, float Height, bool bCenter = false);
+	/** Bottom-middle message banner (announcements, hints). */
+	void Notice(const FString& Text, float Alpha);
 	void RoundButton(EGolfHudButton Id, const FVector2D& Center, float Radius, const FString& Text, const FLinearColor& Fill, int32 Payload = 0);
 	bool ToScreen(const FVector& World, FVector2D& OutScreen) const;
 };
