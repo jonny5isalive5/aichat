@@ -189,12 +189,13 @@ HOLES = {
              ponds=[ellipse(322, 4, 22, 26)], streams=[], footbridges=[],
              landform=dict(kind='plunge', drop=7.0, camber=-0.05, wall_left=4.0, wall_right=3.0, green=0.5),
              mix={'Oak_A': 2, 'Oak_B': 2, 'Poplar': 3, 'Bush_Round': 3}),
-    # Home hole: carry the waste bunker, then up to a raised last green with a pond short left.
+    # Home hole, the finale: carry the waste bunker, then over the pond with its timber sleeper wall to a raised
+    # green in a horseshoe of grandstands, with the hospitality box and the live leaderboard either side.
     18: dict(name='Home Waste', par=4, aim=(240, -8),
-             fairways=[path([(30, 0), (108, 0)], 30), path([(192, -14), (300, -5)], 30)],
+             fairways=[path([(30, 0), (108, 0)], 30), path([(192, -14), (290, -5)], 30)],
              green=((332, -5), 16), bunkers=[ellipse(150, 4, 38, 30), (338, 16, 5), (349, -4, 4), (352, 24, 4)],
              woods=[ellipse(190, 50, 110, 12)],
-             ponds=[ellipse(316, -30, 14, 8, 10)], streams=[], footbridges=[],
+             ponds=[ellipse(304, -5, 8, 24)], streams=[], footbridges=[], stadium=True,
              landform=dict(kind='uphill', rise=5.0, camber=0.03, wall_left=3.0, wall_right=3.0, green=1.5),
              mix={'Pine': 5, 'Oak_B': 2, 'Bush_Round': 3}),
 }

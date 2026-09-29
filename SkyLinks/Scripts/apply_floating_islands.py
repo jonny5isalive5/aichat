@@ -58,7 +58,7 @@ GRASS = {
 ROCK = ('M_Island_Rock', 'T_RockDetail', 'PM_Rough')
 PATH_COLOUR = (0.23, 0.16, 0.09)  # painted footpaths (vertex colour B) on the grass: packed earth
 SEA = 'M_Island_Sea'
-PARTS = ('IslandTop', 'IslandRock', 'Vines', 'Water', 'Props')
+PARTS = ('IslandTop', 'IslandRock', 'Vines', 'Water', 'Props', 'Stadium')
 NO_COLLISION = ('Vines',)  # hanging ivy: the ball and buggy pass through
 
 actors = unreal.get_editor_subsystem(unreal.EditorActorSubsystem)
@@ -527,6 +527,20 @@ def _v(p, lift=0.0):
     return unreal.Vector(p[0] * M, p[1] * M, p[2] * M + lift)
 
 
+def place_leaderboard(number, spot, everything):
+    """The live leaderboard (SkyLinksLeaderboard C++ actor) on the stadium's screen beside the 18th green."""
+    if not hasattr(unreal, 'SkyLinksLeaderboard'):
+        print('LEADERBOARD skipped: rebuild the C++ first (Build.bat)')
+        return
+    for actor in everything:
+        if actor.get_actor_label() == 'Leaderboard':
+            actors.destroy_actor(actor)
+    x, y, z, yaw = spot
+    board = actors.spawn_actor_from_class(unreal.SkyLinksLeaderboard, unreal.Vector(x * M, y * M, z * M), unreal.Rotator(0, 0, yaw))
+    board.set_actor_label('Leaderboard')
+    board.set_folder_path(f'Course/Hole{number:02d}')
+
+
 def place_hole(number, spots):
     """Move the hole's GolfHole to its island (tee, heading, aim, cup) and seat its tee markers."""
     folder = f'Course/Hole{number:02d}'
@@ -545,6 +559,8 @@ def place_hole(number, spots):
     markers = [a for a in everything if str(a.get_folder_path()) == folder and a.get_actor_label().startswith('TeeMarker')]
     for actor, spot in zip(markers, spots['tee_markers']):
         actor.set_actor_location(_v(spot, 5.0), False, True)
+    if spots.get('leaderboard'):
+        place_leaderboard(number, spots['leaderboard'], everything)
     if number == 1:
         clubhouse = next((a for a in everything if a.get_actor_label() == 'Clubhouse'), None)
         if clubhouse:
@@ -802,8 +818,12 @@ def refresh_islands(holes=HOLES, bridges=True):
         spots = json.loads(spots_path.read_text())
         for part in PARTS:
             name = f'SM_H{number:02d}_{part}'
-            if (SOURCE / f'{name}.fbx').is_file() and unreal.EditorAssetLibrary.does_asset_exist(f'{DEST}/{name}'):
-                import_mesh(name, materials, part not in NO_COLLISION)
+            if not (SOURCE / f'{name}.fbx').is_file():
+                continue
+            is_new = not unreal.EditorAssetLibrary.does_asset_exist(f'{DEST}/{name}')
+            mesh = import_mesh(name, materials, part not in NO_COLLISION)
+            if is_new:  # a part this island didn't have before (the 18th's stadium): put it in the level too
+                place(mesh, f'{part}{number:02d}', f'Course/Hole{number:02d}/Islands', part not in NO_COLLISION)
         place_hole(number, spots)
         place_footbridges(number, spots)
         if number in KEEP_TREES or not spots.get('land_outline'):
