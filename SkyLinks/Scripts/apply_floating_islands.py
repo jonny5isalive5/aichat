@@ -13,6 +13,7 @@
     isl.refresh_islands()       after an island rebuild: new meshes in place, trees replanted; your floaters stay
     isl.reimport_tops([4])      re-import island surfaces only (after paths are baked); nothing else moves
     isl.update_materials()      rebuild the island materials only (grass paths: Mesh Paint, Blue channel)
+    isl.update_surfaces()       new island surfaces + materials only (nothing in the level moves)
     isl.import_grass()          the 3D grass clumps + M_GrassBlades (grown around the camera in game)
     isl.raise_fog(20)           lift every cloud patch 20 m (or lower it with a negative number)
 
@@ -766,6 +767,20 @@ def reimport_tops(holes=HOLES):
             import_mesh(f'SM_H{number:02d}_IslandTop', materials)
     unreal.get_editor_subsystem(unreal.LevelEditorSubsystem).save_current_level()
     print(f'TOPS re-imported: holes {list(holes)}')
+
+
+def update_surfaces():
+    """New island surfaces + materials, and nothing in the level moves: re-imports every IslandTop and floating
+    island mesh (the actors pick them up where they are) and rebuilds the materials. Trees, paths, decals, bridges
+    and everything placed by hand stay exactly as they are."""
+    materials = build_materials()
+    count = 0
+    for path in sorted(SOURCE.glob('SM_H??_IslandTop.fbx')) + sorted(SOURCE.glob('SM_H??_Floater*.fbx')):
+        if unreal.EditorAssetLibrary.does_asset_exist(f'{DEST}/{path.stem}'):
+            import_mesh(path.stem, materials)
+            count += 1
+    unreal.EditorAssetLibrary.save_directory(DEST)
+    print(f'SURFACES updated: {count} meshes re-imported, materials rebuilt. Nothing in the level was moved.')
 
 
 def update_materials():
