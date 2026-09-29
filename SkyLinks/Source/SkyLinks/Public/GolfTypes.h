@@ -51,7 +51,9 @@ enum class EGolferReaction : uint8
 	Celebrate,
 	PuttVictory,
 	PuttMiss,
-	BadShot
+	BadShot,
+	/** Pushing a tee into the ground on the first tee: starts the round. */
+	TeeUp
 };
 
 USTRUCT(BlueprintType)

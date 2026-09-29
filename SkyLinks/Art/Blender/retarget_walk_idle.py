@@ -73,10 +73,14 @@ def retarget(name):
                 head = dst_rest_hips + (src.matrix_world @ s.head - src_rest_hips) * ratio
             else:
                 head = dst.matrix_world @ d.head
-            world = Matrix.Translation(head) @ world_rot.to_matrix().to_4x4()
-            d.matrix = dst.matrix_world.inverted() @ world
+            # Into armature space as rotation + position only: the armature object carries a 0.01 scale, and
+            # folding it into the bone matrices would scale every bone 100x (a giant golfer in game).
+            arm_rot = dst.matrix_world.to_quaternion().inverted() @ world_rot
+            arm_head = dst.matrix_world.inverted() @ head
+            d.matrix = Matrix.Translation(arm_head) @ arm_rot.to_matrix().to_4x4()
             bpy.context.view_layer.update()
         for d, _ in pairs:
+            d.keyframe_insert('scale', frame=f)
             d.keyframe_insert('rotation_quaternion' if d.rotation_mode == 'QUATERNION' else 'rotation_euler', frame=f)
             if d is dst_hips:
                 d.keyframe_insert('location', frame=f)

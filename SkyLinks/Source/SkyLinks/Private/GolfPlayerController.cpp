@@ -28,7 +28,8 @@ namespace
 
 	const FVector2D SpinPresets[] = { { 0.f, 0.f }, { 0.f, -1.f }, { 0.f, 1.f } };
 	const TCHAR* SpinLabels[] = { TEXT("SPIN"), TEXT("BACK"), TEXT("TOP") };
-	constexpr float LandingViewMaxCarry = 7500.f;
+	constexpr int32 MiniMapPixelsX = 256;
+	constexpr int32 MiniMapPixelsY = 448;
 }
 
 AGolfPlayerController::AGolfPlayerController()
@@ -184,11 +185,34 @@ void AGolfPlayerController::OnPlayShotKey()
 	}
 }
 
+bool AGolfPlayerController::CanTeeUp() const
+{
+	const AGolfGameState* State = GetGolfState();
+	const AGolfCharacter* Golfer = GetMyGolfer();
+	if (!State || State->Phase != EGolfMatchPhase::Lobby || !IsHost() || !IsWalking() || !Golfer)
+	{
+		return false;
+	}
+	const AGolfHole* First = nullptr;
+	for (TActorIterator<AGolfHole> It(GetWorld()); It; ++It)
+	{
+		if (!First || It->HoleNumber < First->HoleNumber)
+		{
+			First = *It;
+		}
+	}
+	return First && FVector::Dist2D(First->GetTeeLocation(), Golfer->GetActorLocation()) <= AGolfGameMode::TeeUpReach;
+}
+
 void AGolfPlayerController::OnUseKey()
 {
 	if (IsMyTurn())
 	{
 		CycleClub(1); // At the ball, E still changes club.
+	}
+	else if (CanTeeUp())
+	{
+		ServerRequestStart();
 	}
 	else if (IsDriving() || GetBuggyInReach())
 	{
@@ -312,6 +336,62 @@ void AGolfPlayerController::UpdateLandingCapture()
 	LandingCapture->bCaptureEveryFrame = true;
 }
 
+UTextureRenderTarget2D* AGolfPlayerController::GetMiniMapTexture() const
+{
+	return MiniMapHole.IsValid() ? MiniMapTarget.Get() : nullptr;
+}
+
+void AGolfPlayerController::UpdateMiniMap(float DeltaSeconds)
+{
+	const AGolfGameState* State = GetGolfState();
+	AGolfHole* Hole = State && State->Phase == EGolfMatchPhase::PlayingHole ? State->CurrentHole.Get() : nullptr;
+	if (!Hole)
+	{
+		MiniMapHole.Reset();
+		return;
+	}
+	MiniMapRecapture -= DeltaSeconds;
+	if (Hole == MiniMapHole.Get() && MiniMapRecapture > 0.f)
+	{
+		return;
+	}
+	const bool bNewHole = Hole != MiniMapHole.Get();
+	MiniMapHole = Hole;
+	// Capture again a couple of seconds after arriving (trees and textures may still be streaming in).
+	MiniMapRecapture = bNewHole ? 2.f : 1.0e9f;
+
+	if (!MiniMapCapture)
+	{
+		MiniMapTarget = NewObject<UTextureRenderTarget2D>(this);
+		MiniMapTarget->InitAutoFormat(MiniMapPixelsX, MiniMapPixelsY);
+		MiniMapCapture = NewObject<USceneCaptureComponent2D>(this);
+		MiniMapCapture->SetUsingAbsoluteLocation(true);
+		MiniMapCapture->SetUsingAbsoluteRotation(true);
+		MiniMapCapture->TextureTarget = MiniMapTarget;
+		MiniMapCapture->CaptureSource = ESceneCaptureSource::SCS_FinalColorLDR;
+		MiniMapCapture->ProjectionType = ECameraProjectionMode::Orthographic;
+		MiniMapCapture->bCaptureEveryFrame = false;
+		MiniMapCapture->bCaptureOnMovement = false;
+		MiniMapCapture->ShowFlags.SetInstancedStaticMeshes(false);
+		MiniMapCapture->ShowFlags.SetInstancedFoliage(false);
+		MiniMapCapture->ShowFlags.SetInstancedGrass(false);
+		MiniMapCapture->ShowFlags.SetFog(false);
+		MiniMapCapture->ShowFlags.SetVolumetricFog(false);
+		MiniMapCapture->RegisterComponent();
+	}
+	// Straight down, tee at the bottom and green at the top, the whole hole in frame.
+	const FVector Tee = Hole->GetTeeLocation();
+	const FVector Cup = Hole->GetCupLocation();
+	MiniMapYaw = (Cup - Tee).Rotation().Yaw;
+	MiniMapCenter = (Tee + Cup) * 0.5f;
+	const float Length = FVector::Dist2D(Tee, Cup) + 9000.f;
+	const float Aspect = static_cast<float>(MiniMapPixelsX) / MiniMapPixelsY;
+	MiniMapWidth = FMath::Max(Length * Aspect, 12000.f);
+	MiniMapCapture->OrthoWidth = MiniMapWidth;
+	MiniMapCapture->SetWorldLocationAndRotation(MiniMapCenter + FVector(0.f, 0.f, 30000.f), FRotator(-89.9f, MiniMapYaw, 0.f));
+	MiniMapCapture->CaptureScene();
+}
+
 FString AGolfPlayerController::GetSpinLabel() const
 {
 	return SpinLabels[SpinPreset];
@@ -334,6 +414,7 @@ void AGolfPlayerController::Tick(float DeltaSeconds)
 	{
 		UpdateWalking();
 	}
+	UpdateMiniMap(DeltaSeconds);
 
 	const bool bMyTurn = IsMyTurn();
 	if (bMyTurn)
@@ -601,10 +682,11 @@ void AGolfPlayerController::RefreshPreview()
 		GolfPhysics::PredictCarry(GetWorld(), GolfPhysics::MakeLaunch(Club, Input, Ball->GetLie(), Start), Ball, PreviewPath, PreviewLanding);
 	}
 
-	// Wedges with a short predicted carry are played as chips. Centre the view on the target so
-	// players can read the landing area while they adjust power and aim.
-	bLandingView = !Club.bIsPutter && Club.LaunchAngle >= 28.f
-		&& FVector::Dist2D(Start, PreviewLanding) <= LandingViewMaxCarry;
+	// Any club that can reach the green gets the overhead view of the landing area and the pin, so players
+	// can read where it will come down while they adjust power and aim.
+	const AGolfGameState* GolfState = GetGolfState();
+	const float ToPin = GolfState && GolfState->CurrentHole ? FVector::Dist2D(Start, GolfState->CurrentHole->GetCupLocation()) : 0.f;
+	bLandingView = !Club.bIsPutter && ToPin > 0.f && GetClubCarry(ClubIndex) >= ToPin * 0.85f;
 	bHasPreview = true;
 	UpdateLandingCapture();
 }

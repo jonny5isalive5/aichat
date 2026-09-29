@@ -2,16 +2,26 @@
 
     import sys, unreal; sys.path.append(unreal.Paths.project_dir() + "Scripts")
     import apply_floating_islands as isl
-    isl.apply_course()          holes 1-6: islands, water, vines, footbridges, trees, rope bridges, fog, sea
+    isl.apply_course()          holes 1-18: islands, water, vines, footbridges, trees, rope bridges, fog, sea
     isl.validate_course()       in a LATER call (collision cooks after the import): what the ball finds at each
                                 tee and cup
-    isl.apply_islands(n)        one hole only (no bridges or fog)
+    isl.apply_islands(n)        one hole only (no bridges or fog; its trees are added again, so clear by hand)
+    isl.trees_to_foliage()      turn the scripted forests into foliage (Foliage mode > Select moves single trees)
+    isl.fab_footbridges()       the Fab bridge on every brook crossing (deck_offset_cm=... to lift / sink it)
+    isl.make_path_decal()       M_PathDecal: drag Decal Actors onto the grass for footpaths (the easy way)
+    isl.export_paths()          save footpaths drawn as splines (actors named Path...) for baking into the islands
+    isl.refresh_islands()       after an island rebuild: new meshes in place, trees replanted; your floaters stay
+    isl.reimport_tops([4])      re-import island surfaces only (after paths are baked); nothing else moves
+    isl.update_materials()      rebuild the island materials only (grass paths: Mesh Paint, Blue channel)
+    isl.update_surfaces()       new island surfaces + materials only (nothing in the level moves)
+    isl.import_grass()          the 3D grass clumps + M_GrassBlades (grown around the camera in game)
+    isl.raise_fog(20)           lift every cloud patch 20 m (or lower it with a negative number)
 
 Needs, from Scripts/import_trees.py, the stylised trees and their M_Tree_Bark / M_Tree_Leaves / M_Tree_Vines
 materials (the vines and the rope bridges use them too), and the SkyLinksForest C++ class (rebuild first).
 
 Sources (Art/Blender/build_course_islands.py), all in world coordinates, placed at the origin:
-  Art/Exports/Islands/SM_Hnn_{IslandTop,IslandRock,Floaters,Vines,Water,Props}.fbx, Holenn_spots.json
+  Art/Exports/Islands/SM_Hnn_{IslandTop,IslandRock,Vines,Water,Props}.fbx, SM_Hnn_FloaterNN.fbx, Holenn_spots.json
   Art/Exports/Islands/SM_Bridge_nn_mm{,_Rails}.fbx (looks) + SM_Bridge_nn_mm_Guard.fbx (hidden drive slab and walls), Course_links.json (bridges and fog patches)
 Each hole's GolfHole actor is moved to its island: tee, heading, height, aim point, cup, par and name.
 Re-running replaces everything it made; it is safe to run twice.
@@ -30,20 +40,22 @@ MAT_DIR = '/Game/Course/Materials'
 TREES = '/Game/Course/Trees'
 MAP_PATH = '/Game/Maps/Course'
 M = 100.0
-HOLES = range(1, 7)
+HOLES = range(1, 19)
 
-# Slot name in the FBX -> (Unreal material, base colour (linear), roughness, colour variation, mowing stripes,
-# detail texture, physical material). Colour variation and stripes come from the vertex colours (R, G).
+# Slot name in the FBX -> (Unreal material, surface kind, roughness, physical material). Each kind is shaded by
+# SURFACE_CODE below: several shades of green in patches, crisp mowing stripes, green collars, a first cut of
+# rough round the fairways, and grainy raked sand with turf walls under the bunker lips.
 GRASS = {
-    'Rough':   ('M_Island_Rough',   (0.045, 0.12, 0.02),  0.95, 0.5,  0.0,  'T_GrassDetail', 'PM_Rough'),
-    'Fairway': ('M_Island_Fairway', (0.07, 0.2, 0.03),    0.9,  0.25, 0.14, 'T_GrassDetail', 'PM_Fairway'),
-    'Green':   ('M_Island_Green',   (0.08, 0.25, 0.035),  0.85, 0.12, 0.0,  'T_GrassDetail', 'PM_Green'),
-    'TeeBox':  ('M_Island_TeeBox',  (0.075, 0.21, 0.032), 0.9,  0.1,  0.0,  'T_GrassDetail', 'PM_Fairway'),
-    'Bunker':  ('M_Island_Bunker',  (0.42, 0.33, 0.2),    1.0,  0.15, 0.0,  'T_SandDetail',  'PM_Bunker'),
+    'Rough':   ('M_Island_Rough',   'rough',   0.95, 'PM_Rough'),
+    'Fairway': ('M_Island_Fairway', 'fairway', 0.88, 'PM_Fairway'),
+    'Green':   ('M_Island_Green',   'green',   0.8,  'PM_Green'),
+    'TeeBox':  ('M_Island_TeeBox',  'tee',     0.88, 'PM_Fairway'),
+    'Bunker':  ('M_Island_Bunker',  'bunker',  0.92, 'PM_Bunker'),
 }
 ROCK = ('M_Island_Rock', 'T_RockDetail', 'PM_Rough')
+PATH_COLOUR = (0.23, 0.16, 0.09)  # painted footpaths (vertex colour B) on the grass: packed earth
 SEA = 'M_Island_Sea'
-PARTS = ('IslandTop', 'IslandRock', 'Floaters', 'Vines', 'Water', 'Props')
+PARTS = ('IslandTop', 'IslandRock', 'Vines', 'Water', 'Props')
 NO_COLLISION = ('Vines',)  # hanging ivy: the ball and buggy pass through
 
 actors = unreal.get_editor_subsystem(unreal.EditorActorSubsystem)
@@ -62,7 +74,19 @@ def _import(filename, destination, options=None):
     return unreal.load_asset(f'{destination}/{Path(filename).stem}')
 
 
+SURFACE_TEXTURES = {  # Art/Blender/surface_textures.py: name -> (compression, sRGB)
+    'T_Sand_Color': ('TC_DEFAULT', True), 'T_Sand_Normal': ('TC_MASKS', False),
+    'T_Turf': ('TC_GRAYSCALE', False), 'T_RoughTurf': ('TC_GRAYSCALE', False), 'T_Macro': ('TC_GRAYSCALE', False),
+}
+
+
 def import_textures():
+    for name, (compression, srgb) in SURFACE_TEXTURES.items():
+        texture = _import(TEXTURE_SOURCE / f'{name}.png', TEXTURE_DEST)
+        assert texture, f'{name}.png did not import (run Art/Blender/surface_textures.py)'
+        texture.set_editor_property('srgb', srgb)
+        texture.set_editor_property('compression_settings', getattr(unreal.TextureCompressionSettings, compression))
+        unreal.EditorAssetLibrary.save_loaded_asset(texture)
     for name in ('T_GrassDetail', 'T_SandDetail', 'T_RockDetail'):
         texture = _import(TEXTURE_SOURCE / f'{name}.png', TEXTURE_DEST)
         assert texture, f'{name}.png did not import'
@@ -111,23 +135,222 @@ def _finish(mat, physical):
     return mat
 
 
-def grass_material(name, colour, roughness, variation, stripes, detail, physical):
-    """colour * (R * variation + 1 - variation / 2) * (1 - G * stripes) * detail texture."""
+# HLSL for each surface kind: returns the base colour (linear). Inputs, all plain floats:
+#   M1 M2 M3  patchy large-scale noise at 37 m / 11 m / 4 m      D  mown-grass detail    R  long-grass detail
+#   VC  vertex colour (B = footpath)   H  hole-local metres (x down the hole)   E  metres to (x) bunker edge, (y) fairway/green edge
+#   SC  sand colour   L8  world metres within an 8 m tile   ZL  0..1 up every 12 cm of height   N  world normal   Tint, Stripes
+SURFACE_CODE = {
+    'rough': """
+float3 c = lerp(float3(0.028, 0.080, 0.012), float3(0.070, 0.110, 0.018), saturate(M1 * 2.2 - 0.6));
+c = lerp(c, float3(0.022, 0.072, 0.030), saturate(M2 * 2.0 - 0.9) * 0.7);
+c *= (0.78 + 0.44 * M3) * (0.55 + 0.6 * R);
+float cut = 1 - smoothstep(1.0, 2.2, E.y);
+c = lerp(c, float3(0.050, 0.140, 0.022) * (0.8 + 0.3 * D), cut * 0.75);
+c *= 1 - 0.3 * (1 - smoothstep(0.0, 0.7, E.x));
+c *= Tint.rgb;
+return lerp(c, float3(0.23, 0.16, 0.09) * (0.75 + 0.3 * D), VC.b);
+""",
+    'fairway': """
+float3 c = float3(0.058, 0.165, 0.026);
+c = lerp(c, float3(0.078, 0.172, 0.020), saturate(M1 * 2.2 - 0.6) * 0.6);
+c = lerp(c, float3(0.045, 0.150, 0.036), saturate(M2 * 2.0 - 0.9) * 0.5);
+c *= (0.88 + 0.24 * M3) * (0.72 + 0.36 * D);
+float s = smoothstep(0.4, 0.6, abs(frac(H.y / 10.0) - 0.5) * 2);
+c *= lerp(1 - Stripes, 1 + Stripes, s);
+c *= 1 - 0.08 * (1 - smoothstep(0.3, 0.9, E.y));
+c = lerp(c, float3(0.035, 0.095, 0.015) * (0.6 + 0.6 * R), (1 - smoothstep(0.0, 0.6, E.x)) * 0.7);
+c *= Tint.rgb;
+return lerp(c, float3(0.23, 0.16, 0.09) * (0.75 + 0.3 * D), VC.b);
+""",
+    'green': """
+float3 c = float3(0.070, 0.215, 0.034);
+c = lerp(c, float3(0.085, 0.215, 0.030), saturate(M2 * 2.0 - 0.8) * 0.4);
+c *= (0.93 + 0.14 * M3) * (0.86 + 0.18 * D);
+float a = smoothstep(0.4, 0.6, abs(frac((H.x + H.y) / 6.0) - 0.5) * 2);
+float b = smoothstep(0.4, 0.6, abs(frac((H.x - H.y) / 6.0) - 0.5) * 2);
+c *= 1 + Stripes * 0.6 * ((a - 0.5) + (b - 0.5));
+float collar = 1 - smoothstep(0.7, 1.0, E.y);
+float3 fringe = float3(0.055, 0.170, 0.028) * (0.8 + 0.3 * D);
+c = lerp(c, fringe * lerp(1 - Stripes, 1 + Stripes, a), collar);
+c = lerp(c, float3(0.035, 0.095, 0.015) * (0.6 + 0.6 * R), (1 - smoothstep(0.0, 0.5, E.x)) * 0.6);
+return c * Tint.rgb;
+""",
+    'tee': """
+float3 c = float3(0.062, 0.180, 0.028);
+c *= (0.9 + 0.2 * M3) * (0.8 + 0.3 * D);
+float s = smoothstep(0.4, 0.6, abs(frac(H.x / 4.0) - 0.5) * 2);
+c *= lerp(1 - Stripes, 1 + Stripes, s);
+c *= Tint.rgb;
+return lerp(c, float3(0.23, 0.16, 0.09) * (0.75 + 0.3 * D), VC.b);
+""",
+    'bunker': """
+float3 c = SC * (0.9 + 0.2 * M3);
+float2 dir = float2(0.8, 0.6);
+float wob = (M3 - 0.5) * 1.2;
+float rake = sin((dot(L8, dir) + wob) * 39.27);
+c *= 1 + 0.07 * rake * saturate(M2 * 3.0 - 1.2);
+float slope = 1 - saturate(N.z);
+float lip = 1 - smoothstep(0.0, 0.6, E.x);
+c *= 1 - 0.2 * lip;
+float wall = saturate((slope - 0.25) * 3.0) * (1 - smoothstep(0.0, 0.5, E.x));
+float3 sod = lerp(float3(0.06, 0.045, 0.028), float3(0.10, 0.08, 0.045), step(0.5, ZL));
+c = lerp(c, sod, wall * 0.85);
+c = lerp(c, float3(0.045, 0.11, 0.02), (1 - smoothstep(0.0, 0.12, E.x)) * 0.7);
+return c * Tint.rgb;
+""",
+}
+SAND_NORMAL_CODE = """
+float3 n = SN * 2 - 1;
+float2 dir = float2(0.8, 0.6);
+float wob = (M3 - 0.5) * 1.2;
+float ridge = cos((dot(L8, dir) + wob) * 39.27) * saturate(M2 * 3.0 - 1.2) * 0.25;
+return normalize(N + float3(n.x * 0.6 + dir.x * ridge, n.y * 0.6 + dir.y * ridge, 0));
+"""
+SURFACE_TINT = {'rough': (1, 1, 1), 'fairway': (1, 1, 1), 'green': (1, 1, 1), 'tee': (1, 1, 1),
+                'bunker': (0.95, 0.92, 0.86)}  # sand: a touch warmer / darker than the raw texture
+
+
+def _tex(mat, name, uv, x, y, sampler=unreal.MaterialSamplerType.SAMPLERTYPE_LINEAR_GRAYSCALE):
+    node = _expr(mat, unreal.MaterialExpressionTextureSample, x, y, texture=unreal.load_asset(f'{TEXTURE_DEST}/{name}'),
+                 sampler_type=sampler)
+    lib.connect_material_expressions(uv, '', node, 'UVs')
+    return node
+
+
+def _world_uv(mat, metres, x, y, offset=0.0):
+    """World XY / (metres per tile), for textures laid over every island alike."""
+    position = _expr(mat, unreal.MaterialExpressionWorldPosition, x - 450, y)
+    mask = _expr(mat, unreal.MaterialExpressionComponentMask, x - 300, y, r=True, g=True, b=False, a=False)
+    lib.connect_material_expressions(position, '', mask, '')
+    scaled = _mul(mat, mask, '', _const(mat, 1.0 / (100.0 * metres), x - 300, y + 60), '', x - 150, y)
+    return _add(mat, scaled, _const(mat, offset, x - 150, y + 60), x, y) if offset else scaled
+
+
+def _custom(mat, code, inputs, x, y, output=unreal.CustomMaterialOutputType.CMOT_FLOAT3):
+    node = _expr(mat, unreal.MaterialExpressionCustom, x, y)
+    node.set_editor_property('code', code)
+    node.set_editor_property('output_type', output)
+    pins = []
+    for name in inputs:
+        pin = unreal.CustomInput()
+        pin.set_editor_property('input_name', name)
+        pins.append(pin)
+    node.set_editor_property('inputs', pins)
+    for name, (source, out) in inputs.items():
+        lib.connect_material_expressions(source, out, node, name)
+    return node
+
+
+def _surface_inputs(mat, kind):
+    """The plain-float feeds every surface kind reads (see SURFACE_CODE)."""
+    gray = unreal.MaterialSamplerType.SAMPLERTYPE_LINEAR_GRAYSCALE
+    feeds = {
+        'M1': (_tex(mat, 'T_Macro', _world_uv(mat, 37, -1600, -600), -1350, -600), 'R'),
+        'M2': (_tex(mat, 'T_Macro', _world_uv(mat, 11, -1600, -400, 0.37), -1350, -400), 'R'),
+        'M3': (_tex(mat, 'T_Macro', _world_uv(mat, 4.3, -1600, -200, 0.71), -1350, -200), 'R'),
+        'D': (_tex(mat, 'T_Turf', _world_uv(mat, 1.1, -1600, 0), -1350, 0, gray), 'R'),
+        'R': (_tex(mat, 'T_RoughTurf', _world_uv(mat, 0.8, -1600, 200), -1350, 200, gray), 'R'),
+        'VC': (_expr(mat, unreal.MaterialExpressionVertexColor, -1350, 400), ''),
+        'H': (_expr(mat, unreal.MaterialExpressionTextureCoordinate, -1350, 550, coordinate_index=1), ''),
+        'E': (_expr(mat, unreal.MaterialExpressionTextureCoordinate, -1350, 650, coordinate_index=2), ''),
+        'N': (_expr(mat, unreal.MaterialExpressionVertexNormalWS, -1350, 750), ''),
+        'Tint': (_expr(mat, unreal.MaterialExpressionVectorParameter, -1350, 850, parameter_name='Tint',
+                       default_value=unreal.LinearColor(*SURFACE_TINT[kind], 1.0)), ''),
+        'Stripes': (_expr(mat, unreal.MaterialExpressionScalarParameter, -1350, 1000, parameter_name='StripeStrength',
+                          default_value=0.12 if kind in ('fairway', 'tee') else 0.08), ''),
+    }
+    if kind == 'bunker':
+        feeds['SC'] = (_tex(mat, 'T_Sand_Color', _world_uv(mat, 0.9, -1600, 1150), -1350, 1150,
+                            unreal.MaterialSamplerType.SAMPLERTYPE_COLOR), 'RGB')
+        feeds['SN'] = (_tex(mat, 'T_Sand_Normal', _world_uv(mat, 0.9, -1600, 1350), -1350, 1350,
+                            unreal.MaterialSamplerType.SAMPLERTYPE_MASKS), 'RGB')
+        local = _expr(mat, unreal.MaterialExpressionFrac, -1450, 1550)
+        lib.connect_material_expressions(_world_uv(mat, 8, -1600, 1550), '', local, '')
+        feeds['L8'] = (_mul(mat, local, '', _const(mat, 8.0, -1450, 1610), '', -1350, 1550), '')
+        position = _expr(mat, unreal.MaterialExpressionWorldPosition, -1900, 1750)
+        height = _expr(mat, unreal.MaterialExpressionComponentMask, -1750, 1750, r=False, g=False, b=True, a=False)
+        lib.connect_material_expressions(position, '', height, '')
+        layers = _expr(mat, unreal.MaterialExpressionFrac, -1450, 1750)
+        lib.connect_material_expressions(_mul(mat, height, '', _const(mat, 1.0 / 12.0, -1750, 1810), '', -1600, 1750), '', layers, '')
+        feeds['ZL'] = (layers, '')
+    return feeds
+
+
+def surface_material(name, kind, roughness, physical):
+    """Island surface: base colour from SURFACE_CODE[kind]; sand also gets a world-space normal (grains, rake lines)."""
     mat = _material(name)
-    vc = _expr(mat, unreal.MaterialExpressionVertexColor, -1200, 0)
-    shade = _add(mat, _mul(mat, vc, 'R', _const(mat, variation, -1200, 200), '', -1000, 100),
-                 _const(mat, 1 - variation * 0.5, -1000, 250), -800, 150)
-    stripe = _add(mat, _mul(mat, vc, 'G', _const(mat, -stripes, -1200, 400), '', -1000, 350),
-                  _const(mat, 1.0, -1000, 450), -800, 400)
-    base = _expr(mat, unreal.MaterialExpressionConstant3Vector, -800, -150,
-                 constant=unreal.LinearColor(colour[0], colour[1], colour[2], 1.0))
-    texture = _expr(mat, unreal.MaterialExpressionTextureSample, -800, 600,
-                    texture=unreal.load_asset(f'{TEXTURE_DEST}/{detail}'),
-                    sampler_type=unreal.MaterialSamplerType.SAMPLERTYPE_LINEAR_GRAYSCALE)
-    result = _mul(mat, _mul(mat, base, '', shade, '', -600, 0), '', _mul(mat, stripe, '', texture, 'R', -600, 400), '', -400, 200)
-    lib.connect_material_property(result, '', unreal.MaterialProperty.MP_BASE_COLOR)
+    feeds = _surface_inputs(mat, kind)
+    used = {k: v for k, v in feeds.items() if k in SURFACE_CODE[kind] or k in ('VC',)}
+    colour = _custom(mat, SURFACE_CODE[kind], used, -700, 0)
+    lib.connect_material_property(colour, '', unreal.MaterialProperty.MP_BASE_COLOR)
     lib.connect_material_property(_const(mat, roughness, -400, 400), '', unreal.MaterialProperty.MP_ROUGHNESS)
+    if kind == 'bunker':
+        mat.set_editor_property('tangent_space_normal', False)
+        normal = _custom(mat, SAND_NORMAL_CODE, {k: feeds[k] for k in ('SN', 'N', 'L8', 'M2', 'M3')}, -700, 400)
+        lib.connect_material_property(normal, '', unreal.MaterialProperty.MP_NORMAL)
     return _finish(mat, physical)
+
+
+GRASS_BLADES_CODE = """
+float3 c = lerp(float3(0.034, 0.092, 0.014), float3(0.080, 0.120, 0.020), saturate(M1 * 2.2 - 0.6));
+c = lerp(c, float3(0.025, 0.080, 0.035), saturate(M2 * 2.0 - 0.9) * 0.7);
+c *= 0.75 + 0.5 * VC.g;
+c = lerp(c, c * float3(1.3, 1.12, 0.75), PIR * 0.55);
+c *= lerp(0.4, 1.2, VC.r);
+return c * Tint.rgb;
+"""
+
+
+def grass_blades_material():
+    """M_GrassBlades: two-sided, dark at the root, lighter toward the tip, every clump its own shade, and the same
+    patchy large-scale colour as the rough under it."""
+    mat = _material('M_GrassBlades')
+    mat.set_editor_property('two_sided', True)
+    feeds = {
+        'M1': (_tex(mat, 'T_Macro', _world_uv(mat, 37, -1600, -600), -1350, -600), 'R'),
+        'M2': (_tex(mat, 'T_Macro', _world_uv(mat, 11, -1600, -400, 0.37), -1350, -400), 'R'),
+        'VC': (_expr(mat, unreal.MaterialExpressionVertexColor, -1350, -200), ''),
+        'PIR': (_expr(mat, unreal.MaterialExpressionPerInstanceRandom, -1350, 0), ''),
+        'Tint': (_expr(mat, unreal.MaterialExpressionVectorParameter, -1350, 200, parameter_name='Tint',
+                       default_value=unreal.LinearColor(1, 1, 1, 1)), ''),
+    }
+    colour = _custom(mat, GRASS_BLADES_CODE, feeds, -700, 0)
+    lib.connect_material_property(colour, '', unreal.MaterialProperty.MP_BASE_COLOR)
+    lib.connect_material_property(_const(mat, 0.85, -400, 300), '', unreal.MaterialProperty.MP_ROUGHNESS)
+    lib.recompile_material(mat)
+    unreal.EditorAssetLibrary.save_loaded_asset(mat)
+    return mat
+
+
+GRASS_SOURCE = ROOT / 'Art' / 'Exports' / 'Grass'
+GRASS_DEST = '/Game/Course/Grass'
+
+
+def import_grass():
+    """The 3D grass clumps (Art/Blender/build_grass.py) and their material. ASkyLinksGrass grows them in game."""
+    import_textures()
+    mat = grass_blades_material()
+    for name in ('SM_GrassClump', 'SM_GrassTuft'):
+        options = unreal.FbxImportUI()
+        options.set_editor_property('import_mesh', True)
+        options.set_editor_property('import_as_skeletal', False)
+        options.set_editor_property('mesh_type_to_import', unreal.FBXImportType.FBXIT_STATIC_MESH)
+        options.set_editor_property('import_materials', False)
+        options.set_editor_property('import_textures', False)
+        data = options.static_mesh_import_data
+        data.set_editor_property('combine_meshes', True)
+        data.set_editor_property('auto_generate_collision', False)
+        data.set_editor_property('generate_lightmap_u_vs', False)
+        data.set_editor_property('vertex_color_import_option', unreal.VertexColorImportOption.REPLACE)
+        data.set_editor_property('normal_import_method', unreal.FBXNormalImportMethod.FBXNIM_IMPORT_NORMALS)
+        mesh = _import(GRASS_SOURCE / f'{name}.fbx', GRASS_DEST, options)
+        assert isinstance(mesh, unreal.StaticMesh), f'{name}.fbx did not import'
+        mesh.set_material(0, mat)
+        body = mesh.get_editor_property('body_setup')
+        if body:
+            body.set_editor_property('collision_trace_flag', unreal.CollisionTraceFlag.CTF_USE_SIMPLE_AS_COMPLEX)
+        unreal.EditorAssetLibrary.save_loaded_asset(mesh)
+    print(f'GRASS ready in {GRASS_DEST}: press Play to see it grow on the rough and along the bunker lips')
 
 
 def rock_material(name, detail, physical):
@@ -160,7 +383,7 @@ def plain_material(name, colour, roughness, physical=None, specular=None):
 
 def build_materials():
     import_textures()
-    materials = {slot: grass_material(*spec) for slot, spec in GRASS.items()}
+    materials = {slot: surface_material(*spec) for slot, spec in GRASS.items()}
     materials['IslandRock'] = rock_material(*ROCK)
     materials['Water'] = plain_material('M_Island_Water', (0.015, 0.06, 0.08), 0.06, 'PM_Water', specular=0.8)
     plain_material(SEA, (0.01, 0.05, 0.1), 0.15)
@@ -190,6 +413,12 @@ def import_mesh(name, materials, collide=True):
         key = next((k for k in materials if slot_name == k or slot_name.startswith(k + '_') or slot_name.startswith(k + '.')), None)
         assert key, f'{name}: unexpected material slot {slot_name}'
         mesh.set_material(index, materials[key])
+    if name.endswith('_IslandTop') or '_Floater' in name:
+        # UV1 holds hole-local metres (hundreds): half-float UVs would make the mowing stripes jagged.
+        meshes = unreal.get_editor_subsystem(unreal.StaticMeshEditorSubsystem)
+        build = meshes.get_lod_build_settings(mesh, 0)
+        build.set_editor_property('use_full_precision_u_vs', True)
+        meshes.set_lod_build_settings(mesh, 0, build)
     if collide:
         # The ball and the buggy need the real surface (and its per-face physical material), not boxes.
         body = mesh.get_editor_property('body_setup')
@@ -211,19 +440,19 @@ def remove_flat_ground(number):
         if label == f'Terrain_Hole{number:02d}' and isinstance(actor, unreal.Landscape):
             doomed.append(actor)
         elif path == folder and isinstance(actor, unreal.StaticMeshActor) and (
-                label in ('Rough', 'Green', 'TeeBox') or label.startswith(('Fairway', 'Bunker', 'Water', 'TreeTrunk', 'TreeCanopy'))):
+                label in ('Rough', 'Green', 'TeeBox') or label.startswith(('Fairway', 'Bunker', 'Water', 'Tree'))):
             doomed.append(actor)  # blockout slabs and the placeholder ball trees (the forest replaces them)
         elif number == 1 and label == 'ClubhouseLawn':
             doomed.append(actor)
-        elif path in (f'{folder}/Islands', f'{folder}/Trees'):
+        elif path in (f'{folder}/Islands', f'{folder}/Trees', f'{folder}/Islands/Floaters', f'{folder}/Footbridges'):
             doomed.append(actor)  # a previous run
     for actor in doomed:
         actors.destroy_actor(actor)
     print(f'HOLE {number}: removed {len(doomed)} old actors')
 
 
-def place(mesh, label, folder, collide=True, shadow=None):
-    actor = actors.spawn_actor_from_object(mesh, unreal.Vector(0, 0, 0), unreal.Rotator(0, 0, 0))
+def place(mesh, label, folder, collide=True, shadow=None, location=None):
+    actor = actors.spawn_actor_from_object(mesh, location or unreal.Vector(0, 0, 0), unreal.Rotator(0, 0, 0))
     actor.set_actor_label(label)
     actor.set_folder_path(folder)
     if not collide:
@@ -296,6 +525,292 @@ def setup_car_park(clubhouse, everything):
     print(f'CAR PARK: {len(CAR_PARK_BAYS)} buggy bays, {len(starts)} player start(s) moved to the car park')
 
 
+FOG_LIFT = 20.0  # m above the heights in Course_links.json: the cloud patches drift up among the islands
+
+
+def _foliage_types():
+    """FT_* foliage types from import_trees (one per tree / bush kind)."""
+    types = [unreal.load_asset(f'/Game/Course/Foliage/{path.split("/")[-1].split(".")[0]}')
+             for path in unreal.EditorAssetLibrary.list_assets('/Game/Course/Foliage', recursive=False)]
+    types = [t for t in types if isinstance(t, unreal.FoliageType)]
+    assert types, '/Game/Course/Foliage is empty: run import_trees.import_trees() first'
+    return types
+
+
+def trees_to_foliage():
+    """Hand every SkyLinksForest's trees to the level's foliage: in Foliage mode (Select tool) each tree can
+    be clicked and moved on its own, and the brush paints more. Instancing (and the fps) stays the same."""
+    types = _foliage_types()
+    moved = 0
+    for forest in [a for a in _all() if isinstance(a, unreal.SkyLinksForest)]:
+        moved += forest.convert_to_foliage(types)
+    unreal.get_editor_subsystem(unreal.LevelEditorSubsystem).save_current_level()
+    print(f'TREES: {moved} trees and bushes are now foliage')
+
+
+# Fab "Bridge" (TAKOYTO): 2 m wide, 8.6 m long along its Y axis. Exported to /Game/Fab/Bridge (with its textures);
+# an earlier export without textures landed in /Game/Course/Vegetation.
+FAB_FOLDERS = ('/Game/Fab/Bridge', '/Game/Course/Vegetation')
+
+
+def _fab(name):
+    for folder in FAB_FOLDERS:
+        asset = unreal.load_asset(f'{folder}/{name}') if unreal.EditorAssetLibrary.does_asset_exist(f'{folder}/{name}') else None
+        if asset:
+            return asset
+    return None
+FOOTBRIDGE_WIDTH = 3.0                           # m, as Art/Blender/build_course_islands.py (so the buggy fits)
+
+
+def footbridge_wood():
+    """Warm painted-wood material for the Fab bridge when its own textures didn't come through (it shows white)."""
+    path = f'{MAT_DIR}/M_Footbridge_Wood'
+    if unreal.EditorAssetLibrary.does_asset_exist(path):
+        return unreal.load_asset(path)
+    mat = _material('M_Footbridge_Wood')
+    base = _expr(mat, unreal.MaterialExpressionConstant3Vector, -800, -100, constant=unreal.LinearColor(0.34, 0.2, 0.1, 1))
+    texture = _expr(mat, unreal.MaterialExpressionTextureSample, -800, 150,
+                    texture=unreal.load_asset(f'{TEXTURE_DEST}/T_RockDetail'),
+                    sampler_type=unreal.MaterialSamplerType.SAMPLERTYPE_LINEAR_GRAYSCALE)
+    result = _mul(mat, base, '', texture, 'R', -500, 0)
+    lib.connect_material_property(result, '', unreal.MaterialProperty.MP_BASE_COLOR)
+    lib.connect_material_property(_const(mat, 0.85, -500, 250), '', unreal.MaterialProperty.MP_ROUGHNESS)
+    lib.recompile_material(mat)
+    unreal.EditorAssetLibrary.save_loaded_asset(mat)
+    return mat
+
+
+
+
+def footbridge_fab_material():
+    """M_Footbridge_Fab from the Fab textures (Bridge_BaseColor, Bridge_Normal), or None until they're imported."""
+    colour = _fab('Bridge_BaseColor')
+    normal = _fab('Bridge_Normal')
+    if not isinstance(colour, unreal.Texture2D):
+        return None
+    for texture in (colour, normal):
+        if isinstance(texture, unreal.Texture2D):
+            texture.set_editor_property('max_texture_size', 2048)  # 4K is more than a footbridge needs (phones)
+    if isinstance(normal, unreal.Texture2D):
+        normal.set_editor_property('compression_settings', unreal.TextureCompressionSettings.TC_NORMALMAP)
+        normal.set_editor_property('srgb', False)
+    for texture in (colour, normal):
+        if isinstance(texture, unreal.Texture2D):
+            unreal.EditorAssetLibrary.save_loaded_asset(texture)
+    mat = _material('M_Footbridge_Fab')
+    base = _expr(mat, unreal.MaterialExpressionTextureSample, -600, 0, texture=colour)
+    lib.connect_material_property(base, 'RGB', unreal.MaterialProperty.MP_BASE_COLOR)
+    if isinstance(normal, unreal.Texture2D):
+        bump = _expr(mat, unreal.MaterialExpressionTextureSample, -600, 300, texture=normal,
+                     sampler_type=unreal.MaterialSamplerType.SAMPLERTYPE_NORMAL)
+        lib.connect_material_property(bump, 'RGB', unreal.MaterialProperty.MP_NORMAL)
+    lib.connect_material_property(_const(mat, 0.8, -600, 550), '', unreal.MaterialProperty.MP_ROUGHNESS)
+    lib.recompile_material(mat)
+    unreal.EditorAssetLibrary.save_loaded_asset(mat)
+    return mat
+
+
+def place_footbridges(number, spots, deck_offset_cm=0.0, wood=True):
+    """The Fab bridge over each brook crossing (looks only), stretched to the span; the Props mesh underneath
+    becomes the invisible flat deck the buggy and ball actually use."""
+    folder = f'Course/Hole{number:02d}/Footbridges'
+    for actor in _all():
+        if str(actor.get_folder_path()) == folder:
+            actors.destroy_actor(actor)
+        elif actor.get_actor_label() == f'Props{number:02d}':
+            actor.set_actor_hidden_in_game(True)
+            actor.static_mesh_component.set_editor_property('visible', False)
+            actor.static_mesh_component.set_editor_property('cast_shadow', False)
+    mesh = _fab('Bridge1')
+    if not mesh or not spots.get('footbridges'):
+        return
+    # The Fab bridge's own textures when they've been imported, otherwise the painted-wood stand-in.
+    look = footbridge_fab_material() or (footbridge_wood() if wood else None)
+    box = mesh.get_bounding_box()
+    width_cm, length_cm = box.max.x - box.min.x, box.max.y - box.min.y
+    for i, (x, y, z, yaw, length) in enumerate(spots['footbridges']):
+        # The mesh runs along its Y axis: turn it a quarter so Y follows the crossing; overlap the banks a little.
+        bridge = actors.spawn_actor_from_object(mesh, unreal.Vector(x * M, y * M, z * M + deck_offset_cm), unreal.Rotator(0, 0, yaw - 90.0))
+        bridge.set_actor_scale3d(unreal.Vector(FOOTBRIDGE_WIDTH * M / width_cm, (length + 1.5) * M / length_cm, 1.0))
+        bridge.static_mesh_component.set_collision_enabled(unreal.CollisionEnabled.NO_COLLISION)
+        if look:
+            for slot in range(bridge.static_mesh_component.get_num_materials()):
+                bridge.static_mesh_component.set_material(slot, look)
+        bridge.set_actor_label(f'Footbridge{number:02d}_{i + 1}')
+        bridge.set_folder_path(folder)
+
+
+def fab_footbridges(deck_offset_cm=0.0, wood=True, holes=HOLES):
+    """Swap every footbridge for the Fab bridge: re-imports the decks (SM_Hnn_Props), hides them, places the
+    bridges. deck_offset_cm lifts (+) or sinks (-) the Fab bridges if their deck doesn't meet the drive height.
+    wood=True paints them with M_Footbridge_Wood; wood=False keeps the Fab material (once its textures import)."""
+    materials = build_materials()
+    for number in holes:
+        spots_path = SOURCE / f'Hole{number:02d}_spots.json'
+        if not spots_path.is_file():
+            continue
+        spots = json.loads(spots_path.read_text())
+        if not spots.get('footbridges'):
+            continue
+        import_mesh(f'SM_H{number:02d}_Props', materials)
+        place_footbridges(number, spots, deck_offset_cm, wood)
+        print(f"FOOTBRIDGES hole {number}: {len(spots['footbridges'])}")
+    unreal.get_editor_subsystem(unreal.LevelEditorSubsystem).save_current_level()
+
+
+def export_paths(default_width_m=3.0):
+    """Save every footpath drawn in the level to Art/Exports/Islands/Paths.json for the island builder.
+
+    Draw a path: Place Actors > Empty Actor, name it Path... (e.g. Path_H04_a), Details > + Add > Spline, then drag
+    the spline's points over the grass (Alt+drag a point adds the next one). Optional width: add the actor tag
+    'width=4' (metres). Push the json; build_course_islands.py bakes the paths into the island tops (crisp edges)."""
+    paths = []
+    for actor in _all():
+        if not actor.get_actor_label().lower().startswith('path'):
+            continue
+        spline = actor.get_component_by_class(unreal.SplineComponent)
+        if not spline:
+            print(f'PATHS: {actor.get_actor_label()} has no Spline component, skipped')
+            continue
+        width = default_width_m
+        for tag in actor.tags:
+            if str(tag).lower().startswith('width='):
+                width = float(str(tag).split('=')[1])
+        # Sample the curve every metre so bends stay round.
+        length = spline.get_spline_length()
+        steps = max(2, int(length / 100.0) + 1)
+        points = []
+        for i in range(steps + 1):
+            p = spline.get_location_at_distance_along_spline(length * i / steps, unreal.SplineCoordinateSpace.WORLD)
+            points.append([round(p.x / M, 3), round(p.y / M, 3), round(p.z / M, 3)])
+        paths.append({'name': actor.get_actor_label(), 'width': width, 'points': points})
+    out = SOURCE / 'Paths.json'
+    out.write_text(json.dumps({'paths': paths}, indent=1) + '\n')
+    print(f'PATHS: {len(paths)} saved to {out} (commit and push it)')
+
+
+def make_path_decal():
+    """M_PathDecal: a dirt footpath for Decal Actors. Soft sides and ends, so pieces laid end to end or overlapped
+    blend into one path. Place Actors > Decal Actor, set its Decal Material to this, then scale / rotate it."""
+    mat = _material('M_PathDecal')
+    mat.set_editor_property('material_domain', unreal.MaterialDomain.MD_DEFERRED_DECAL)
+    mat.set_editor_property('blend_mode', unreal.BlendMode.BLEND_TRANSLUCENT)
+    uv = _expr(mat, unreal.MaterialExpressionTextureCoordinate, -1400, 300)
+
+    def fade(channel, x, y, sharp):
+        # 1 in the middle, 0 at the edge: 1 - |2 * uv - 1| ^ sharp
+        mask = _expr(mat, unreal.MaterialExpressionComponentMask, x, y, r=channel == 'R', g=channel == 'G', b=False, a=False)
+        lib.connect_material_expressions(uv, '', mask, '')
+        centred = _add(mat, _mul(mat, mask, '', _const(mat, 2.0, x, y + 60), '', x + 150, y), _const(mat, -1.0, x + 150, y + 60), x + 300, y)
+        dist = _expr(mat, unreal.MaterialExpressionAbs, x + 450, y)
+        lib.connect_material_expressions(centred, '', dist, '')
+        power = _expr(mat, unreal.MaterialExpressionPower, x + 600, y)
+        lib.connect_material_expressions(dist, '', power, 'Base')
+        lib.connect_material_expressions(_const(mat, sharp, x + 450, y + 60), '', power, 'Exp')
+        return _add(mat, _mul(mat, power, '', _const(mat, -1.0, x + 600, y + 60), '', x + 750, y), _const(mat, 1.0, x + 750, y + 60), x + 900, y)
+    across = fade('G', -1400, 450, 4.0)   # soft sides
+    along = fade('R', -1400, 650, 8.0)    # softer only right at the ends
+    opacity = _mul(mat, across, '', along, '', -300, 550)
+    grit = _expr(mat, unreal.MaterialExpressionTextureSample, -800, 0, texture=unreal.load_asset(f'{TEXTURE_DEST}/T_SandDetail'),
+                 sampler_type=unreal.MaterialSamplerType.SAMPLERTYPE_LINEAR_GRAYSCALE)
+    dirt = _expr(mat, unreal.MaterialExpressionConstant3Vector, -800, -150, constant=unreal.LinearColor(*PATH_COLOUR, 1.0))
+    lib.connect_material_property(_mul(mat, dirt, '', grit, 'R', -500, 0), '', unreal.MaterialProperty.MP_BASE_COLOR)
+    lib.connect_material_property(_const(mat, 0.95, -500, 200), '', unreal.MaterialProperty.MP_ROUGHNESS)
+    lib.connect_material_property(opacity, '', unreal.MaterialProperty.MP_OPACITY)
+    lib.recompile_material(mat)
+    unreal.EditorAssetLibrary.save_loaded_asset(mat)
+    print(f'PATH DECAL ready: {MAT_DIR}/M_PathDecal')
+    return mat
+
+
+KEEP_TREES = {1}  # holes whose trees the owner arranged by hand: refresh_islands leaves their foliage alone
+
+
+def refresh_islands(holes=HOLES):
+    """After a rebuild of the island meshes (new bunkers, buggy paths...): re-import every hole's surface, rock,
+    ivy, water and footbridge deck in place, re-seat the holes, footbridges and rope bridges, and replant the
+    trees island by island (clear of the new paths and bunkers). Holes in KEEP_TREES (hole 1, arranged by hand)
+    keep their trees. Your moved floating islands, the fog and the sea stay as they are."""
+    world = unreal.get_editor_subsystem(unreal.UnrealEditorSubsystem).get_editor_world()
+    materials = build_materials()
+    types = _foliage_types()
+    for number in holes:
+        spots_path = SOURCE / f'Hole{number:02d}_spots.json'
+        if not spots_path.is_file():
+            continue
+        spots = json.loads(spots_path.read_text())
+        for part in PARTS:
+            name = f'SM_H{number:02d}_{part}'
+            if (SOURCE / f'{name}.fbx').is_file() and unreal.EditorAssetLibrary.does_asset_exist(f'{DEST}/{name}'):
+                import_mesh(name, materials, part not in NO_COLLISION)
+        place_hole(number, spots)
+        place_footbridges(number, spots)
+        if number in KEEP_TREES or not spots.get('land_outline'):
+            print(f'HOLE {number} refreshed (trees kept)')
+            continue
+        # Only this island's trees go (inside its outline); every other island keeps its own.
+        outline = [unreal.Vector2D(x * M, y * M) for x, y in spots['land_outline']]
+        removed = unreal.SkyLinksForest.clear_foliage_inside(world, types, outline)
+        plant_forest(number, spots)
+        print(f'HOLE {number} refreshed: {removed} old trees out, new ones planted')
+    apply_bridges(materials, json.loads((SOURCE / 'Course_links.json').read_text()))
+    unreal.get_editor_subsystem(unreal.LevelEditorSubsystem).save_current_level()
+    print('ISLANDS REFRESHED. Run validate_course() in a separate call.')
+
+
+def reimport_tops(holes=HOLES):
+    """Re-import only the island surfaces (SM_Hnn_IslandTop), e.g. after footpaths are baked in. The placed
+    actors pick up the new meshes; floaters, trees, bridges and everything you've moved stay as they are."""
+    materials = build_materials()
+    for number in holes:
+        if (SOURCE / f'SM_H{number:02d}_IslandTop.fbx').is_file():
+            import_mesh(f'SM_H{number:02d}_IslandTop', materials)
+    unreal.get_editor_subsystem(unreal.LevelEditorSubsystem).save_current_level()
+    print(f'TOPS re-imported: holes {list(holes)}')
+
+
+def update_surfaces():
+    """New island surfaces + materials, and nothing in the level moves: re-imports every IslandTop and floating
+    island mesh (the actors pick them up where they are) and rebuilds the materials. Trees, paths, decals, bridges
+    and everything placed by hand stay exactly as they are."""
+    materials = build_materials()
+    count = 0
+    for path in sorted(SOURCE.glob('SM_H??_IslandTop.fbx')) + sorted(SOURCE.glob('SM_H??_Floater*.fbx')):
+        if unreal.EditorAssetLibrary.does_asset_exist(f'{DEST}/{path.stem}'):
+            import_mesh(path.stem, materials)
+            count += 1
+    unreal.EditorAssetLibrary.save_directory(DEST)
+    print(f'SURFACES updated: {count} meshes re-imported, materials rebuilt. Nothing in the level was moved.')
+
+
+def update_materials():
+    """Rebuild the island materials only (nothing in the level moves), e.g. after a material change."""
+    build_materials()
+    print('MATERIALS rebuilt')
+
+
+def reimport_props(holes=HOLES):
+    """Re-import the footbridges (SM_Hnn_Props) in place: the placed actors pick up the new mesh, nothing moves."""
+    materials = build_materials()
+    done = [f'SM_H{n:02d}_Props' for n in holes if (SOURCE / f'SM_H{n:02d}_Props.fbx').is_file()]
+    for name in done:
+        import_mesh(name, materials)
+    unreal.get_editor_subsystem(unreal.LevelEditorSubsystem).save_current_level()
+    print(f'PROPS re-imported: {", ".join(done)}')
+
+
+def raise_fog(meters=20.0):
+    """Move every cloud patch up (or down) without rebuilding anything else."""
+    count = 0
+    for actor in _all():
+        if str(actor.get_folder_path()) == 'Course/Fog':
+            p = actor.get_actor_location()
+            actor.set_actor_location(unreal.Vector(p.x, p.y, p.z + meters * M), False, True)
+            count += 1
+    unreal.get_editor_subsystem(unreal.LevelEditorSubsystem).save_current_level()
+    print(f'FOG: {count} patches moved {meters:+.0f} m')
+
+
 def _tree_mesh(kind):
     path = f'{TREES}/SM_Tree_{kind}' if not kind.startswith('Bush') else f'{TREES}/SM_{kind}'
     mesh = unreal.load_asset(path)
@@ -320,7 +835,9 @@ def plant_forest(number, spots):
     total = 0
     for kind, transforms in by_kind.items():
         total += forest.add_trees(_tree_mesh(kind), transforms)
-    print(f'HOLE {number}: planted {total} trees and bushes')
+    # Into the level's foliage, so single trees can be moved in Foliage mode (the forest actor goes away).
+    forest.convert_to_foliage(_foliage_types())
+    print(f'HOLE {number}: planted {total} trees and bushes (foliage)')
 
 
 def apply_islands(number, materials=None):
@@ -334,7 +851,12 @@ def apply_islands(number, materials=None):
             continue
         collide = part not in NO_COLLISION
         place(import_mesh(name, materials, collide), f'{part}{number:02d}', folder, collide)
+    # Background mini islands, high above the hole: one actor each (pivot in its middle), free to move by hand.
+    for name, x, y, z in spots.get('floaters', []):
+        place(import_mesh(name, materials, collide=False), name.replace(f'SM_H{number:02d}_', ''), f'{folder}/Floaters',
+              collide=False, shadow=True, location=unreal.Vector(x * M, y * M, z * M))
     place_hole(number, spots)
+    place_footbridges(number, spots)
     plant_forest(number, spots)
     print(f'HOLE {number} {spots["name"]} (par {spots["par"]}) placed at z {spots["tee"][2]:+.0f} m')
 
@@ -371,7 +893,8 @@ def add_fog(links):
         print('FOG skipped: LocalFogVolume not available in this engine build')
         return
     for i, (x, y, z, radius) in enumerate(links['fog']):
-        fog = actors.spawn_actor_from_class(unreal.LocalFogVolume, unreal.Vector(x * M, y * M, z * M), unreal.Rotator(0, 0, 0))
+        fog = actors.spawn_actor_from_class(unreal.LocalFogVolume, unreal.Vector(x * M, y * M, (z + FOG_LIFT) * M),
+                                            unreal.Rotator(0, 0, 0))
         fog.set_actor_scale3d(unreal.Vector(radius / 5.0, radius / 5.0, radius / 10.0))  # flattened like a cloud bank
         fog.set_actor_label(f'CloudFog{i:02d}')
         fog.set_folder_path(folder)
@@ -397,10 +920,16 @@ def ensure_sea():
     sea.set_folder_path('Course/Environment')
 
 
-def apply_course(holes=HOLES):
+def apply_course(holes=HOLES, wipe_hand_work=False):
+    """First-time build of the whole course. It clears EVERY tree and replants, so hand-arranged holes (KEEP_TREES)
+    would be lost: once the course exists, use refresh_islands() instead."""
+    assert wipe_hand_work or not KEEP_TREES, ('apply_course() replants every island and would wipe your hand-placed '
+                                              'trees on hole(s) %s. Use refresh_islands() instead.' % sorted(KEEP_TREES))
     world = unreal.get_editor_subsystem(unreal.UnrealEditorSubsystem).get_editor_world()
     assert world.get_path_name() == f'{MAP_PATH}.Course', f'Open {MAP_PATH} first'
     materials = build_materials()
+    # Replanting every hole: clear the old foliage trees first (they'd double up otherwise).
+    unreal.SkyLinksForest.clear_foliage(world, _foliage_types())
     for number in holes:
         apply_islands(number, materials)
     links = json.loads((SOURCE / 'Course_links.json').read_text())

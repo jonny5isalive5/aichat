@@ -262,10 +262,15 @@ def pslg(lines, spacing):
 
 def triangulate_top(layout):
     lines = [LineString(r.coords) for region in layout['regions'].values() for r in polygon_rings(region)]
+    # Extra outlines to keep as mesh edges (footpath borders), so painted-in features get crisp edges.
+    lines += [LineString(r.coords) for g in layout.get('extra_lines', []) for r in polygon_rings(g)]
     vertices, segments = pslg(lines, EDGE_SPACING)
     seeds = []
+    extra = unary_union(layout.get('extra_lines', [])) if layout.get('extra_lines') else None
     for region_id, region in layout['regions'].items():
-        for part in (region.geoms if hasattr(region, 'geoms') else [region]):
+        # Extra outlines (footpaths) cut regions into pieces: seed every piece so each keeps its type and density.
+        pieces = [region] if extra is None else [region.difference(extra), region.intersection(extra)]
+        for part in (g for piece in pieces for g in (piece.geoms if hasattr(piece, 'geoms') else [piece])):
             if part.area > 0.5:
                 p = part.representative_point()
                 seeds.append([p.x, p.y, region_id, REGION_MAX_AREA[region_id]])
@@ -341,7 +346,7 @@ def top_colours(x, y, number):
 
 # ---------------------------------------------------------------- Blender meshes
 
-def make_mesh(name, verts_ue, faces, face_materials, material_names, colours, smooth_shading=True, uv_scale=4.0):
+def make_mesh(name, verts_ue, faces, face_materials, material_names, colours, smooth_shading=True, uv_scale=4.0, extra_uvs=()):
     """verts_ue: Unreal-frame metres. Mirrors y for Blender and flips winding so normals stay outward."""
     verts = [(float(v[0]), float(-v[1]), float(v[2])) for v in verts_ue]
     mesh = bpy.data.meshes.new(name)
@@ -373,6 +378,10 @@ def make_mesh(name, verts_ue, faces, face_materials, material_names, colours, sm
     u = np.where(n[:, 2] >= np.maximum(n[:, 0], n[:, 1]), p[:, 0], np.where(n[:, 0] >= n[:, 1], p[:, 1], p[:, 0]))
     v = np.where(n[:, 2] >= np.maximum(n[:, 0], n[:, 1]), p[:, 1], p[:, 2])
     uv.data.foreach_set('uv', (np.stack([u, v], 1) / uv_scale).astype(np.float32).ravel())
+    # Further UV channels carry per-vertex data for the materials (UV1, UV2... in Unreal).
+    for uv_name, values in extra_uvs:
+        layer = mesh.uv_layers.new(name=uv_name)
+        layer.data.foreach_set('uv', np.asarray(values, np.float32)[loops_v].ravel())
 
     mesh.validate()
     obj = bpy.data.objects.new(name, mesh)

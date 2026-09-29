@@ -50,6 +50,7 @@ class SKYLINKS_API AGolfHUD : public AHUD
 
 public:
 	virtual void DrawHUD() override;
+	virtual void BeginPlay() override;
 
 	/** OutPayload carries the digit for keypad keys and the list index for friends. */
 	EGolfHudButton HitTest(const FVector2D& ScreenPosition, int32& OutPayload) const;
@@ -82,6 +83,8 @@ private:
 	/** Arrow and distance to my ball, PLAY SHOT / SKIP (only on the way to my ball). */
 	void DrawBallCompass(AGolfPlayerController* Controller, const AActor* From);
 	void DrawPinMarker(AGolfGameState* State);
+	/** Top-down map of the hole on the left with the pin, the balls and the current shot's landing zone. */
+	void DrawMiniMap(AGolfGameState* State, AGolfPlayerController* Controller);
 	void DrawLandingView(AGolfGameState* State, AGolfPlayerController* Controller);
 	void DrawGreenGrid(AGolfPlayerController* Controller);
 	void DrawPreview(AGolfPlayerController* Controller);
@@ -93,8 +96,12 @@ private:
 	void Box(const FVector2D& Position, const FVector2D& Size, const FLinearColor& Color);
 	void Disc(const FVector2D& Center, float Radius, const FLinearColor& Color);
 	void Ring(const FVector2D& Center, float Radius, const FLinearColor& Color, float Thickness);
+	/** Part of a ring: from StartDegrees (0 = right, clockwise on screen) sweeping SweepDegrees. */
+	void Arc(const FVector2D& Center, float Radius, float StartDegrees, float SweepDegrees, const FLinearColor& Color, float Thickness);
 	void Line(const FVector2D& A, const FVector2D& B, const FLinearColor& Color, float Thickness);
 	void Label(const FString& Text, const FVector2D& Position, float Height, const FLinearColor& Color, bool bCenter);
+	/** Panel heading: small spaced capitals over a hairline rule with a bright lead-in segment. */
+	void Heading(const FString& Text, const FVector2D& Position, float Width, float Height, bool bCenter = false);
 	void RoundButton(EGolfHudButton Id, const FVector2D& Center, float Radius, const FString& Text, const FLinearColor& Fill, int32 Payload = 0);
 	bool ToScreen(const FVector& World, FVector2D& OutScreen) const;
 };
