@@ -306,6 +306,8 @@ def grass_blades_material():
     patchy large-scale colour as the rough under it."""
     mat = _material('M_GrassBlades')
     mat.set_editor_property('two_sided', True)
+    # The grass is instanced at runtime: without this flag the game can't compile it and shows grey blades.
+    mat.set_editor_property('used_with_instanced_static_meshes', True)
     feeds = {
         'M1': (_tex(mat, 'T_Macro', _world_uv(mat, 37, -1600, -600), -1350, -600), 'R'),
         'M2': (_tex(mat, 'T_Macro', _world_uv(mat, 11, -1600, -400, 0.37), -1350, -400), 'R'),

@@ -25,22 +25,22 @@ public:
 
 	/** Clumps per square metre of rough. */
 	UPROPERTY(EditAnywhere, Category = "Grass")
-	float RoughDensity = 2.2f;
+	float RoughDensity = 6.f;
 
 	/** Tufts per metre of bunker edge (they sit on the grass just outside the sand). */
 	UPROPERTY(EditAnywhere, Category = "Grass")
-	float LipDensity = 5.f;
+	float LipDensity = 8.f;
 
 	/** Grass is grown within this distance of the camera (cm). */
 	UPROPERTY(EditAnywhere, Category = "Grass")
-	float Radius = 4000.f;
+	float Radius = 3500.f;
 
 	UPROPERTY(EditAnywhere, Category = "Grass")
 	float CellSize = 800.f;
 
 	/** Line traces allowed per frame while filling cells. */
 	UPROPERTY(EditAnywhere, Category = "Grass")
-	int32 TraceBudget = 1500;
+	int32 TraceBudget = 2500;
 
 	UPROPERTY(EditAnywhere, Category = "Grass")
 	TSoftObjectPtr<UStaticMesh> ClumpMesh;
