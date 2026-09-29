@@ -325,6 +325,30 @@ def grass_blades_material():
     return mat
 
 
+DEBRIS_CODE = """
+float3 green = float3(0.06, 0.16, 0.02);
+float3 yellow = float3(0.42, 0.32, 0.05);
+float3 brown = float3(0.20, 0.10, 0.035);
+float3 c = PIR < 0.4 ? lerp(green, yellow, PIR / 0.4) : lerp(yellow, brown, (PIR - 0.4) / 0.6);
+return c * lerp(0.7, 1.1, VC.r);
+"""
+
+
+def debris_material():
+    """M_WindDebris: two-sided; each leaf or straw its own shade from green through yellow to brown."""
+    mat = _material('M_WindDebris')
+    mat.set_editor_property('two_sided', True)
+    mat.set_editor_property('used_with_instanced_static_meshes', True)
+    feeds = {'VC': (_expr(mat, unreal.MaterialExpressionVertexColor, -1000, 0), ''),
+             'PIR': (_expr(mat, unreal.MaterialExpressionPerInstanceRandom, -1000, 200), '')}
+    colour = _custom(mat, DEBRIS_CODE, feeds, -600, 0)
+    lib.connect_material_property(colour, '', unreal.MaterialProperty.MP_BASE_COLOR)
+    lib.connect_material_property(_const(mat, 0.8, -400, 300), '', unreal.MaterialProperty.MP_ROUGHNESS)
+    lib.recompile_material(mat)
+    unreal.EditorAssetLibrary.save_loaded_asset(mat)
+    return mat
+
+
 GRASS_SOURCE = ROOT / 'Art' / 'Exports' / 'Grass'
 GRASS_DEST = '/Game/Course/Grass'
 
@@ -332,8 +356,10 @@ GRASS_DEST = '/Game/Course/Grass'
 def import_grass():
     """The 3D grass clumps (Art/Blender/build_grass.py) and their material. ASkyLinksGrass grows them in game."""
     import_textures()
-    mat = grass_blades_material()
-    for name in ('SM_GrassClump', 'SM_GrassTuft'):
+    blades = grass_blades_material()
+    debris = debris_material()
+    for name in ('SM_GrassClump', 'SM_GrassTuft', 'SM_WindLeaf', 'SM_WindStraw'):
+        mat = debris if name.startswith('SM_Wind') else blades
         options = unreal.FbxImportUI()
         options.set_editor_property('import_mesh', True)
         options.set_editor_property('import_as_skeletal', False)
@@ -353,7 +379,7 @@ def import_grass():
         if body:
             body.set_editor_property('collision_trace_flag', unreal.CollisionTraceFlag.CTF_USE_SIMPLE_AS_COMPLEX)
         unreal.EditorAssetLibrary.save_loaded_asset(mesh)
-    print(f'GRASS ready in {GRASS_DEST}: press Play to see it grow on the rough and along the bunker lips')
+    print(f'GRASS ready in {GRASS_DEST}: press Play to see it grow on the rough and along the bunker lips, and leaves blow in the wind')
 
 
 def rock_material(name, detail, physical):

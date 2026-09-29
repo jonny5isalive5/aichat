@@ -2,7 +2,8 @@
 
     python Art/Blender/build_grass.py        (bpy module)
 
-Writes Art/Exports/Grass/SM_GrassClump.fbx (short rough) and SM_GrassTuft.fbx (taller, wispy lip tufts).
+Writes Art/Exports/Grass/SM_GrassClump.fbx (short rough), SM_GrassTuft.fbx (taller, wispy lip tufts) and
+SM_WindLeaf / SM_WindStraw.fbx (the leaves and dry grass the wind blows about, ASkyLinksWindDebris).
 Each blade is a thin bent strip (3 triangles). Vertex colour R = height up the blade (0 root .. 1 tip),
 G = a random shade per blade; the normals all point up so the blades light like the ground they grow from.
 Scripts/apply_floating_islands.py (import_grass) brings them in with the M_GrassBlades material.
@@ -65,6 +66,30 @@ def clump(name, blades, spread, height, width, lean, seed):
     return obj
 
 
+def flake(name, kind):
+    """A single leaf (a folded diamond, 6 cm) or a bit of dry grass (a thin 8 cm sliver) for the wind debris.
+    Vertex colour R = 0 at the stem end, 1 at the tip."""
+    if kind == 'leaf':
+        verts = [(-0.03, 0.0, 0.0), (0.0, -0.016, 0.004), (0.03, 0.0, 0.0), (0.0, 0.016, 0.004), (0.0, 0.0, -0.002)]
+        faces = [(0, 1, 4), (1, 2, 4), (2, 3, 4), (3, 0, 4)]
+        cols = [(0.0, 0.5, 0, 1), (0.5, 0.5, 0, 1), (1.0, 0.5, 0, 1), (0.5, 0.5, 0, 1), (0.5, 0.5, 0, 1)]
+    else:
+        verts = [(-0.04, -0.002, 0.0), (0.04, -0.001, 0.003), (0.04, 0.001, 0.003), (-0.04, 0.002, 0.0)]
+        faces = [(0, 1, 2), (0, 2, 3)]
+        cols = [(0.0, 0.5, 0, 1), (1.0, 0.5, 0, 1), (1.0, 0.5, 0, 1), (0.0, 0.5, 0, 1)]
+    mesh = bpy.data.meshes.new(name)
+    mesh.from_pydata(verts, [], faces)
+    attribute = mesh.color_attributes.new('Col', 'BYTE_COLOR', 'POINT')
+    attribute.data.foreach_set('color_srgb', np.asarray(cols, np.float32).ravel())
+    mesh.color_attributes.active_color = attribute
+    mesh.uv_layers.new(name='UVMap')
+    mesh.materials.append(bpy.data.materials.new('Debris'))
+    mesh.validate()
+    obj = bpy.data.objects.new(name, mesh)
+    bpy.context.scene.collection.objects.link(obj)
+    return obj
+
+
 def main():
     OUT.mkdir(parents=True, exist_ok=True)
     specs = {
@@ -76,6 +101,11 @@ def main():
         obj = clump(name, **spec)
         sl.export_fbx(str(OUT / f'{name}.fbx'), [obj])
         print(f'GRASS {name}: {len(obj.data.polygons)} triangles')
+    for name, kind in (('SM_WindLeaf', 'leaf'), ('SM_WindStraw', 'straw')):
+        sl.reset_scene()
+        obj = flake(name, kind)
+        sl.export_fbx(str(OUT / f'{name}.fbx'), [obj])
+        print(f'DEBRIS {name}')
 
 
 if __name__ == '__main__':

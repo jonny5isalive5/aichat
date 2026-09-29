@@ -9,6 +9,7 @@
 #include "GolfSessionSubsystem.h"
 #include "GolfVoiceSubsystem.h"
 #include "SkyLinksGrass.h"
+#include "SkyLinksWindDebris.h"
 #include "EngineUtils.h"
 #include "Engine/GameInstance.h"
 #include "CanvasItem.h"
@@ -187,6 +188,12 @@ void AGolfHUD::BeginPlay()
 		FActorSpawnParameters Params;
 		Params.Owner = this;
 		GetWorld()->SpawnActor<ASkyLinksGrass>(ASkyLinksGrass::StaticClass(), FTransform::Identity, Params);
+	}
+	if (!TActorIterator<ASkyLinksWindDebris>(GetWorld()))
+	{
+		FActorSpawnParameters Params;
+		Params.Owner = this;
+		GetWorld()->SpawnActor<ASkyLinksWindDebris>(ASkyLinksWindDebris::StaticClass(), FTransform::Identity, Params);
 	}
 }
 
