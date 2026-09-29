@@ -25,7 +25,7 @@ public:
 
 	/** Clumps per square metre of rough. */
 	UPROPERTY(EditAnywhere, Category = "Grass")
-	float RoughDensity = 6.f;
+	float RoughDensity = 4.5f;
 
 	/** Tufts per metre of bunker edge (they sit on the grass just outside the sand). */
 	UPROPERTY(EditAnywhere, Category = "Grass")

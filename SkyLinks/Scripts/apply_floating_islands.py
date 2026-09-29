@@ -141,8 +141,8 @@ def _finish(mat, physical):
 #   SC  sand colour   L8  world metres within an 8 m tile   ZL  0..1 up every 12 cm of height   N  world normal   Tint, Stripes
 SURFACE_CODE = {
     'rough': """
-float3 c = lerp(float3(0.028, 0.080, 0.012), float3(0.070, 0.110, 0.018), saturate(M1 * 2.2 - 0.6));
-c = lerp(c, float3(0.022, 0.072, 0.030), saturate(M2 * 2.0 - 0.9) * 0.7);
+float3 c = lerp(float3(0.020, 0.058, 0.009), float3(0.050, 0.080, 0.013), saturate(M1 * 2.2 - 0.6));
+c = lerp(c, float3(0.016, 0.052, 0.022), saturate(M2 * 2.0 - 0.9) * 0.7);
 c *= (0.78 + 0.44 * M3) * (0.55 + 0.6 * R);
 float cut = 1 - smoothstep(1.0, 2.2, E.y);
 c = lerp(c, float3(0.050, 0.140, 0.022) * (0.8 + 0.3 * D), cut * 0.75);
