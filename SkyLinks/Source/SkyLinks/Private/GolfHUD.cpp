@@ -21,12 +21,12 @@ namespace Palette
 {
 	// Holographic sports-broadcast look: see-through blue glass panels with hairline frames and bright corner
 	// brackets, thin rings and arcs, white type with pale-cyan accents.
-	const FLinearColor Panel(0.32f, 0.6f, 0.95f, 0.16f);
-	const FLinearColor PanelSolid(0.12f, 0.32f, 0.6f, 0.34f);
+	const FLinearColor Panel(0.04f, 0.16f, 0.34f, 0.42f);
+	const FLinearColor PanelSolid(0.03f, 0.12f, 0.28f, 0.55f);
 	const FLinearColor Trim(0.82f, 0.95f, 1.f, 0.9f);
-	const FLinearColor Gold(0.72f, 0.92f, 1.f, 1.f);
+	const FLinearColor Gold(1.f, 0.78f, 0.28f, 1.f);      // amber highlights: par, carry, lie, headings
 	const FLinearColor White(1.f, 1.f, 1.f, 1.f);
-	const FLinearColor Dim(0.78f, 0.88f, 0.96f, 0.9f);
+	const FLinearColor Dim(0.5f, 0.85f, 1.f, 0.95f);      // cyan captions
 	const FLinearColor Glow(0.55f, 0.88f, 1.f, 0.95f);
 	const FLinearColor Hairline(0.8f, 0.94f, 1.f, 0.45f);
 	const FLinearColor Under(0.45f, 1.f, 0.8f, 1.f);   // under par: cool green-cyan
@@ -113,7 +113,9 @@ void AGolfHUD::Label(const FString& Text, const FVector2D& Position, float Heigh
 	Item.Scale = FVector2D(Scale, Scale);
 	Item.bCentreX = bCenter;
 	Item.bCentreY = bCenter;
-	Item.EnableShadow(FLinearColor(0.f, 0.f, 0.f, 0.7f), FVector2D(1.5f, 1.5f));
+	Item.EnableShadow(FLinearColor(0.f, 0.f, 0.f, 0.6f), FVector2D(1.5f, 1.5f));
+	Item.bOutlined = true;
+	Item.OutlineColor = FLinearColor(0.f, 0.03f, 0.08f, 0.75f);
 	Canvas->DrawItem(Item);
 }
 
@@ -254,12 +256,12 @@ void AGolfHUD::DrawVoice(AGolfGameState* State, AGolfPlayerController* Controlle
 	if (!Voice) return;
 	const bool bMuted = Voice->IsMicrophoneMuted();
 	const FString MicLabel = bMuted ? TEXT("MUTED") : Voice->IsReady() ? TEXT("MIC ON") : TEXT("NO VOICE");
-	RoundButton(EGolfHudButton::Microphone, FVector2D(Canvas->ClipX - 8.f * U, 23.f * U), 5.f * U,
+	RoundButton(EGolfHudButton::Microphone, FVector2D(Canvas->ClipX - 6.5f * U, 35.f * U), 3.8f * U,
 		MicLabel, bMuted ? Palette::Red : Voice->IsReady() ? Palette::Accept : Palette::PanelSolid);
-	RoundButton(EGolfHudButton::VoicePanel, FVector2D(Canvas->ClipX - 20.f * U, 23.f * U), 5.f * U,
+	RoundButton(EGolfHudButton::VoicePanel, FVector2D(Canvas->ClipX - 16.f * U, 35.f * U), 3.8f * U,
 		TEXT("GROUP"), Palette::PanelSolid);
 	if (!Controller->IsVoicePanelOpen()) return;
-	const FVector2D Origin(Canvas->ClipX - 54.f * U, 30.f * U);
+	const FVector2D Origin(Canvas->ClipX - 54.f * U, 41.f * U);
 	Box(Origin, FVector2D(52.f * U, 40.f * U), Palette::PanelSolid);
 	Buttons.Add({ EGolfHudButton::VoicePanelBackground, Origin + FVector2D(26.f * U, 20.f * U), 0.f, 0, FVector2D(52.f * U, 40.f * U) });
 	Heading(TEXT("Voice Group"), Origin + FVector2D(2.f * U, 1.6f * U), 48.f * U, 2.2f);
@@ -515,7 +517,7 @@ void AGolfHUD::DrawPlaying(AGolfGameState* State, AGolfPlayerController* Control
 
 	if (const AGolfPlayerState* Active = Cast<AGolfPlayerState>(State->ActivePlayer); Active && Active->Ball)
 	{
-		const FVector2D LiePos(Canvas->ClipX - 12.f * U, 30.f * U);
+		const FVector2D LiePos(Canvas->ClipX - 11.f * U, 27.5f * U);
 		Box(LiePos - FVector2D(8.f * U, 1.8f * U), FVector2D(16.f * U, 3.6f * U), Palette::Panel);
 		Label(GolfPhysics::LieName(Active->Ball->GetLie()).ToUpper(), LiePos, 2.2f, Palette::Gold, true);
 	}
@@ -549,8 +551,10 @@ void AGolfHUD::DrawLandingView(AGolfGameState* State, AGolfPlayerController* Con
 		return;
 	}
 	// Window at the top middle, 16:9.
-	const FVector2D Size(34.f * U * 16.f / 9.f, 34.f * U);
-	const FVector2D Pos(Canvas->ClipX * 0.5f - Size.X * 0.5f, 2.f * U);
+	const float GapLeft = 47.f * U, GapRight = Canvas->ClipX - 24.f * U;
+	const float Width = FMath::Clamp(GapRight - GapLeft, 30.f * U, 34.f * U * 16.f / 9.f);
+	const FVector2D Size(Width, Width * 9.f / 16.f);
+	const FVector2D Pos(FMath::Max(GapLeft, (GapLeft + GapRight - Width) * 0.5f), 2.f * U);
 	const FVector2D Center = Pos + Size * 0.5f;
 	Box(Pos - FVector2D(0.4f * U, 0.4f * U), Size + FVector2D(0.8f * U, 0.8f * U), Palette::PanelSolid);
 	FCanvasTileItem Tile(Pos, Picture->GetResource(), Size, FLinearColor::White);
@@ -602,9 +606,21 @@ void AGolfHUD::DrawMiniMap(AGolfGameState* State, AGolfPlayerController* Control
 		return;
 	}
 	// Left edge, between the players list and the club disc: the whole hole, tee at the bottom.
-	const float Height = FMath::Min(46.f * U, Canvas->ClipY - 54.f * U);
-	const FVector2D Size(Height * Picture->SizeX / FMath::Max(1, Picture->SizeY), Height);
-	const FVector2D Pos(2.f * U, 25.f * U);
+	int32 Rows = 0;
+	for (APlayerState* Base : State->PlayerArray)
+	{
+		const AGolfPlayerState* Player = Cast<AGolfPlayerState>(Base);
+		Rows += Player && Player->bInRound ? 1 : 0;
+	}
+	const float Top = (20.f + 5.f * Rows) * U;
+	const float Aspect = static_cast<float>(Picture->SizeX) / FMath::Max(1, Picture->SizeY);
+	float Height = FMath::Max(16.f * U, Canvas->ClipY - 26.f * U - Top);
+	if (Height * Aspect > 34.f * U)
+	{
+		Height = 34.f * U / Aspect;
+	}
+	const FVector2D Size(Height * Aspect, Height);
+	const FVector2D Pos(2.f * U, Top);
 	const FVector2D Center = Pos + Size * 0.5f;
 	Box(Pos - FVector2D(0.4f * U, 0.4f * U), Size + FVector2D(0.8f * U, 0.8f * U), Palette::PanelSolid);
 	FCanvasTileItem Tile(Pos, Picture->GetResource(), Size, FLinearColor::White);
@@ -754,7 +770,7 @@ void AGolfHUD::DrawBallCompass(AGolfPlayerController* Controller, const AActor* 
 		Line(BallScreen + FVector2D(0.f, 1.4f * U), BallScreen + FVector2D(0.f, 4.f * U), Palette::Glow, 0.25f * U);
 	}
 
-	RoundButton(EGolfHudButton::SkipDrive, FVector2D(Canvas->ClipX - 12.f * U, 36.f * U), 4.5f * U, TEXT("SKIP"), Palette::PanelSolid);
+	RoundButton(EGolfHudButton::SkipDrive, FVector2D(Canvas->ClipX - 11.f * U, 47.f * U), 4.5f * U, TEXT("SKIP"), Palette::PanelSolid);
 	if (Controller->CanPlayShot())
 	{
 		RoundButton(EGolfHudButton::PlayShot, FVector2D(Canvas->ClipX * 0.5f, Canvas->ClipY - 14.f * U), 9.f * U, TEXT("PLAY SHOT"), Palette::Accept);
@@ -794,7 +810,7 @@ void AGolfHUD::DrawDriving(AGolfPlayerController* Controller)
 	const FVector2D Go(Canvas->ClipX - 14.f * U, Canvas->ClipY - 16.f * U);
 	RoundButton(EGolfHudButton::Throttle, Go, 10.f * U, TEXT("GO"), Palette::Accept);
 	RoundButton(EGolfHudButton::Reverse, FVector2D(Canvas->ClipX - 33.f * U, Canvas->ClipY - 10.f * U), 6.f * U, TEXT("REV"), Palette::PanelSolid);
-	RoundButton(EGolfHudButton::Buggy, FVector2D(Canvas->ClipX - 12.f * U, 50.f * U), 5.f * U, TEXT("GET OUT"), Palette::PanelSolid);
+	RoundButton(EGolfHudButton::Buggy, FVector2D(Canvas->ClipX - 11.f * U, 59.f * U), 4.5f * U, TEXT("GET OUT"), Palette::PanelSolid);
 
 	// Speedo arc over the GO pedal.
 	const float Kmh = FMath::Abs(Buggy->GetSpeed()) * 0.036f;
@@ -870,7 +886,7 @@ void AGolfHUD::DrawHoleCard(AGolfGameState* State)
 		const FString PinDistance = Meters < 1.f
 			? FString::Printf(TEXT("PIN %.0f cm"), Meters * 100.f)
 			: (Meters < 10.f ? FString::Printf(TEXT("PIN %.1f m"), Meters) : FString::Printf(TEXT("PIN %.0f m"), Meters));
-		Label(PinDistance, FVector2D(Pos.X + 26.f * U, Pos.Y + 9.8f * U), 3.f, Palette::White, false);
+		Label(PinDistance, FVector2D(Pos.X + 26.f * U, Pos.Y + 9.8f * U), 3.f, Palette::Dim, false);
 	}
 }
 
@@ -885,7 +901,7 @@ void AGolfHUD::DrawPlayers(AGolfGameState* State)
 			continue;
 		}
 		const bool bActive = State->ActivePlayer == Player;
-		FCanvasTileItem Row(FVector2D(2.f * U, Y), FVector2D(42.f * U, 4.4f * U), bActive ? FLinearColor(0.3f, 0.65f, 1.f, 0.26f) : Palette::Panel);
+		FCanvasTileItem Row(FVector2D(2.f * U, Y), FVector2D(42.f * U, 4.4f * U), bActive ? FLinearColor(0.06f, 0.3f, 0.6f, 0.55f) : Palette::Panel);
 		Row.BlendMode = SE_BLEND_Translucent;
 		Canvas->DrawItem(Row);
 		// Accent bar on the left: bright for the player whose turn it is.
@@ -895,7 +911,7 @@ void AGolfHUD::DrawPlayers(AGolfGameState* State)
 		const int32 ToPar = Player->GetToPar(State->Pars);
 		const FString ToParText = ToPar == 0 ? TEXT("E") : FString::Printf(TEXT("%+d"), ToPar);
 		Label(Player->GetPlayerName().Left(12).ToUpper(), FVector2D(4.f * U, Y + 0.7f * U), 2.8f, Palette::White, false);
-		Label(Player->bHoledOut ? TEXT("IN") : FString::Printf(TEXT("%d"), Player->Strokes), FVector2D(32.f * U, Y + 0.7f * U), 2.8f, Palette::Dim, false);
+		Label(Player->bHoledOut ? TEXT("IN") : FString::Printf(TEXT("%d"), Player->Strokes), FVector2D(32.f * U, Y + 0.7f * U), 2.8f, Palette::Gold, false);
 		Label(ToParText, FVector2D(38.5f * U, Y + 0.7f * U), 2.8f, ToPar < 0 ? Palette::Under : ToPar > 0 ? Palette::Over : Palette::White, false);
 		Y += 5.f * U;
 	}
@@ -903,8 +919,8 @@ void AGolfHUD::DrawPlayers(AGolfGameState* State)
 
 void AGolfHUD::DrawWind(AGolfGameState* State)
 {
-	const FVector2D Center(Canvas->ClipX - 12.f * U, 11.f * U);
-	const float Radius = 8.f * U;
+	const FVector2D Center(Canvas->ClipX - 11.f * U, 10.f * U);
+	const float Radius = 7.f * U;
 	Disc(Center, Radius, Palette::Panel);
 	Ring(Center, Radius, Palette::Trim, 0.15f * U);
 	Ring(Center, Radius * 0.62f, Palette::Hairline, 0.1f * U);
@@ -930,8 +946,8 @@ void AGolfHUD::DrawWind(AGolfGameState* State)
 		Line(Tip, Tip - Dir * 2.f * U + Side * 1.4f * U, Palette::White, 0.45f * U);
 		Line(Tip, Tip - Dir * 2.f * U - Side * 1.4f * U, Palette::White, 0.45f * U);
 	}
-	Label(TEXT("WIND"), Center + FVector2D(0.f, Radius + 1.9f * U), 1.8f, Palette::Dim, true);
-	Label(FString::Printf(TEXT("%.1f m/s"), Speed), Center + FVector2D(0.f, Radius + 4.3f * U), 2.6f, Palette::White, true);
+	Label(TEXT("WIND"), Center + FVector2D(0.f, Radius + 2.f * U), 1.8f, Palette::Dim, true);
+	Label(FString::Printf(TEXT("%.1f m/s"), Speed), Center + FVector2D(0.f, Radius + 4.3f * U), 2.6f, Palette::Gold, true);
 }
 
 void AGolfHUD::DrawGreenGrid(AGolfPlayerController* Controller)
@@ -1048,8 +1064,8 @@ void AGolfHUD::DrawClubDisc(AGolfPlayerController* Controller)
 	{
 		return;
 	}
-	const FVector2D Center(15.f * U, Canvas->ClipY - 16.f * U);
-	const float Radius = 12.f * U;
+	const FVector2D Center(12.5f * U, Canvas->ClipY - 12.5f * U);
+	const float Radius = 9.5f * U;
 	Disc(Center, Radius, Palette::Panel);
 	Ring(Center, Radius, Palette::Trim, 0.18f * U);
 	// Dashed inner ring and a carry gauge: how far this club goes against the longest in the bag.
@@ -1064,12 +1080,12 @@ void AGolfHUD::DrawClubDisc(AGolfPlayerController* Controller)
 	}
 	Arc(Center, Radius * 1.1f, 135.f, 270.f, Palette::Hairline, 0.2f * U);
 	Arc(Center, Radius * 1.1f, 135.f, 270.f * FMath::Clamp(Controller->GetClubCarry(Index) / Longest, 0.f, 1.f), Palette::Glow, 0.5f * U);
-	Label(TEXT("CLUB"), Center - FVector2D(0.f, 7.f * U), 1.8f, Palette::Dim, true);
-	Label(Bag[Index].ShortName, Center - FVector2D(0.f, 1.5f * U), 7.5f, Palette::White, true);
-	Label(FString::Printf(TEXT("%.0f m"), Controller->GetClubCarry(Index) / 100.f), Center + FVector2D(0.f, 5.5f * U), 2.8f, Palette::Gold, true);
+	Label(TEXT("CLUB"), Center - FVector2D(0.f, 5.6f * U), 1.6f, Palette::Dim, true);
+	Label(Bag[Index].ShortName, Center - FVector2D(0.f, 1.2f * U), 6.f, Palette::White, true);
+	Label(FString::Printf(TEXT("%.0f m"), Controller->GetClubCarry(Index) / 100.f), Center + FVector2D(0.f, 4.6f * U), 2.4f, Palette::Gold, true);
 	Buttons.Add({ EGolfHudButton::Club, Center, Radius, 0 });
 
-	RoundButton(EGolfHudButton::Spin, FVector2D(34.f * U, Canvas->ClipY - 8.f * U), 6.f * U, Controller->GetSpinLabel(), Palette::PanelSolid);
+	RoundButton(EGolfHudButton::Spin, FVector2D(29.f * U, Canvas->ClipY - 6.5f * U), 4.5f * U, Controller->GetSpinLabel(), Palette::PanelSolid);
 }
 
 void AGolfHUD::DrawPowerMeter(AGolfPlayerController* Controller)
