@@ -51,7 +51,10 @@ namespace GolfPhysics
 	SKYLINKS_API void StepFlight(FGolfBallState& State, const FVector& Wind, float Dt);
 	SKYLINKS_API FGolfBallState MakeLaunch(const FGolfClub& Club, const FGolfShotInput& Input, EGolfLie Lie, const FVector& Start);
 
-	SKYLINKS_API bool SweepBall(const UWorld* World, const FVector& From, const FVector& To, FHitResult& OutHit, const AActor* Ignore);
+	SKYLINKS_API bool SweepBall(const UWorld* World, const FVector& From, const FVector& To, FHitResult& OutHit, const AActor* Ignore, const AActor* IgnoreAlso = nullptr);
+
+	/** Trees and bushes (instanced foliage): the ball clatters through them instead of bouncing like off turf. */
+	SKYLINKS_API bool IsFoliageHit(const FHitResult& Hit);
 
 	/** Flies the ball through the world with no wind and returns where it first touches something. */
 	SKYLINKS_API bool PredictCarry(const UWorld* World, FGolfBallState State, const AActor* Ignore, TArray<FVector>& OutPath, FVector& OutLanding);

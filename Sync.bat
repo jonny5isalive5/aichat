@@ -15,8 +15,23 @@ if not errorlevel 1 (
     exit /b 1
 )
 
-echo Saving your work...
+echo Checking this copy is up to date...
 git checkout -q %BRANCH% || goto fail
+git fetch -q origin %BRANCH% || goto fail
+set BEHIND=0
+for /f %%n in ('git rev-list --count HEAD..origin/%BRANCH%') do set BEHIND=%%n
+set DIRTY=
+for /f %%f in ('git status --porcelain') do set DIRTY=1
+if defined DIRTY if %BEHIND% GTR 3 (
+    echo.
+    echo STOPPED: this copy of the project is %BEHIND% updates behind GitHub AND has changes in it.
+    echo It is probably an old copy. Uploading it could overwrite newer work, so nothing was changed.
+    echo Send this window to Claude.
+    pause
+    exit /b 1
+)
+
+echo Saving your work...
 git add -A || goto fail
 rem Finish any merge left half-done from before, otherwise commit what you changed (if anything).
 git rev-parse -q --verify MERGE_HEAD >nul 2>nul

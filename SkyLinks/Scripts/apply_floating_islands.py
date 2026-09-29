@@ -11,9 +11,12 @@
     isl.make_path_decal()       M_PathDecal: drag Decal Actors onto the grass for footpaths (the easy way)
     isl.export_paths()          save footpaths drawn as splines (actors named Path...) for baking into the islands
     isl.refresh_islands()       after an island rebuild: new meshes in place, trees replanted; your floaters stay
+    isl.refresh_remaining()     the same, a few holes per run, crash-proof: run it until it says ALL DONE
     isl.reimport_tops([4])      re-import island surfaces only (after paths are baked); nothing else moves
+    isl.lift_floaters()         lift floating islands that hang too low over a hole (lift_floaters(60) for higher)
     isl.update_materials()      rebuild the island materials only (grass paths: Mesh Paint, Blue channel)
     isl.update_surfaces()       new island surfaces + materials only (nothing in the level moves)
+    isl.tune_look()             tame the bright exposure, richer colours (tune_look(-1.5) darker, (-0.5) brighter)
     isl.import_grass()          the 3D grass clumps + M_GrassBlades (grown around the camera in game)
     isl.raise_fog(20)           lift every cloud patch 20 m (or lower it with a negative number)
 
@@ -55,7 +58,7 @@ GRASS = {
 ROCK = ('M_Island_Rock', 'T_RockDetail', 'PM_Rough')
 PATH_COLOUR = (0.23, 0.16, 0.09)  # painted footpaths (vertex colour B) on the grass: packed earth
 SEA = 'M_Island_Sea'
-PARTS = ('IslandTop', 'IslandRock', 'Vines', 'Water', 'Props')
+PARTS = ('IslandTop', 'IslandRock', 'Vines', 'Water', 'Props', 'Stadium')
 NO_COLLISION = ('Vines',)  # hanging ivy: the ball and buggy pass through
 
 actors = unreal.get_editor_subsystem(unreal.EditorActorSubsystem)
@@ -76,6 +79,7 @@ def _import(filename, destination, options=None):
 
 SURFACE_TEXTURES = {  # Art/Blender/surface_textures.py: name -> (compression, sRGB)
     'T_Sand_Color': ('TC_DEFAULT', True), 'T_Sand_Normal': ('TC_MASKS', False),
+    'T_BallDimples': ('TC_MASKS', False),
     'T_Turf': ('TC_GRAYSCALE', False), 'T_RoughTurf': ('TC_GRAYSCALE', False), 'T_Macro': ('TC_GRAYSCALE', False),
 }
 
@@ -141,14 +145,14 @@ def _finish(mat, physical):
 #   SC  sand colour   L8  world metres within an 8 m tile   ZL  0..1 up every 12 cm of height   N  world normal   Tint, Stripes
 SURFACE_CODE = {
     'rough': """
-float3 c = lerp(float3(0.028, 0.080, 0.012), float3(0.070, 0.110, 0.018), saturate(M1 * 2.2 - 0.6));
-c = lerp(c, float3(0.022, 0.072, 0.030), saturate(M2 * 2.0 - 0.9) * 0.7);
+float3 c = lerp(float3(0.020, 0.058, 0.009), float3(0.050, 0.080, 0.013), saturate(M1 * 2.2 - 0.6));
+c = lerp(c, float3(0.016, 0.052, 0.022), saturate(M2 * 2.0 - 0.9) * 0.7);
 c *= (0.78 + 0.44 * M3) * (0.55 + 0.6 * R);
 float cut = 1 - smoothstep(1.0, 2.2, E.y);
 c = lerp(c, float3(0.050, 0.140, 0.022) * (0.8 + 0.3 * D), cut * 0.75);
 c *= 1 - 0.3 * (1 - smoothstep(0.0, 0.7, E.x));
 c *= Tint.rgb;
-return lerp(c, float3(0.23, 0.16, 0.09) * (0.75 + 0.3 * D), VC.b);
+return lerp(c, float3(0.23, 0.16, 0.09) * (0.75 + 0.3 * D), smoothstep(0.1, -0.06, P.x + (D - 0.8) * 0.25));
 """,
     'fairway': """
 float3 c = float3(0.058, 0.165, 0.026);
@@ -160,7 +164,7 @@ c *= lerp(1 - Stripes, 1 + Stripes, s);
 c *= 1 - 0.08 * (1 - smoothstep(0.3, 0.9, E.y));
 c = lerp(c, float3(0.035, 0.095, 0.015) * (0.6 + 0.6 * R), (1 - smoothstep(0.0, 0.6, E.x)) * 0.7);
 c *= Tint.rgb;
-return lerp(c, float3(0.23, 0.16, 0.09) * (0.75 + 0.3 * D), VC.b);
+return lerp(c, float3(0.23, 0.16, 0.09) * (0.75 + 0.3 * D), smoothstep(0.1, -0.06, P.x + (D - 0.8) * 0.25));
 """,
     'green': """
 float3 c = float3(0.070, 0.215, 0.034);
@@ -181,7 +185,7 @@ c *= (0.9 + 0.2 * M3) * (0.8 + 0.3 * D);
 float s = smoothstep(0.4, 0.6, abs(frac(H.x / 4.0) - 0.5) * 2);
 c *= lerp(1 - Stripes, 1 + Stripes, s);
 c *= Tint.rgb;
-return lerp(c, float3(0.23, 0.16, 0.09) * (0.75 + 0.3 * D), VC.b);
+return lerp(c, float3(0.23, 0.16, 0.09) * (0.75 + 0.3 * D), smoothstep(0.1, -0.06, P.x + (D - 0.8) * 0.25));
 """,
     'bunker': """
 float3 c = SC * (0.9 + 0.2 * M3);
@@ -207,7 +211,7 @@ float ridge = cos((dot(L8, dir) + wob) * 39.27) * saturate(M2 * 3.0 - 1.2) * 0.2
 return normalize(N + float3(n.x * 0.6 + dir.x * ridge, n.y * 0.6 + dir.y * ridge, 0));
 """
 SURFACE_TINT = {'rough': (1, 1, 1), 'fairway': (1, 1, 1), 'green': (1, 1, 1), 'tee': (1, 1, 1),
-                'bunker': (0.95, 0.92, 0.86)}  # sand: a touch warmer / darker than the raw texture
+                'bunker': (0.72, 0.64, 0.52)}  # sand: a touch warmer / darker than the raw texture
 
 
 def _tex(mat, name, uv, x, y, sampler=unreal.MaterialSamplerType.SAMPLERTYPE_LINEAR_GRAYSCALE):
@@ -253,6 +257,7 @@ def _surface_inputs(mat, kind):
         'VC': (_expr(mat, unreal.MaterialExpressionVertexColor, -1350, 400), ''),
         'H': (_expr(mat, unreal.MaterialExpressionTextureCoordinate, -1350, 550, coordinate_index=1), ''),
         'E': (_expr(mat, unreal.MaterialExpressionTextureCoordinate, -1350, 650, coordinate_index=2), ''),
+        'P': (_expr(mat, unreal.MaterialExpressionTextureCoordinate, -1350, 700, coordinate_index=3), ''),
         'N': (_expr(mat, unreal.MaterialExpressionVertexNormalWS, -1350, 750), ''),
         'Tint': (_expr(mat, unreal.MaterialExpressionVectorParameter, -1350, 850, parameter_name='Tint',
                        default_value=unreal.LinearColor(*SURFACE_TINT[kind], 1.0)), ''),
@@ -306,6 +311,8 @@ def grass_blades_material():
     patchy large-scale colour as the rough under it."""
     mat = _material('M_GrassBlades')
     mat.set_editor_property('two_sided', True)
+    # The grass is instanced at runtime: without this flag the game can't compile it and shows grey blades.
+    mat.set_editor_property('used_with_instanced_static_meshes', True)
     feeds = {
         'M1': (_tex(mat, 'T_Macro', _world_uv(mat, 37, -1600, -600), -1350, -600), 'R'),
         'M2': (_tex(mat, 'T_Macro', _world_uv(mat, 11, -1600, -400, 0.37), -1350, -400), 'R'),
@@ -322,6 +329,57 @@ def grass_blades_material():
     return mat
 
 
+DEBRIS_CODE = """
+float3 green = float3(0.06, 0.16, 0.02);
+float3 yellow = float3(0.42, 0.32, 0.05);
+float3 brown = float3(0.20, 0.10, 0.035);
+float3 c = PIR < 0.4 ? lerp(green, yellow, PIR / 0.4) : lerp(yellow, brown, (PIR - 0.4) / 0.6);
+return c * lerp(0.7, 1.1, VC.r);
+"""
+
+
+def debris_material():
+    """M_WindDebris: two-sided; each leaf or straw its own shade from green through yellow to brown."""
+    mat = _material('M_WindDebris')
+    mat.set_editor_property('two_sided', True)
+    mat.set_editor_property('used_with_instanced_static_meshes', True)
+    feeds = {'VC': (_expr(mat, unreal.MaterialExpressionVertexColor, -1000, 0), ''),
+             'PIR': (_expr(mat, unreal.MaterialExpressionPerInstanceRandom, -1000, 200), '')}
+    colour = _custom(mat, DEBRIS_CODE, feeds, -600, 0)
+    lib.connect_material_property(colour, '', unreal.MaterialProperty.MP_BASE_COLOR)
+    lib.connect_material_property(_const(mat, 0.8, -400, 300), '', unreal.MaterialProperty.MP_ROUGHNESS)
+    lib.recompile_material(mat)
+    unreal.EditorAssetLibrary.save_loaded_asset(mat)
+    return mat
+
+
+BALL_NORMAL_CODE = """
+float3 n = SN * 2 - 1;
+n.xy *= 0.8;
+return normalize(n);
+"""
+
+
+def make_golf_ball():
+    """M_GolfBall in /Game/Course/Ball: glossy white with hex-packed dimples (the ball loads it by path)."""
+    path = '/Game/Course/Ball'
+    name = 'M_GolfBall'
+    mat = unreal.load_asset(f'{path}/{name}') if unreal.EditorAssetLibrary.does_asset_exist(f'{path}/{name}') else \
+        tools.create_asset(name, path, unreal.Material, unreal.MaterialFactoryNew())
+    lib.delete_all_material_expressions(mat)
+    white = _expr(mat, unreal.MaterialExpressionConstant3Vector, -500, 0, constant=unreal.LinearColor(0.86, 0.86, 0.84, 1))
+    lib.connect_material_property(white, '', unreal.MaterialProperty.MP_BASE_COLOR)
+    lib.connect_material_property(_const(mat, 0.3, -500, 150), '', unreal.MaterialProperty.MP_ROUGHNESS)
+    lib.connect_material_property(_const(mat, 0.6, -500, 250), '', unreal.MaterialProperty.MP_SPECULAR)
+    uv = _expr(mat, unreal.MaterialExpressionTextureCoordinate, -1200, 400, u_tiling=8.0, v_tiling=4.6)
+    dimples = _tex(mat, 'T_BallDimples', uv, -1000, 400, unreal.MaterialSamplerType.SAMPLERTYPE_MASKS)
+    normal = _custom(mat, BALL_NORMAL_CODE, {'SN': (dimples, 'RGB')}, -600, 400)
+    lib.connect_material_property(normal, '', unreal.MaterialProperty.MP_NORMAL)
+    lib.recompile_material(mat)
+    unreal.EditorAssetLibrary.save_loaded_asset(mat)
+    return mat
+
+
 GRASS_SOURCE = ROOT / 'Art' / 'Exports' / 'Grass'
 GRASS_DEST = '/Game/Course/Grass'
 
@@ -329,8 +387,11 @@ GRASS_DEST = '/Game/Course/Grass'
 def import_grass():
     """The 3D grass clumps (Art/Blender/build_grass.py) and their material. ASkyLinksGrass grows them in game."""
     import_textures()
-    mat = grass_blades_material()
-    for name in ('SM_GrassClump', 'SM_GrassTuft'):
+    make_golf_ball()
+    blades = grass_blades_material()
+    debris = debris_material()
+    for name in ('SM_GrassClump', 'SM_GrassTuft', 'SM_WindLeaf', 'SM_WindStraw'):
+        mat = debris if name.startswith('SM_Wind') else blades
         options = unreal.FbxImportUI()
         options.set_editor_property('import_mesh', True)
         options.set_editor_property('import_as_skeletal', False)
@@ -350,7 +411,7 @@ def import_grass():
         if body:
             body.set_editor_property('collision_trace_flag', unreal.CollisionTraceFlag.CTF_USE_SIMPLE_AS_COMPLEX)
         unreal.EditorAssetLibrary.save_loaded_asset(mesh)
-    print(f'GRASS ready in {GRASS_DEST}: press Play to see it grow on the rough and along the bunker lips')
+    print(f'GRASS ready in {GRASS_DEST}: press Play to see it grow on the rough and along the bunker lips, and leaves blow in the wind')
 
 
 def rock_material(name, detail, physical):
@@ -466,6 +527,20 @@ def _v(p, lift=0.0):
     return unreal.Vector(p[0] * M, p[1] * M, p[2] * M + lift)
 
 
+def place_leaderboard(number, spot, everything):
+    """The live leaderboard (SkyLinksLeaderboard C++ actor) on the stadium's screen beside the 18th green."""
+    if not hasattr(unreal, 'SkyLinksLeaderboard'):
+        print('LEADERBOARD skipped: rebuild the C++ first (Build.bat)')
+        return
+    for actor in everything:
+        if actor.get_actor_label() == 'Leaderboard':
+            actors.destroy_actor(actor)
+    x, y, z, yaw = spot
+    board = actors.spawn_actor_from_class(unreal.SkyLinksLeaderboard, unreal.Vector(x * M, y * M, z * M), unreal.Rotator(0, 0, yaw))
+    board.set_actor_label('Leaderboard')
+    board.set_folder_path(f'Course/Hole{number:02d}')
+
+
 def place_hole(number, spots):
     """Move the hole's GolfHole to its island (tee, heading, aim, cup) and seat its tee markers."""
     folder = f'Course/Hole{number:02d}'
@@ -484,6 +559,8 @@ def place_hole(number, spots):
     markers = [a for a in everything if str(a.get_folder_path()) == folder and a.get_actor_label().startswith('TeeMarker')]
     for actor, spot in zip(markers, spots['tee_markers']):
         actor.set_actor_location(_v(spot, 5.0), False, True)
+    if spots.get('leaderboard'):
+        place_leaderboard(number, spots['leaderboard'], everything)
     if number == 1:
         clubhouse = next((a for a in everything if a.get_actor_label() == 'Clubhouse'), None)
         if clubhouse:
@@ -723,10 +800,10 @@ def make_path_decal():
     return mat
 
 
-KEEP_TREES = {1}  # holes whose trees the owner arranged by hand: refresh_islands leaves their foliage alone
+KEEP_TREES = set()  # holes whose trees the owner arranged by hand: refresh_islands leaves their foliage alone
 
 
-def refresh_islands(holes=HOLES):
+def refresh_islands(holes=HOLES, bridges=True):
     """After a rebuild of the island meshes (new bunkers, buggy paths...): re-import every hole's surface, rock,
     ivy, water and footbridge deck in place, re-seat the holes, footbridges and rope bridges, and replant the
     trees island by island (clear of the new paths and bunkers). Holes in KEEP_TREES (hole 1, arranged by hand)
@@ -741,8 +818,12 @@ def refresh_islands(holes=HOLES):
         spots = json.loads(spots_path.read_text())
         for part in PARTS:
             name = f'SM_H{number:02d}_{part}'
-            if (SOURCE / f'{name}.fbx').is_file() and unreal.EditorAssetLibrary.does_asset_exist(f'{DEST}/{name}'):
-                import_mesh(name, materials, part not in NO_COLLISION)
+            if not (SOURCE / f'{name}.fbx').is_file():
+                continue
+            is_new = not unreal.EditorAssetLibrary.does_asset_exist(f'{DEST}/{name}')
+            mesh = import_mesh(name, materials, part not in NO_COLLISION)
+            if is_new:  # a part this island didn't have before (the 18th's stadium): put it in the level too
+                place(mesh, f'{part}{number:02d}', f'Course/Hole{number:02d}/Islands', part not in NO_COLLISION)
         place_hole(number, spots)
         place_footbridges(number, spots)
         if number in KEEP_TREES or not spots.get('land_outline'):
@@ -753,9 +834,42 @@ def refresh_islands(holes=HOLES):
         removed = unreal.SkyLinksForest.clear_foliage_inside(world, types, outline)
         plant_forest(number, spots)
         print(f'HOLE {number} refreshed: {removed} old trees out, new ones planted')
-    apply_bridges(materials, json.loads((SOURCE / 'Course_links.json').read_text()))
+        unreal.SystemLibrary.collect_garbage()  # free each hole's imports before the next (big batches ran out of memory)
+    if bridges:
+        apply_bridges(materials, json.loads((SOURCE / 'Course_links.json').read_text()))
     unreal.get_editor_subsystem(unreal.LevelEditorSubsystem).save_current_level()
     print('ISLANDS REFRESHED. Run validate_course() in a separate call.')
+
+
+def _surface_tag(number):
+    import hashlib
+    text = (SOURCE / f'Hole{number:02d}_spots.json').read_text()
+    return 'Surface:' + hashlib.md5(text.encode()).hexdigest()[:10]
+
+
+def refresh_remaining(per_run=3):
+    """Crash-proof refresh: does the next few holes that aren't up to date yet (each is saved as soon as it is
+    done and marked on its GolfHole), then stops. Run it again, and again, until it says ALL DONE; after a crash just
+    reopen the editor and run it again - it carries on where it got to. The rope bridges go in on the last run."""
+    everything = _all()
+    pending = []
+    for number in HOLES:
+        golf_hole = next((a for a in everything if a.get_actor_label() == f'GolfHole{number:02d}'), None)
+        if golf_hole and _surface_tag(number) not in [str(t) for t in golf_hole.tags]:
+            pending.append((number, golf_hole))
+    if not pending:
+        apply_bridges(build_materials(), json.loads((SOURCE / 'Course_links.json').read_text()))
+        unreal.get_editor_subsystem(unreal.LevelEditorSubsystem).save_current_level()
+        print('ALL DONE: every hole is up to date and the rope bridges are in. Run validate_course() next.')
+        return
+    for number, golf_hole in pending[:per_run]:
+        refresh_islands([number], bridges=False)
+        golf_hole.modify()
+        golf_hole.set_editor_property('tags', [t for t in golf_hole.tags if not str(t).startswith('Surface:')] + [unreal.Name(_surface_tag(number))])
+        unreal.get_editor_subsystem(unreal.LevelEditorSubsystem).save_current_level()
+        unreal.SystemLibrary.collect_garbage()
+    left = len(pending) - min(per_run, len(pending))
+    print(f'REFRESHED holes {[n for n, _ in pending[:per_run]]}. {left} still to do: run isl.refresh_remaining() again.')
 
 
 def reimport_tops(holes=HOLES):
@@ -769,18 +883,71 @@ def reimport_tops(holes=HOLES):
     print(f'TOPS re-imported: holes {list(holes)}')
 
 
-def update_surfaces():
-    """New island surfaces + materials, and nothing in the level moves: re-imports every IslandTop and floating
-    island mesh (the actors pick them up where they are) and rebuilds the materials. Trees, paths, decals, bridges
-    and everything placed by hand stay exactly as they are."""
+def update_surfaces(holes=HOLES):
+    """New island surfaces + materials, and nothing in the level moves: re-imports each hole's IslandTop and
+    floating island meshes (the actors pick them up where they are) and rebuilds the materials. Trees, paths,
+    decals, bridges and everything placed by hand stay exactly as they are. Run it in batches if memory is short:
+    update_surfaces(range(1, 7)), then range(7, 13), then range(13, 19)."""
     materials = build_materials()
     count = 0
-    for path in sorted(SOURCE.glob('SM_H??_IslandTop.fbx')) + sorted(SOURCE.glob('SM_H??_Floater*.fbx')):
-        if unreal.EditorAssetLibrary.does_asset_exist(f'{DEST}/{path.stem}'):
-            import_mesh(path.stem, materials)
-            count += 1
-    unreal.EditorAssetLibrary.save_directory(DEST)
-    print(f'SURFACES updated: {count} meshes re-imported, materials rebuilt. Nothing in the level was moved.')
+    for number in holes:
+        paths = [SOURCE / f'SM_H{number:02d}_IslandTop.fbx'] + sorted(SOURCE.glob(f'SM_H{number:02d}_Floater*.fbx'))
+        for path in paths:
+            if path.is_file() and unreal.EditorAssetLibrary.does_asset_exist(f'{DEST}/{path.stem}'):
+                import_mesh(path.stem, materials)
+                count += 1
+                unreal.SystemLibrary.collect_garbage()  # free each import before the next (large batches ran out of memory)
+        print(f'SURFACES hole {number} done')
+    print(f'SURFACES updated: {count} meshes re-imported (holes {list(holes)}), materials rebuilt. Nothing in the level was moved.')
+
+
+def tune_look(exposure=-1.0, saturation=1.15, contrast=1.05):
+    """One unbound post-process volume (Course/Environment/CourseLook) that tames the automatic exposure (the sun
+    on pale grass and sand washed everything out) and gives the colours a little more punch. Run again with other
+    numbers to adjust, e.g. tune_look(-1.5) for darker, tune_look(-0.5) for brighter."""
+    volume = next((a for a in _all() if a.get_actor_label() == 'CourseLook'), None)
+    if not volume:
+        volume = actors.spawn_actor_from_class(unreal.PostProcessVolume, unreal.Vector(0, 0, 0), unreal.Rotator(0, 0, 0))
+        volume.set_actor_label('CourseLook')
+        volume.set_folder_path('Course/Environment')
+    volume.set_editor_property('unbound', True)
+    volume.set_editor_property('priority', 10.0)
+    settings = volume.get_editor_property('settings')
+    for key, value in (('override_auto_exposure_bias', True), ('auto_exposure_bias', float(exposure)),
+                       ('override_color_saturation', True), ('color_saturation', unreal.Vector4(saturation, saturation, saturation, 1.0)),
+                       ('override_color_contrast', True), ('color_contrast', unreal.Vector4(contrast, contrast, contrast, 1.0))):
+        settings.set_editor_property(key, value)
+    volume.set_editor_property('settings', settings)
+    unreal.get_editor_subsystem(unreal.LevelEditorSubsystem).save_current_level()
+    print(f'LOOK set: exposure {exposure}, saturation {saturation}, contrast {contrast}')
+
+
+def lift_floaters(clearance=45.0):
+    """After the holes changed height, lift any floating island that now hangs too close over a course: each one's
+    underside ends up at least `clearance` metres above the ground below it. Ones already high enough don't move
+    (nor sideways, so your hand placement stays)."""
+    world = unreal.get_editor_subsystem(unreal.UnrealEditorSubsystem).get_editor_world()
+    lifted = 0
+    for actor in _all():
+        if not str(actor.get_folder_path()).endswith('/Floaters'):
+            continue
+        origin, extent = actor.get_actor_bounds(False)
+        bottom = unreal.Vector(origin.x, origin.y, origin.z - extent.z - 10)
+        hit = unreal.SystemLibrary.line_trace_single(world, bottom, bottom - unreal.Vector(0, 0, 200000),
+                                                     unreal.TraceTypeQuery.TRACE_TYPE_QUERY1, True, [actor],
+                                                     unreal.DrawDebugTrace.NONE, True)
+        if not hit:
+            continue
+        parts = hit.to_tuple()
+        if not parts[0]:
+            continue
+        gap = parts[3] / M
+        if gap < clearance:
+            p = actor.get_actor_location()
+            actor.set_actor_location(unreal.Vector(p.x, p.y, p.z + (clearance - gap) * M), False, True)
+            lifted += 1
+    unreal.get_editor_subsystem(unreal.LevelEditorSubsystem).save_current_level()
+    print(f'FLOATERS: {lifted} lifted to at least {clearance:.0f} m above the course')
 
 
 def update_materials():

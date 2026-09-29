@@ -1,4 +1,5 @@
 #include "GolfPhysics.h"
+#include "Components/InstancedStaticMeshComponent.h"
 #include "SkyLinks.h"
 #include "Engine/World.h"
 #include "Engine/HitResult.h"
@@ -141,13 +142,22 @@ FGolfBallState GolfPhysics::MakeLaunch(const FGolfClub& Club, const FGolfShotInp
 	return State;
 }
 
-bool GolfPhysics::SweepBall(const UWorld* World, const FVector& From, const FVector& To, FHitResult& OutHit, const AActor* Ignore)
+bool GolfPhysics::IsFoliageHit(const FHitResult& Hit)
+{
+	return Hit.GetComponent() && Hit.GetComponent()->IsA<UInstancedStaticMeshComponent>();
+}
+
+bool GolfPhysics::SweepBall(const UWorld* World, const FVector& From, const FVector& To, FHitResult& OutHit, const AActor* Ignore, const AActor* IgnoreAlso)
 {
 	if (!World)
 	{
 		return false;
 	}
 	FCollisionQueryParams Params(SCENE_QUERY_STAT(GolfBallSweep), false, Ignore);
+	if (IgnoreAlso)
+	{
+		Params.AddIgnoredActor(IgnoreAlso);
+	}
 	Params.bReturnPhysicalMaterial = true;
 	const bool bHit = World->SweepSingleByChannel(OutHit, From, To, FQuat::Identity, ECC_GolfBall, FCollisionShape::MakeSphere(BallRadius), Params);
 	return bHit && !OutHit.bStartPenetrating;

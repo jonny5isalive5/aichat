@@ -2,8 +2,8 @@
 
 Each is one static mesh of about 1-3k triangles with two material slots (TreeBark, TreeLeaves), vertex colours
 for all the colour (so no leaf textures), and the wind weight in vertex alpha (0 at the root, 1 at the canopy
-top) for the sway shader in Scripts/import_trees.py. A UCX_ box round the trunk is the only collision, so the
-ball hits trunks and flies through leaves. Origin on the ground at the trunk. Instanced by the foliage brush,
+top) for the sway shader in Scripts/import_trees.py. Collision: a UCX_ box round the trunk and a convex hull round
+the canopy (a bush's whole body), so the ball clatters off trees and bushes like on a real course. Origin on the ground at the trunk. Instanced by the foliage brush,
 a hundred of these cost less than one Megaplant.
 
     python Art/Blender/build_trees.py            (bpy module, Blender 4.2)
@@ -280,6 +280,32 @@ def preview(objects):
                       yaw_degrees=-90, ground_size=80, resolution=(1800, 620), lens=36)
 
 
+def canopy_hull(obj, name, points=260, shrink=0.92):
+    """Convex collision round the leaves (a bush's whole body), so a ball clatters into a canopy instead of flying
+    through it; shrunk a touch so a ball that only grazes the outermost leaves gets past."""
+    rng = random.Random(len(name))
+    leaf = {i for p in obj.data.polygons if p.material_index == 1 for i in p.vertices}
+    cloud = [obj.data.vertices[i].co.copy() for i in (leaf or range(len(obj.data.vertices)))]
+    if len(cloud) > points:
+        # Keep the extremes on every axis so the hull still covers the canopy, then a random sample of the rest.
+        ends = {min(cloud, key=lambda v: v[k] * s) .freeze() for k in range(3) for s in (1, -1)}
+        cloud = [Vector(v) for v in ends] + rng.sample(cloud, points - len(ends))
+    centre = sum(cloud, Vector()) / len(cloud)
+    bm = bmesh.new()
+    for v in cloud:
+        bm.verts.new(centre + (v - centre) * shrink)
+    result = bmesh.ops.convex_hull(bm, input=bm.verts)
+    loose = {g for g in result['geom_interior'] + result['geom_unused'] if isinstance(g, bmesh.types.BMVert)}
+    bmesh.ops.delete(bm, geom=list(loose), context='VERTS')
+    mesh = bpy.data.meshes.new(name)
+    bm.to_mesh(mesh)
+    bm.free()
+    hull = bpy.data.objects.new(name, mesh)
+    bpy.context.scene.collection.objects.link(hull)
+    hull.hide_render = True
+    return hull
+
+
 def main():
     sl.reset_scene()
     OUT.mkdir(parents=True, exist_ok=True)
@@ -292,6 +318,7 @@ def main():
             collision = sl.box(f'UCX_{name}_00', -r, r, -r, r, 0.0, 4.0)
             collision.hide_render = True
             exported.append(collision)
+        exported.append(canopy_hull(obj, f'UCX_{name}_01'))
         sl.export_fbx(str(OUT / f'{name}.fbx'), exported)
         for extra in exported[1:]:
             bpy.data.objects.remove(extra)

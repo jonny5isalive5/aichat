@@ -94,6 +94,11 @@ private:
 	void DrawAnnouncement(AGolfGameState* State);
 
 	void Box(const FVector2D& Position, const FVector2D& Size, const FLinearColor& Color);
+	/** Shaded plate: a vertical blend from a lighter top to a darker bottom with a fine highlight along the top.
+	 *  Bright blue fills are drawn as glossy header bars. */
+	void Fill(const FVector2D& Position, const FVector2D& Size, const FLinearColor& Color);
+	void Gradient(const FVector2D& Position, const FVector2D& Size, const FLinearColor& Top, const FLinearColor& Bottom);
+	void GradientDisc(const FVector2D& Center, float Radius, const FLinearColor& Inner, const FLinearColor& Outer);
 	void Disc(const FVector2D& Center, float Radius, const FLinearColor& Color);
 	void Ring(const FVector2D& Center, float Radius, const FLinearColor& Color, float Thickness);
 	/** Part of a ring: from StartDegrees (0 = right, clockwise on screen) sweeping SweepDegrees. */
@@ -102,6 +107,8 @@ private:
 	void Label(const FString& Text, const FVector2D& Position, float Height, const FLinearColor& Color, bool bCenter);
 	/** Panel heading: small spaced capitals over a hairline rule with a bright lead-in segment. */
 	void Heading(const FString& Text, const FVector2D& Position, float Width, float Height, bool bCenter = false);
-	void RoundButton(EGolfHudButton Id, const FVector2D& Center, float Radius, const FString& Text, const FLinearColor& Fill, int32 Payload = 0);
+	/** Bottom-middle message banner (announcements, hints). */
+	void Notice(const FString& Text, float Alpha);
+	void RoundButton(EGolfHudButton Id, const FVector2D& Center, float Radius, const FString& Text, const FLinearColor& FillColor, int32 Payload = 0);
 	bool ToScreen(const FVector& World, FVector2D& OutScreen) const;
 };
