@@ -781,7 +781,7 @@ def make_path_decal():
     return mat
 
 
-KEEP_TREES = {1}  # holes whose trees the owner arranged by hand: refresh_islands leaves their foliage alone
+KEEP_TREES = set()  # holes whose trees the owner arranged by hand: refresh_islands leaves their foliage alone
 
 
 def refresh_islands(holes=HOLES):

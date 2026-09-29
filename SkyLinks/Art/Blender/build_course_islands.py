@@ -99,7 +99,7 @@ def design_new(number):
     regions[B.ROUGH] = land.difference(unary_union([regions[B.BUNKER], regions[B.GREEN], regions[B.FAIRWAY], tee]))
     return dict(land=land, main=land, regions=regions, fairways=fairways, green=green, bunkers=bunkers, tee=tee,
                 cup=(cx, cy), pads=[((-14, 0), 9)], water=wet, woods=woods, streams=streams, ponds=ponds,
-                footbridges=h['footbridges'], trees=[], floaters=[])
+                footbridges=h['footbridges'], trees=[], floaters=[], landform=h.get('landform'))
 
 
 def layout_for(number):
@@ -198,7 +198,7 @@ CART_WIDTH = 3.2        # m
 CART_OFFSET = 7.0       # m: the path likes to run this far off the edge of the fairway, in the rough
 ANCHORS = {}            # hole -> {'in': (x, y), 'out': (x, y)} local metres; filled in main() from the bridges
 CAR_PARK_EXIT = (-73.0, -30.0)  # hole 1: the edge of the clubhouse pad nearest the first tee
-HAND_PATHS = {1}        # holes whose buggy paths the owner laid by hand
+HAND_PATHS = set()      # holes whose buggy paths the owner laid by hand
 SOFT_PATHS = False      # --soft-paths: no path borders in the mesh (fallback if the mesher chokes on them)
 
 
@@ -342,13 +342,96 @@ def bunker_relief(x, y, layout):
     return dz
 
 
+# Each hole's big shape, in turn round the course so neighbours differ: how the ground falls from tee to green.
+LANDFORMS = ['downhill', 'terraced', 'uphill', 'valley', 'ridge', 'plunge']
+RELIEF = 2.3      # scales every hole's drops and rises (the designs' numbers are in 'gentle' metres)
+BANKS = 1.7       # scales the rough banks either side of the fairways
+
+
+def landform(number, layout):
+    """The hole's landform (m, added to the surface): a tee-to-green profile (falls, rises, terraces, a valley or a
+    crest), a camber that tips the fairway down to one side, rough banks rising away from the fairway so it sits
+    in a corridor, a green set on its own plateau or in a shallow bowl, and a level tee terrace. Ponds and brooks
+    get a level floor of their own. Stores the water level in layout['water_offset']."""
+    rng = np.random.default_rng(7919 * number)
+    # Each hole's design names its landform (course_layout.HOLES[n]['landform']); hole 1 gets a gentle fall.
+    spec = layout.get('landform') or dict(kind='downhill', drop=3.0, camber=0.02, wall_left=2.5, wall_right=2.5, green=0.5)
+    kind = spec.get('kind', LANDFORMS[(number - 1) % len(LANDFORMS)])
+    cx, cy = layout['cup']
+    length = max(60.0, math.hypot(cx, cy))
+    ux, uy = cx / length, cy / length
+    drop = RELIEF * spec.get('drop', rng.uniform(5.0, 9.0))
+    rise = RELIEF * spec.get('rise', rng.uniform(3.0, 6.0))
+
+    def step(t, a, b):
+        return B.smooth((t - a) / (b - a))
+
+    def profile(t):
+        if kind == 'downhill':     # tee high above a fairway that falls away, green at the bottom
+            return -drop * step(t, 0.05, 0.55)
+        if kind == 'terraced':     # two distinct levels stepping down
+            return -0.45 * drop * step(t, 0.24, 0.32) - 0.55 * drop * step(t, 0.64, 0.72)
+        if kind == 'uphill':       # climbing to a raised green
+            return rise * step(t, 0.35, 0.95)
+        if kind == 'valley':       # down into a dip, back up to the green
+            return -drop * np.sin(np.pi * np.clip(t, 0, 1)) ** 1.5 + 0.3 * rise * step(t, 0.7, 1.0)
+        if kind == 'ridge':        # up over a crest, then falling to the green
+            return 0.5 * rise * np.sin(np.pi * np.clip(t / 0.6, 0, 1)) - 0.7 * drop * step(t, 0.55, 0.95)
+        return -1.3 * drop * step(t, 0.1, 0.4)   # plunge: a big drop off the tee, then level
+
+    camber = spec.get('camber', 0.0)       # > 0 tips the ground down to the left (-y), < 0 down to the right
+    wall_left, wall_right = BANKS * spec.get('wall_left', 3.0), BANKS * spec.get('wall_right', 3.0)
+    green_lift = spec.get('green', 0.0)
+    fair, green, tee = layout['fairways'], layout['green'], layout['tee']
+    water = layout.get('water')
+
+    def shape(x, y):
+        t = (x * ux + y * uy) / length
+        lat = -x * uy + y * ux
+        pts = shapely.points(x, y)
+        h = profile(t) + camber * np.clip(lat, -35, 35)
+        fd = shapely.distance(fair, pts)
+        h = h + np.where(lat > 0, wall_right, wall_left) * B.smooth((fd - 2) / 16)
+        # Rolling ground: broad swales and humps down the fairway too, not just in the rough.
+        h = h + 1.4 * B.fbm(x / 45, y / 45, 3, number + 300)
+        return h, pts
+
+    water_level = 0.0
+    if water is not None:
+        wx, wy = np.asarray(water.exterior.coords).T if water.geom_type == 'Polygon' else \
+            np.concatenate([np.asarray(g.exterior.coords) for g in water.geoms]).T
+        water_level = min(float(np.mean(shape(wx, wy)[0])), -0.3)
+    layout['water_offset'] = water_level
+    clat = -cx * uy + cy * ux
+    green_level = float(profile(1.0) + camber * np.clip(clat, -35, 35) + green_lift)
+    if water is not None:
+        green_level = max(green_level, water_level + 0.8)
+
+    def fn(x, y):
+        x, y = np.asarray(x, float), np.asarray(y, float)
+        h, pts = shape(x, y)
+        if water is not None:
+            wb = 1 - B.smooth(shapely.distance(water, pts) / 15)
+            h = h * (1 - wb) + water_level * wb
+        gb = 1 - B.smooth((shapely.distance(green, pts) - 1) / 8)
+        h = h * (1 - gb) + green_level * gb
+        tb = 1 - B.smooth((shapely.distance(tee, pts) - 2) / 12)
+        h = h * (1 - tb)
+        for (px, py), pr in layout['pads']:
+            h = h * B.smooth((np.hypot(x - px, y - py) - pr) / 12)
+        return h
+    return fn
+
+
 def height_fn(number, layout):
     """Local surface height (m, relative to the tee) as a function of local x, y."""
     plain = dict(layout, bunkers=[])  # the old shallow round dips are replaced by bunker_relief
+    land_shape = landform(number, layout)
+    level = layout['water_offset']
 
     def base(x, y):
         x, y = np.asarray(x, float), np.asarray(y, float)
-        return B.top_height(x, y, plain, number) + bunker_relief(x, y, layout)
+        return B.top_height(x, y, plain, number) + land_shape(x, y) + bunker_relief(x, y, layout)
     water = layout.get('water')
     if water is None:
         return base
@@ -360,9 +443,9 @@ def height_fn(number, layout):
         inside = shapely.distance(water.boundary, pts) * (outside == 0)
         # Keep the banks above the water line, then drop into a basin under the surface.
         bank = 1 - B.smooth(outside / 8)
-        h = np.where(outside > 0, h * (1 - bank) + np.maximum(h, 0.15) * bank, h)
+        h = np.where(outside > 0, h * (1 - bank) + np.maximum(h, level + 0.15) * bank, h)
         basin = B.smooth(inside / 2.5)
-        return np.where(outside > 0, h, 0.1 * (1 - basin) - 1.8 * basin)
+        return np.where(outside > 0, h, level + 0.1 * (1 - basin) - 1.8 * basin)
     return with_water
 
 
@@ -899,7 +982,7 @@ def build_hole(number, rng):
 
     if layout.get('water') is not None:
         wxy, wtris = B.triangulate_underside(layout['water'], [], 6)
-        wv = place(number, np.column_stack([wxy, np.full(len(wxy), WATER_LEVEL)]))
+        wv = place(number, np.column_stack([wxy, np.full(len(wxy), WATER_LEVEL + layout.get('water_offset', 0.0))]))
         exported.append(B.make_mesh(f'{name}_Water', wv, wtris, np.zeros(len(wtris), int), ['Water'],
                                     np.tile([0.5, 0.0, 0.0], (len(wv), 1))))
     footbridge_spots = []
@@ -1103,7 +1186,31 @@ def render_course(layouts):
         bpy.ops.render.render(write_still=True)
 
 
+def settle_heights(grade=0.2):
+    """The landforms move each green well above or below its tee, so re-seat every island's height along the chain
+    (hole 1 stays put): each rope bridge from a green to the next tee climbs or falls at most `grade`."""
+    layouts = {n: layout_for(n) for n in C.PLACE}
+    anchors = bridge_anchor_points({n: (lay, None) for n, lay in layouts.items()})
+    heights = {n: height_fn(n, lay) for n, lay in layouts.items()}
+
+    def ground(n, wx, wy):
+        lx, ly = C.to_local(n, wx, wy)
+        return float(heights[n](np.array([float(lx)]), np.array([float(ly)]))[0])
+    for n in sorted(C.PLACE)[:-1]:
+        if n not in anchors:
+            continue
+        ax, ay, bx, by = anchors[n]
+        za = C.PLACE[n][2] + ground(n, ax, ay)
+        zb_local = ground(n + 1, bx, by)
+        gap = math.hypot(bx - ax, by - ay)
+        target = za + float(np.clip(C.PLACE[n + 1][2] + zb_local - za, -grade * gap, grade * gap))
+        xy, yaw, _ = C.PLACE[n + 1]
+        C.PLACE[n + 1] = (xy, yaw, round(target - zb_local, 2))
+    print('HEIGHTS', {n: C.PLACE[n][2] for n in sorted(C.PLACE)})
+
+
 def main():
+    settle_heights()
     args = sys.argv[sys.argv.index('--') + 1:] if '--' in sys.argv else []
     wanted = [int(a) for a in args if a.isdigit()] or sorted(C.PLACE)
     OUT.mkdir(parents=True, exist_ok=True)
