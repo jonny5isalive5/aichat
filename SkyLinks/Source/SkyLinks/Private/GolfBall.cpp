@@ -163,7 +163,7 @@ bool AGolfBall::HitFoliageShape(const FVector& Point, FVector& OutNormal, const 
 	return false;
 }
 
-void AGolfBall::BounceOffFoliage(const FVector& Point, const FVector& Normal, const AActor* Owner)
+void AGolfBall::BounceOffFoliage(const FVector& Point, const FVector& Normal, const AActor* HitOwner)
 {
 	// Trees and bushes: the ball clatters off branches and leaves, loses most of its pace and kicks off at an
 	// odd angle. Landing on top of a canopy it drops through the leaves to the ground instead. The "random"
@@ -177,7 +177,7 @@ void AGolfBall::BounceOffFoliage(const FVector& Point, const FVector& Normal, co
 	Sim.Velocity = Out;
 	if (N.Z > 0.35f || Out.Size() < 250.f)
 	{
-		PassThrough = Owner;
+		PassThrough = HitOwner;
 		PassThroughUntil = GetWorld()->GetTimeSeconds() + 1.5f;
 		Sim.Velocity = FVector(Out.X * 0.3f, Out.Y * 0.3f, -FMath::Abs(Out.Z) * 0.3f);
 	}
@@ -278,10 +278,10 @@ void AGolfBall::StepFlightMode(float Dt)
 	if (GetWorld()->GetTimeSeconds() >= PassThroughUntil)
 	{
 		FVector Normal;
-		const AActor* Owner = nullptr;
-		if (HitFoliageShape(Sim.Location, Normal, Owner))
+		const AActor* HitOwner = nullptr;
+		if (HitFoliageShape(Sim.Location, Normal, HitOwner))
 		{
-			BounceOffFoliage(Sim.Location, Normal, Owner);
+			BounceOffFoliage(Sim.Location, Normal, HitOwner);
 			return;
 		}
 	}

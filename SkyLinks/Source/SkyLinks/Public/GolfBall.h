@@ -116,7 +116,7 @@ private:
 	TArray<TWeakObjectPtr<class UInstancedStaticMeshComponent>> Foliage;
 	void GatherFoliage();
 	bool HitFoliageShape(const FVector& Point, FVector& OutNormal, const AActor*& OutOwner) const;
-	void BounceOffFoliage(const FVector& Point, const FVector& Normal, const AActor* Owner);
+	void BounceOffFoliage(const FVector& Point, const FVector& Normal, const AActor* HitOwner);
 	FVector Cup = FVector::ZeroVector;
 	float CupRadius = 8.f;
 	float Accumulator = 0.f;
