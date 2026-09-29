@@ -266,8 +266,11 @@ def triangulate_top(layout):
     lines += [LineString(r.coords) for g in layout.get('extra_lines', []) for r in polygon_rings(g)]
     vertices, segments = pslg(lines, EDGE_SPACING)
     seeds = []
+    extra = unary_union(layout.get('extra_lines', [])) if layout.get('extra_lines') else None
     for region_id, region in layout['regions'].items():
-        for part in (region.geoms if hasattr(region, 'geoms') else [region]):
+        # Extra outlines (footpaths) cut regions into pieces: seed every piece so each keeps its type and density.
+        pieces = [region] if extra is None else [region.difference(extra), region.intersection(extra)]
+        for part in (g for piece in pieces for g in (piece.geoms if hasattr(piece, 'geoms') else [piece])):
             if part.area > 0.5:
                 p = part.representative_point()
                 seeds.append([p.x, p.y, region_id, REGION_MAX_AREA[region_id]])

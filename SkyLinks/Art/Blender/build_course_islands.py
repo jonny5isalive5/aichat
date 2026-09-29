@@ -147,23 +147,36 @@ def reshape_bunkers(number, layout):
             r = min(max(r, 3.5), 7.5)
             d = np.array([c.x - gc.x, c.y - gc.y])
             d = d / (np.linalg.norm(d) + 1e-9)
-            centre = (gc.x + d[0] * (gr + 0.55 * r), gc.y + d[1] * (gr + 0.55 * r))
-            shape, depth = organic_blob(centre, r, rng, (1.0, 1.5), 90.0), rng.uniform(1.1, 1.9)
+            centre = (gc.x + d[0] * (gr + 0.9 * r), gc.y + d[1] * (gr + 0.9 * r))
+            # Tight to the green with a thin grass collar (outlines that cross each other upset the mesher).
+            shape = organic_blob(centre, r, rng, (1.0, 1.5), 90.0).difference(green.buffer(0.8)).difference(fair.buffer(1.0))
+            depth = rng.uniform(1.1, 1.9)
         elif r > 14:
-            shape, depth = organic_blob((c.x, c.y), r, rng, (0.9, 1.3), 20.0), rng.uniform(0.5, 0.9)
+            shape = organic_blob((c.x, c.y), r, rng, (0.9, 1.3), 20.0).difference(fair.buffer(1.0))
+            depth = rng.uniform(0.5, 0.9)
         else:
+            # On the fairway: wholly inside it, a metre in from its edge.
+            room = fair.buffer(-1.0)
             r = min(max(r, 4.0), 10.0)
-            target = fair.buffer(-0.5 * r)
+            for _ in range(4):
+                target = room.buffer(-1.25 * r)
+                if not target.is_empty:
+                    break
+                r *= 0.75
             if target.is_empty:
-                target = fair
+                continue
             centre = (c.x, c.y) if target.contains(c) else nearest_points(target, c)[0].coords[0]
-            shape, depth = organic_blob(centre, r, rng), rng.uniform(0.7, 1.4)
+            shape = organic_blob(centre, r, rng).intersection(room)
+            depth = rng.uniform(0.7, 1.4)
         shape = shape.intersection(safe)
         if isinstance(shape, MultiPolygon):
             shape = max(shape.geoms, key=lambda g: g.area)
         if shape.is_empty or shape.area < 6 or any(shape.distance(o) < 2.5 for o in bunkers):
             continue
-        bunkers.append(shapely.set_precision(shape, 0.05))
+        # Even 0.8 m spacing round the outline (as every other outline): tiny steps make the mesher over-refine.
+        ring = shape.exterior
+        count = max(12, int(ring.length / B.EDGE_SPACING))
+        bunkers.append(Polygon([ring.interpolate(i / count, normalized=True).coords[0] for i in range(count)]).buffer(0))
         depths.append(round(depth, 2))
     land_ = layout['land']
     tee = layout['tee']
@@ -290,6 +303,24 @@ def cart_path(number, layout):
         r = 0.25 * line[:-1] + 0.75 * line[1:]
         line = np.vstack([line[:1], np.column_stack([q, r]).reshape(-1, 2), line[-1:]])
     return LineString(line).simplify(0.3)
+
+
+def hole_paths(number, layout):
+    """(cart path line, all path area) for a hole: the automatic buggy path plus any drawn in Paths.json."""
+    # Hole 1's paths were laid by hand in the editor (decals), so it gets no automatic one.
+    cart = cart_path(number, layout) if number not in HAND_PATHS else None
+    cart_area = None
+    if cart is not None:
+        # Off greens, tees and bunkers, and it stops half a metre short of the fairway where it crosses one.
+        cart_area = cart.buffer(CART_WIDTH / 2, 12).difference(
+            unary_union([layout['green'].buffer(0.5), layout['tee'].buffer(0.5), layout['fairways'].buffer(0.5)]
+                        + [b.buffer(0.5) for b in layout['bunkers']]))
+    paths = footpaths(number, layout['land'], cart_area)
+    if paths is not None:
+        # One tidy outline per path (points no closer than ~0.3 m): its border becomes a mesh edge, so the path is
+        # crisp without flooding the mesh with slivers.
+        paths = shapely.set_precision(paths.simplify(0.25), 0.05)
+    return cart, paths
 
 
 def bunker_relief(x, y, layout):
@@ -778,23 +809,16 @@ def build_hole(number, rng):
     B.build_materials()
     name = f'SM_H{number:02d}'
 
-    # Hole 1's paths were laid by hand in the editor (decals), so it gets no automatic one.
-    cart = cart_path(number, layout) if number not in HAND_PATHS else None
-    cart_area = None
-    if cart is not None:
-        cart_area = cart.buffer(CART_WIDTH / 2, 12).difference(
-            unary_union([layout['green'].buffer(0.5), layout['tee']] + layout['bunkers']))
-    paths = footpaths(number, layout['land'], cart_area)
+    cart, paths = hole_paths(number, layout)
     layout = dict(layout, paths=paths, cart=cart)
     if paths is not None and not SOFT_PATHS:
-        # Path borders become mesh edges: a thin band between an inner and an outer outline carries the fade.
-        layout = dict(layout, extra_lines=[paths.buffer(-PATH_EDGE), paths.buffer(PATH_EDGE).intersection(layout['land'].buffer(-1.0))])
+        layout = dict(layout, extra_lines=[paths])
     xy, tris, attrs = B.triangulate_top(layout)
     z = local_h(xy[:, 0], xy[:, 1])
     top_cols = B.top_colours(xy[:, 0], xy[:, 1], number)
     if paths is not None:
-        inner = paths.buffer(-PATH_EDGE + 0.01)
-        top_cols[:, 2] = shapely.contains_xy(inner, xy[:, 0], xy[:, 1]).astype(float)  # B: 1 on the path
+        on_path = shapely.contains_xy(paths.buffer(0.02), xy[:, 0], xy[:, 1])
+        top_cols[:, 2] = on_path.astype(float)  # B: 1 on the path (its border vertices included)
     top = B.make_mesh(f'{name}_IslandTop', place(number, np.column_stack([xy, z])), tris, attrs,
                       [B.REGION_MATERIAL[i] for i in range(5)], top_cols)
 
