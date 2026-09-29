@@ -68,7 +68,7 @@ def clump(name, blades, spread, height, width, lean, seed):
 def main():
     OUT.mkdir(parents=True, exist_ok=True)
     specs = {
-        'SM_GrassClump': dict(blades=16, spread=0.07, height=(0.09, 0.2), width=(0.008, 0.014), lean=(0.15, 0.55), seed=1),
+        'SM_GrassClump': dict(blades=34, spread=0.16, height=(0.07, 0.19), width=(0.009, 0.016), lean=(0.2, 0.7), seed=1),
         'SM_GrassTuft': dict(blades=24, spread=0.06, height=(0.16, 0.38), width=(0.006, 0.011), lean=(0.3, 0.9), seed=2),
     }
     for name, spec in specs.items():
