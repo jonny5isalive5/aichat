@@ -811,6 +811,7 @@ def refresh_islands(holes=HOLES):
         removed = unreal.SkyLinksForest.clear_foliage_inside(world, types, outline)
         plant_forest(number, spots)
         print(f'HOLE {number} refreshed: {removed} old trees out, new ones planted')
+        unreal.SystemLibrary.collect_garbage()  # free each hole's imports before the next (big batches ran out of memory)
     apply_bridges(materials, json.loads((SOURCE / 'Course_links.json').read_text()))
     unreal.get_editor_subsystem(unreal.LevelEditorSubsystem).save_current_level()
     print('ISLANDS REFRESHED. Run validate_course() in a separate call.')
