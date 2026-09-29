@@ -696,7 +696,11 @@ def ensure_sea():
     sea.set_folder_path('Course/Environment')
 
 
-def apply_course(holes=HOLES):
+def apply_course(holes=HOLES, wipe_hand_work=False):
+    """First-time build of the whole course. It clears EVERY tree and replants, so hand-arranged holes (KEEP_TREES)
+    would be lost: once the course exists, use refresh_islands() instead."""
+    assert wipe_hand_work or not KEEP_TREES, ('apply_course() replants every island and would wipe your hand-placed '
+                                              'trees on hole(s) %s. Use refresh_islands() instead.' % sorted(KEEP_TREES))
     world = unreal.get_editor_subsystem(unreal.UnrealEditorSubsystem).get_editor_world()
     assert world.get_path_name() == f'{MAP_PATH}.Course', f'Open {MAP_PATH} first'
     materials = build_materials()
