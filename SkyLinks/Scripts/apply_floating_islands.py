@@ -11,6 +11,7 @@
     isl.make_path_decal()       M_PathDecal: drag Decal Actors onto the grass for footpaths (the easy way)
     isl.export_paths()          save footpaths drawn as splines (actors named Path...) for baking into the islands
     isl.refresh_islands()       after an island rebuild: new meshes in place, trees replanted; your floaters stay
+    isl.refresh_remaining()     the same, a few holes per run, crash-proof: run it until it says ALL DONE
     isl.reimport_tops([4])      re-import island surfaces only (after paths are baked); nothing else moves
     isl.update_materials()      rebuild the island materials only (grass paths: Mesh Paint, Blue channel)
     isl.update_surfaces()       new island surfaces + materials only (nothing in the level moves)
@@ -784,7 +785,7 @@ def make_path_decal():
 KEEP_TREES = set()  # holes whose trees the owner arranged by hand: refresh_islands leaves their foliage alone
 
 
-def refresh_islands(holes=HOLES):
+def refresh_islands(holes=HOLES, bridges=True):
     """After a rebuild of the island meshes (new bunkers, buggy paths...): re-import every hole's surface, rock,
     ivy, water and footbridge deck in place, re-seat the holes, footbridges and rope bridges, and replant the
     trees island by island (clear of the new paths and bunkers). Holes in KEEP_TREES (hole 1, arranged by hand)
@@ -812,9 +813,40 @@ def refresh_islands(holes=HOLES):
         plant_forest(number, spots)
         print(f'HOLE {number} refreshed: {removed} old trees out, new ones planted')
         unreal.SystemLibrary.collect_garbage()  # free each hole's imports before the next (big batches ran out of memory)
-    apply_bridges(materials, json.loads((SOURCE / 'Course_links.json').read_text()))
+    if bridges:
+        apply_bridges(materials, json.loads((SOURCE / 'Course_links.json').read_text()))
     unreal.get_editor_subsystem(unreal.LevelEditorSubsystem).save_current_level()
     print('ISLANDS REFRESHED. Run validate_course() in a separate call.')
+
+
+def _surface_tag(number):
+    import hashlib
+    text = (SOURCE / f'Hole{number:02d}_spots.json').read_text()
+    return 'Surface:' + hashlib.md5(text.encode()).hexdigest()[:10]
+
+
+def refresh_remaining(per_run=3):
+    """Crash-proof refresh: does the next few holes that aren't up to date yet (each is saved as soon as it is
+    done and marked on its GolfHole), then stops. Run it again, and again, until it says ALL DONE; after a crash just
+    reopen the editor and run it again - it carries on where it got to. The rope bridges go in on the last run."""
+    everything = _all()
+    pending = []
+    for number in HOLES:
+        golf_hole = next((a for a in everything if a.get_actor_label() == f'GolfHole{number:02d}'), None)
+        if golf_hole and _surface_tag(number) not in [str(t) for t in golf_hole.tags]:
+            pending.append((number, golf_hole))
+    if not pending:
+        apply_bridges(build_materials(), json.loads((SOURCE / 'Course_links.json').read_text()))
+        unreal.get_editor_subsystem(unreal.LevelEditorSubsystem).save_current_level()
+        print('ALL DONE: every hole is up to date and the rope bridges are in. Run validate_course() next.')
+        return
+    for number, golf_hole in pending[:per_run]:
+        refresh_islands([number], bridges=False)
+        golf_hole.tags = [t for t in golf_hole.tags if not str(t).startswith('Surface:')] + [unreal.Name(_surface_tag(number))]
+        unreal.get_editor_subsystem(unreal.LevelEditorSubsystem).save_current_level()
+        unreal.SystemLibrary.collect_garbage()
+    left = len(pending) - min(per_run, len(pending))
+    print(f'REFRESHED holes {[n for n, _ in pending[:per_run]]}. {left} still to do: run isl.refresh_remaining() again.')
 
 
 def reimport_tops(holes=HOLES):
