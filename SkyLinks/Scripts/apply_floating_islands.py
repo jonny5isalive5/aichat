@@ -14,6 +14,7 @@
     isl.reimport_tops([4])      re-import island surfaces only (after paths are baked); nothing else moves
     isl.update_materials()      rebuild the island materials only (grass paths: Mesh Paint, Blue channel)
     isl.update_surfaces()       new island surfaces + materials only (nothing in the level moves)
+    isl.tune_look()             tame the bright exposure, richer colours (tune_look(-1.5) darker, (-0.5) brighter)
     isl.import_grass()          the 3D grass clumps + M_GrassBlades (grown around the camera in game)
     isl.raise_fog(20)           lift every cloud patch 20 m (or lower it with a negative number)
 
@@ -207,7 +208,7 @@ float ridge = cos((dot(L8, dir) + wob) * 39.27) * saturate(M2 * 3.0 - 1.2) * 0.2
 return normalize(N + float3(n.x * 0.6 + dir.x * ridge, n.y * 0.6 + dir.y * ridge, 0));
 """
 SURFACE_TINT = {'rough': (1, 1, 1), 'fairway': (1, 1, 1), 'green': (1, 1, 1), 'tee': (1, 1, 1),
-                'bunker': (0.95, 0.92, 0.86)}  # sand: a touch warmer / darker than the raw texture
+                'bunker': (0.72, 0.64, 0.52)}  # sand: a touch warmer / darker than the raw texture
 
 
 def _tex(mat, name, uv, x, y, sampler=unreal.MaterialSamplerType.SAMPLERTYPE_LINEAR_GRAYSCALE):
@@ -787,6 +788,27 @@ def update_surfaces(holes=HOLES):
                 unreal.SystemLibrary.collect_garbage()  # free each import before the next (large batches ran out of memory)
         print(f'SURFACES hole {number} done')
     print(f'SURFACES updated: {count} meshes re-imported (holes {list(holes)}), materials rebuilt. Nothing in the level was moved.')
+
+
+def tune_look(exposure=-1.0, saturation=1.15, contrast=1.05):
+    """One unbound post-process volume (Course/Environment/CourseLook) that tames the automatic exposure (the sun
+    on pale grass and sand washed everything out) and gives the colours a little more punch. Run again with other
+    numbers to adjust, e.g. tune_look(-1.5) for darker, tune_look(-0.5) for brighter."""
+    volume = next((a for a in _all() if a.get_actor_label() == 'CourseLook'), None)
+    if not volume:
+        volume = actors.spawn_actor_from_class(unreal.PostProcessVolume, unreal.Vector(0, 0, 0), unreal.Rotator(0, 0, 0))
+        volume.set_actor_label('CourseLook')
+        volume.set_folder_path('Course/Environment')
+    volume.set_editor_property('unbound', True)
+    volume.set_editor_property('priority', 10.0)
+    settings = volume.get_editor_property('settings')
+    for key, value in (('override_auto_exposure_bias', True), ('auto_exposure_bias', float(exposure)),
+                       ('override_color_saturation', True), ('color_saturation', unreal.Vector4(saturation, saturation, saturation, 1.0)),
+                       ('override_color_contrast', True), ('color_contrast', unreal.Vector4(contrast, contrast, contrast, 1.0))):
+        settings.set_editor_property(key, value)
+    volume.set_editor_property('settings', settings)
+    unreal.get_editor_subsystem(unreal.LevelEditorSubsystem).save_current_level()
+    print(f'LOOK set: exposure {exposure}, saturation {saturation}, contrast {contrast}')
 
 
 def update_materials():
