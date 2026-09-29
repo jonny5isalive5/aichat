@@ -18,15 +18,17 @@ if not errorlevel 1 (
 echo Checking this copy is up to date...
 git checkout -q %BRANCH% || goto fail
 git fetch -q origin %BRANCH% || goto fail
-set BEHIND=0
-for /f %%n in ('git rev-list --count HEAD..origin/%BRANCH%') do set BEHIND=%%n
-set DIRTY=
-for /f %%f in ('git status --porcelain') do set DIRTY=1
-if defined DIRTY if %BEHIND% GTR 3 (
+rem Danger only if GitHub has new Unreal content AND this copy has its own unsaved content changes: uploading
+rem could then overwrite newer maps/assets with old ones (that happened once with an old copy). Code, scripts and
+rem island exports from Claude are fine to pull on top of your editor work.
+set REMOTE_CONTENT=
+for /f %%f in ('git diff --name-only HEAD...origin/%BRANCH% -- SkyLinks/Content') do set REMOTE_CONTENT=1
+set LOCAL_CONTENT=
+for /f %%f in ('git status --porcelain -- SkyLinks/Content') do set LOCAL_CONTENT=1
+if defined REMOTE_CONTENT if defined LOCAL_CONTENT (
     echo.
-    echo STOPPED: this copy of the project is %BEHIND% updates behind GitHub AND has changes in it.
-    echo It is probably an old copy. Uploading it could overwrite newer work, so nothing was changed.
-    echo Send this window to Claude.
+    echo STOPPED: GitHub has newer Unreal content AND this copy has its own content changes.
+    echo Uploading could overwrite newer work, so nothing was changed. Send this window to Claude.
     pause
     exit /b 1
 )
