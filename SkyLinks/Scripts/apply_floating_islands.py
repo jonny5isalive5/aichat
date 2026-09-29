@@ -771,18 +771,22 @@ def reimport_tops(holes=HOLES):
     print(f'TOPS re-imported: holes {list(holes)}')
 
 
-def update_surfaces():
-    """New island surfaces + materials, and nothing in the level moves: re-imports every IslandTop and floating
-    island mesh (the actors pick them up where they are) and rebuilds the materials. Trees, paths, decals, bridges
-    and everything placed by hand stay exactly as they are."""
+def update_surfaces(holes=HOLES):
+    """New island surfaces + materials, and nothing in the level moves: re-imports each hole's IslandTop and
+    floating island meshes (the actors pick them up where they are) and rebuilds the materials. Trees, paths,
+    decals, bridges and everything placed by hand stay exactly as they are. Run it in batches if memory is short:
+    update_surfaces(range(1, 7)), then range(7, 13), then range(13, 19)."""
     materials = build_materials()
     count = 0
-    for path in sorted(SOURCE.glob('SM_H??_IslandTop.fbx')) + sorted(SOURCE.glob('SM_H??_Floater*.fbx')):
-        if unreal.EditorAssetLibrary.does_asset_exist(f'{DEST}/{path.stem}'):
-            import_mesh(path.stem, materials)
-            count += 1
-    unreal.EditorAssetLibrary.save_directory(DEST)
-    print(f'SURFACES updated: {count} meshes re-imported, materials rebuilt. Nothing in the level was moved.')
+    for number in holes:
+        paths = [SOURCE / f'SM_H{number:02d}_IslandTop.fbx'] + sorted(SOURCE.glob(f'SM_H{number:02d}_Floater*.fbx'))
+        for path in paths:
+            if path.is_file() and unreal.EditorAssetLibrary.does_asset_exist(f'{DEST}/{path.stem}'):
+                import_mesh(path.stem, materials)
+                count += 1
+                unreal.SystemLibrary.collect_garbage()  # free each import before the next (large batches ran out of memory)
+        print(f'SURFACES hole {number} done')
+    print(f'SURFACES updated: {count} meshes re-imported (holes {list(holes)}), materials rebuilt. Nothing in the level was moved.')
 
 
 def update_materials():
