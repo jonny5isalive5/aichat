@@ -336,7 +336,9 @@ def bunker_relief(x, y, layout):
         inside = shapely.contains_xy(b, x[near], y[near])
         edge = shapely.distance(b.boundary, pts[near])
         wall = min(2.2, 0.35 * math.sqrt(b.area / math.pi) + 0.8)
-        dz[near] += np.where(inside, -depth * B.smooth(edge / wall), 0.18 * depth * (1 - B.smooth(edge / 1.8)))
+        # Grass lip: zero on the sand's edge, rising to a crest ~0.6 m out and easing back into the turf by 2.4 m.
+        lip = 0.2 * depth * np.sin(np.pi * np.clip(edge / 2.4, 0, 1)) ** 1.5
+        dz[near] += np.where(inside, -depth * B.smooth(edge / wall), lip)
     return dz
 
 
@@ -812,7 +814,8 @@ def build_hole(number, rng):
     cart, paths = hole_paths(number, layout)
     layout = dict(layout, paths=paths, cart=cart)
     if paths is not None and not SOFT_PATHS:
-        layout = dict(layout, extra_lines=[paths])
+        # Path border plus a second outline 0.3 m out: the dirt fades to grass across that thin, even band.
+        layout = dict(layout, extra_lines=[paths, paths.buffer(0.3, 8)])
     xy, tris, attrs = B.triangulate_top(layout)
     z = local_h(xy[:, 0], xy[:, 1])
     top_cols = B.top_colours(xy[:, 0], xy[:, 1], number)
