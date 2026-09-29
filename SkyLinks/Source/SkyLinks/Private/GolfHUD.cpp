@@ -19,13 +19,16 @@
 
 namespace Palette
 {
-	// Broadcast-style golf sim: dark glass panels, white type, a single green accent.
-	const FLinearColor Panel(0.f, 0.f, 0.f, 0.5f);
-	const FLinearColor PanelSolid(0.02f, 0.02f, 0.02f, 0.8f);
-	const FLinearColor Trim(1.f, 1.f, 1.f, 0.85f);
-	const FLinearColor Gold(0.95f, 0.9f, 0.75f, 1.f);
+	// Holographic sports-broadcast look: see-through blue glass panels with hairline frames and bright corner
+	// brackets, thin rings and arcs, white type with pale-cyan accents.
+	const FLinearColor Panel(0.32f, 0.6f, 0.95f, 0.16f);
+	const FLinearColor PanelSolid(0.12f, 0.32f, 0.6f, 0.34f);
+	const FLinearColor Trim(0.82f, 0.95f, 1.f, 0.9f);
+	const FLinearColor Gold(0.72f, 0.92f, 1.f, 1.f);
 	const FLinearColor White(1.f, 1.f, 1.f, 1.f);
-	const FLinearColor Dim(0.72f, 0.74f, 0.72f, 1.f);
+	const FLinearColor Dim(0.78f, 0.88f, 0.96f, 0.9f);
+	const FLinearColor Glow(0.55f, 0.88f, 1.f, 0.95f);
+	const FLinearColor Hairline(0.8f, 0.94f, 1.f, 0.45f);
 	const FLinearColor Red(0.9f, 0.22f, 0.18f, 1.f);
 	const FLinearColor Green(0.45f, 0.85f, 0.3f, 1.f);
 	// Landing rings and break arrows: red reads against every shade of grass.
@@ -40,6 +43,37 @@ void AGolfHUD::Box(const FVector2D& Position, const FVector2D& Size, const FLine
 	FCanvasTileItem Item(Position, Size, Color);
 	Item.BlendMode = SE_BLEND_Translucent;
 	Canvas->DrawItem(Item);
+
+	// Panels (not thin bars or meters) get the holographic frame: a hairline border, bright corner brackets and a
+	// faint highlight along the top edge.
+	if (Size.X > 4.f * U && Size.Y > 3.f * U && Color.A < 0.6f)
+	{
+		const FVector2D A = Position, B = Position + FVector2D(Size.X, 0.f), C = Position + Size, D = Position + FVector2D(0.f, Size.Y);
+		Line(A, B, Palette::Hairline, 0.12f * U);
+		Line(B, C, Palette::Hairline, 0.12f * U);
+		Line(C, D, Palette::Hairline, 0.12f * U);
+		Line(D, A, Palette::Hairline, 0.12f * U);
+		const float L = FMath::Min(2.2f * U, FMath::Min(Size.X, Size.Y) * 0.25f);
+		const float T = 0.3f * U;
+		Line(A, A + FVector2D(L, 0.f), Palette::Glow, T);  Line(A, A + FVector2D(0.f, L), Palette::Glow, T);
+		Line(B, B - FVector2D(L, 0.f), Palette::Glow, T);  Line(B, B + FVector2D(0.f, L), Palette::Glow, T);
+		Line(C, C - FVector2D(L, 0.f), Palette::Glow, T);  Line(C, C - FVector2D(0.f, L), Palette::Glow, T);
+		Line(D, D + FVector2D(L, 0.f), Palette::Glow, T);  Line(D, D - FVector2D(0.f, L), Palette::Glow, T);
+		FCanvasTileItem Sheen(Position + FVector2D(0.f, 0.15f * U), FVector2D(Size.X, FMath::Min(Size.Y * 0.35f, 3.f * U)), FLinearColor(0.8f, 0.95f, 1.f, 0.05f));
+		Sheen.BlendMode = SE_BLEND_Translucent;
+		Canvas->DrawItem(Sheen);
+	}
+}
+
+void AGolfHUD::Arc(const FVector2D& Center, float Radius, float StartDegrees, float SweepDegrees, const FLinearColor& Color, float Thickness)
+{
+	const int32 Segments = FMath::Max(4, FMath::RoundToInt(FMath::Abs(SweepDegrees) / 6.f));
+	for (int32 Index = 0; Index < Segments; ++Index)
+	{
+		const float A0 = FMath::DegreesToRadians(StartDegrees + SweepDegrees * Index / Segments);
+		const float A1 = FMath::DegreesToRadians(StartDegrees + SweepDegrees * (Index + 1) / Segments);
+		Line(Center + FVector2D(FMath::Cos(A0), FMath::Sin(A0)) * Radius, Center + FVector2D(FMath::Cos(A1), FMath::Sin(A1)) * Radius, Color, Thickness);
+	}
 }
 
 void AGolfHUD::Disc(const FVector2D& Center, float Radius, const FLinearColor& Color)
@@ -82,8 +116,18 @@ void AGolfHUD::Label(const FString& Text, const FVector2D& Position, float Heigh
 
 void AGolfHUD::RoundButton(EGolfHudButton Id, const FVector2D& Center, float Radius, const FString& Text, const FLinearColor& Fill, int32 Payload)
 {
-	Disc(Center, Radius, Fill);
-	Ring(Center, Radius, Palette::Trim, 0.5f * U);
+	// Glass disc in the button's own tint, a thin bright ring, a glowing accent arc outside it and four ticks.
+	FLinearColor Glass = Fill;
+	Glass.A = FMath::Min(Fill.A, 0.32f);
+	Disc(Center, Radius, Glass);
+	Ring(Center, Radius, Palette::Trim, 0.18f * U);
+	Arc(Center, Radius * 1.12f, -150.f, 110.f, Palette::Glow, 0.35f * U);
+	Arc(Center, Radius * 1.12f, 30.f, 50.f, Palette::Hairline, 0.2f * U);
+	for (int32 Tick = 0; Tick < 4; ++Tick)
+	{
+		const FVector2D Dir(FMath::Cos(Tick * PI * 0.5f), FMath::Sin(Tick * PI * 0.5f));
+		Line(Center + Dir * Radius * 0.86f, Center + Dir * Radius * 0.96f, Palette::Hairline, 0.18f * U);
+	}
 	Label(Text, Center, Radius * 0.45f / U * 1.f, Palette::White, true);
 	Buttons.Add({ Id, Center, Radius, Payload });
 }

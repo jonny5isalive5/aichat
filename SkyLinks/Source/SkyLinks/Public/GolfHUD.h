@@ -95,6 +95,8 @@ private:
 	void Box(const FVector2D& Position, const FVector2D& Size, const FLinearColor& Color);
 	void Disc(const FVector2D& Center, float Radius, const FLinearColor& Color);
 	void Ring(const FVector2D& Center, float Radius, const FLinearColor& Color, float Thickness);
+	/** Part of a ring: from StartDegrees (0 = right, clockwise on screen) sweeping SweepDegrees. */
+	void Arc(const FVector2D& Center, float Radius, float StartDegrees, float SweepDegrees, const FLinearColor& Color, float Thickness);
 	void Line(const FVector2D& A, const FVector2D& B, const FLinearColor& Color, float Thickness);
 	void Label(const FString& Text, const FVector2D& Position, float Height, const FLinearColor& Color, bool bCenter);
 	void RoundButton(EGolfHudButton Id, const FVector2D& Center, float Radius, const FString& Text, const FLinearColor& Fill, int32 Payload = 0);
