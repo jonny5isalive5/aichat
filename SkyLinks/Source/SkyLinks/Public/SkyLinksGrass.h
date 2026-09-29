@@ -33,14 +33,14 @@ public:
 
 	/** Grass is grown within this distance of the camera (cm). */
 	UPROPERTY(EditAnywhere, Category = "Grass")
-	float Radius = 3500.f;
+	float Radius = 6000.f;
 
 	UPROPERTY(EditAnywhere, Category = "Grass")
 	float CellSize = 800.f;
 
 	/** Line traces allowed per frame while filling cells. */
 	UPROPERTY(EditAnywhere, Category = "Grass")
-	int32 TraceBudget = 2500;
+	int32 TraceBudget = 4000;
 
 	UPROPERTY(EditAnywhere, Category = "Grass")
 	TSoftObjectPtr<UStaticMesh> ClumpMesh;
