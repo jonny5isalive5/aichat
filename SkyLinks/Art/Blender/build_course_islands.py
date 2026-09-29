@@ -804,6 +804,23 @@ def forest_plan(number, layout, height_local, rng):
 
 # ---------------------------------------------------------------- build one hole
 
+def surface_uvs(layout, xy):
+    """Per-vertex data for the surface materials.
+    UV1 'Hole': hole-local metres (x down the hole from the tee, y across) for mowing stripes.
+    UV2 'Edges': x = metres to the nearest bunker edge (sand lips, turf walls, lip tufts),
+                 y = metres to the nearest fairway / green / tee edge (green collars, first cut of rough)."""
+    pts = shapely.points(xy[:, 0], xy[:, 1])
+    bunkers = [b for b in layout['bunkers'] if not b.is_empty]
+    bunker_d = shapely.distance(unary_union([b.boundary for b in bunkers]), pts) if bunkers else np.full(len(xy), 10.0)
+    rings = []
+    for shape in (layout['fairways'], layout['green'], layout['tee']):
+        for poly in getattr(shape, 'geoms', [shape]):
+            if not poly.is_empty:
+                rings.append(poly.exterior)
+    edge_d = shapely.distance(unary_union(rings), pts)
+    return [('Hole', xy), ('Edges', np.column_stack([np.minimum(bunker_d, 10.0), np.minimum(edge_d, 10.0)]))]
+
+
 def build_hole(number, rng):
     layout = layout_for(number)
     local_h = height_fn(number, layout)
@@ -823,7 +840,7 @@ def build_hole(number, rng):
         on_path = shapely.contains_xy(paths.buffer(0.02), xy[:, 0], xy[:, 1])
         top_cols[:, 2] = on_path.astype(float)  # B: 1 on the path (its border vertices included)
     top = B.make_mesh(f'{name}_IslandTop', place(number, np.column_stack([xy, z])), tris, attrs,
-                      [B.REGION_MATERIAL[i] for i in range(5)], top_cols)
+                      [B.REGION_MATERIAL[i] for i in range(5)], top_cols, extra_uvs=surface_uvs(layout, xy))
 
     land = layout['land']
     uxy, utris = B.triangulate_underside(land, [0.8, 2.0, 4.0, 7.5, 13, 21, 32], 14)
@@ -864,7 +881,9 @@ def build_hole(number, rng):
         cols = np.concatenate([B.top_colours(vx[:, 0], vx[:, 1], number),
                                moss(B.rock_colours(rv[:, 2], rd, rt, ux[:, 0], ux[:, 1], 700 + i), rv[:, 2], rd, ux[:, 0], ux[:, 1], i)])
         floater_name = f'{name}_Floater{i + 1:02d}'
-        rock_obj = B.make_mesh(floater_name, verts, f_tris, f_mats, ['Rough', 'IslandRock'], cols)
+        far = np.full((len(verts), 2), 10.0)  # no bunkers or fairways on a floater: plain rough
+        rock_obj = B.make_mesh(floater_name, verts, f_tris, f_mats, ['Rough', 'IslandRock'], cols,
+                               extra_uvs=[('Hole', np.zeros((len(verts), 2))), ('Edges', far)])
         ivy = Parts()
         add_vines(ivy, poly, fn, number, rng, density=0.8)
         add_cliff_vines(ivy, rv, ut, rd, poly, number, rng, per_metre=0.5)

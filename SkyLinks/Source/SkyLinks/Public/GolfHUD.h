@@ -50,6 +50,7 @@ class SKYLINKS_API AGolfHUD : public AHUD
 
 public:
 	virtual void DrawHUD() override;
+	virtual void BeginPlay() override;
 
 	/** OutPayload carries the digit for keypad keys and the list index for friends. */
 	EGolfHudButton HitTest(const FVector2D& ScreenPosition, int32& OutPayload) const;

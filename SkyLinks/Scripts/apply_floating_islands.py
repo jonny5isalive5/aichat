@@ -13,6 +13,7 @@
     isl.refresh_islands()       after an island rebuild: new meshes in place, trees replanted; your floaters stay
     isl.reimport_tops([4])      re-import island surfaces only (after paths are baked); nothing else moves
     isl.update_materials()      rebuild the island materials only (grass paths: Mesh Paint, Blue channel)
+    isl.import_grass()          the 3D grass clumps + M_GrassBlades (grown around the camera in game)
     isl.raise_fog(20)           lift every cloud patch 20 m (or lower it with a negative number)
 
 Needs, from Scripts/import_trees.py, the stylised trees and their M_Tree_Bark / M_Tree_Leaves / M_Tree_Vines
@@ -40,14 +41,15 @@ MAP_PATH = '/Game/Maps/Course'
 M = 100.0
 HOLES = range(1, 19)
 
-# Slot name in the FBX -> (Unreal material, base colour (linear), roughness, colour variation, mowing stripes,
-# detail texture, physical material). Colour variation and stripes come from the vertex colours (R, G).
+# Slot name in the FBX -> (Unreal material, surface kind, roughness, physical material). Each kind is shaded by
+# SURFACE_CODE below: several shades of green in patches, crisp mowing stripes, green collars, a first cut of
+# rough round the fairways, and grainy raked sand with turf walls under the bunker lips.
 GRASS = {
-    'Rough':   ('M_Island_Rough',   (0.045, 0.12, 0.02),  0.95, 0.5,  0.0,  'T_GrassDetail', 'PM_Rough'),
-    'Fairway': ('M_Island_Fairway', (0.07, 0.2, 0.03),    0.9,  0.25, 0.14, 'T_GrassDetail', 'PM_Fairway'),
-    'Green':   ('M_Island_Green',   (0.08, 0.25, 0.035),  0.85, 0.12, 0.0,  'T_GrassDetail', 'PM_Green'),
-    'TeeBox':  ('M_Island_TeeBox',  (0.075, 0.21, 0.032), 0.9,  0.1,  0.0,  'T_GrassDetail', 'PM_Fairway'),
-    'Bunker':  ('M_Island_Bunker',  (0.29, 0.21, 0.12),   1.0,  0.2,  0.0,  'T_SandDetail',  'PM_Bunker'),  # darker, deeper sand
+    'Rough':   ('M_Island_Rough',   'rough',   0.95, 'PM_Rough'),
+    'Fairway': ('M_Island_Fairway', 'fairway', 0.88, 'PM_Fairway'),
+    'Green':   ('M_Island_Green',   'green',   0.8,  'PM_Green'),
+    'TeeBox':  ('M_Island_TeeBox',  'tee',     0.88, 'PM_Fairway'),
+    'Bunker':  ('M_Island_Bunker',  'bunker',  0.92, 'PM_Bunker'),
 }
 ROCK = ('M_Island_Rock', 'T_RockDetail', 'PM_Rough')
 PATH_COLOUR = (0.23, 0.16, 0.09)  # painted footpaths (vertex colour B) on the grass: packed earth
@@ -71,7 +73,19 @@ def _import(filename, destination, options=None):
     return unreal.load_asset(f'{destination}/{Path(filename).stem}')
 
 
+SURFACE_TEXTURES = {  # Art/Blender/surface_textures.py: name -> (compression, sRGB)
+    'T_Sand_Color': ('TC_DEFAULT', True), 'T_Sand_Normal': ('TC_MASKS', False),
+    'T_Turf': ('TC_GRAYSCALE', False), 'T_RoughTurf': ('TC_GRAYSCALE', False), 'T_Macro': ('TC_GRAYSCALE', False),
+}
+
+
 def import_textures():
+    for name, (compression, srgb) in SURFACE_TEXTURES.items():
+        texture = _import(TEXTURE_SOURCE / f'{name}.png', TEXTURE_DEST)
+        assert texture, f'{name}.png did not import (run Art/Blender/surface_textures.py)'
+        texture.set_editor_property('srgb', srgb)
+        texture.set_editor_property('compression_settings', getattr(unreal.TextureCompressionSettings, compression))
+        unreal.EditorAssetLibrary.save_loaded_asset(texture)
     for name in ('T_GrassDetail', 'T_SandDetail', 'T_RockDetail'):
         texture = _import(TEXTURE_SOURCE / f'{name}.png', TEXTURE_DEST)
         assert texture, f'{name}.png did not import'
@@ -120,33 +134,222 @@ def _finish(mat, physical):
     return mat
 
 
-def grass_material(name, colour, roughness, variation, stripes, detail, physical):
-    """colour * (R * variation + 1 - variation / 2) * (1 - G * stripes) * detail texture."""
+# HLSL for each surface kind: returns the base colour (linear). Inputs, all plain floats:
+#   M1 M2 M3  patchy large-scale noise at 37 m / 11 m / 4 m      D  mown-grass detail    R  long-grass detail
+#   VC  vertex colour (B = footpath)   H  hole-local metres (x down the hole)   E  metres to (x) bunker edge, (y) fairway/green edge
+#   SC  sand colour   L8  world metres within an 8 m tile   ZL  0..1 up every 12 cm of height   N  world normal   Tint, Stripes
+SURFACE_CODE = {
+    'rough': """
+float3 c = lerp(float3(0.028, 0.080, 0.012), float3(0.070, 0.110, 0.018), saturate(M1 * 2.2 - 0.6));
+c = lerp(c, float3(0.022, 0.072, 0.030), saturate(M2 * 2.0 - 0.9) * 0.7);
+c *= (0.78 + 0.44 * M3) * (0.55 + 0.6 * R);
+float cut = 1 - smoothstep(1.0, 2.2, E.y);
+c = lerp(c, float3(0.050, 0.140, 0.022) * (0.8 + 0.3 * D), cut * 0.75);
+c *= 1 - 0.3 * (1 - smoothstep(0.0, 0.7, E.x));
+c *= Tint.rgb;
+return lerp(c, float3(0.23, 0.16, 0.09) * (0.75 + 0.3 * D), VC.b);
+""",
+    'fairway': """
+float3 c = float3(0.058, 0.165, 0.026);
+c = lerp(c, float3(0.078, 0.172, 0.020), saturate(M1 * 2.2 - 0.6) * 0.6);
+c = lerp(c, float3(0.045, 0.150, 0.036), saturate(M2 * 2.0 - 0.9) * 0.5);
+c *= (0.88 + 0.24 * M3) * (0.72 + 0.36 * D);
+float s = smoothstep(0.4, 0.6, abs(frac(H.y / 10.0) - 0.5) * 2);
+c *= lerp(1 - Stripes, 1 + Stripes, s);
+c *= 1 - 0.08 * (1 - smoothstep(0.3, 0.9, E.y));
+c = lerp(c, float3(0.035, 0.095, 0.015) * (0.6 + 0.6 * R), (1 - smoothstep(0.0, 0.6, E.x)) * 0.7);
+c *= Tint.rgb;
+return lerp(c, float3(0.23, 0.16, 0.09) * (0.75 + 0.3 * D), VC.b);
+""",
+    'green': """
+float3 c = float3(0.070, 0.215, 0.034);
+c = lerp(c, float3(0.085, 0.215, 0.030), saturate(M2 * 2.0 - 0.8) * 0.4);
+c *= (0.93 + 0.14 * M3) * (0.86 + 0.18 * D);
+float a = smoothstep(0.4, 0.6, abs(frac((H.x + H.y) / 6.0) - 0.5) * 2);
+float b = smoothstep(0.4, 0.6, abs(frac((H.x - H.y) / 6.0) - 0.5) * 2);
+c *= 1 + Stripes * 0.6 * ((a - 0.5) + (b - 0.5));
+float collar = 1 - smoothstep(0.7, 1.0, E.y);
+float3 fringe = float3(0.055, 0.170, 0.028) * (0.8 + 0.3 * D);
+c = lerp(c, fringe * lerp(1 - Stripes, 1 + Stripes, a), collar);
+c = lerp(c, float3(0.035, 0.095, 0.015) * (0.6 + 0.6 * R), (1 - smoothstep(0.0, 0.5, E.x)) * 0.6);
+return c * Tint.rgb;
+""",
+    'tee': """
+float3 c = float3(0.062, 0.180, 0.028);
+c *= (0.9 + 0.2 * M3) * (0.8 + 0.3 * D);
+float s = smoothstep(0.4, 0.6, abs(frac(H.x / 4.0) - 0.5) * 2);
+c *= lerp(1 - Stripes, 1 + Stripes, s);
+c *= Tint.rgb;
+return lerp(c, float3(0.23, 0.16, 0.09) * (0.75 + 0.3 * D), VC.b);
+""",
+    'bunker': """
+float3 c = SC * (0.9 + 0.2 * M3);
+float2 dir = float2(0.8, 0.6);
+float wob = (M3 - 0.5) * 1.2;
+float rake = sin((dot(L8, dir) + wob) * 39.27);
+c *= 1 + 0.07 * rake * saturate(M2 * 3.0 - 1.2);
+float slope = 1 - saturate(N.z);
+float lip = 1 - smoothstep(0.0, 0.6, E.x);
+c *= 1 - 0.2 * lip;
+float wall = saturate((slope - 0.25) * 3.0) * (1 - smoothstep(0.0, 0.5, E.x));
+float3 sod = lerp(float3(0.06, 0.045, 0.028), float3(0.10, 0.08, 0.045), step(0.5, ZL));
+c = lerp(c, sod, wall * 0.85);
+c = lerp(c, float3(0.045, 0.11, 0.02), (1 - smoothstep(0.0, 0.12, E.x)) * 0.7);
+return c * Tint.rgb;
+""",
+}
+SAND_NORMAL_CODE = """
+float3 n = SN * 2 - 1;
+float2 dir = float2(0.8, 0.6);
+float wob = (M3 - 0.5) * 1.2;
+float ridge = cos((dot(L8, dir) + wob) * 39.27) * saturate(M2 * 3.0 - 1.2) * 0.25;
+return normalize(N + float3(n.x * 0.6 + dir.x * ridge, n.y * 0.6 + dir.y * ridge, 0));
+"""
+SURFACE_TINT = {'rough': (1, 1, 1), 'fairway': (1, 1, 1), 'green': (1, 1, 1), 'tee': (1, 1, 1),
+                'bunker': (0.95, 0.92, 0.86)}  # sand: a touch warmer / darker than the raw texture
+
+
+def _tex(mat, name, uv, x, y, sampler=unreal.MaterialSamplerType.SAMPLERTYPE_LINEAR_GRAYSCALE):
+    node = _expr(mat, unreal.MaterialExpressionTextureSample, x, y, texture=unreal.load_asset(f'{TEXTURE_DEST}/{name}'),
+                 sampler_type=sampler)
+    lib.connect_material_expressions(uv, '', node, 'UVs')
+    return node
+
+
+def _world_uv(mat, metres, x, y, offset=0.0):
+    """World XY / (metres per tile), for textures laid over every island alike."""
+    position = _expr(mat, unreal.MaterialExpressionWorldPosition, x - 450, y)
+    mask = _expr(mat, unreal.MaterialExpressionComponentMask, x - 300, y, r=True, g=True, b=False, a=False)
+    lib.connect_material_expressions(position, '', mask, '')
+    scaled = _mul(mat, mask, '', _const(mat, 1.0 / (100.0 * metres), x - 300, y + 60), '', x - 150, y)
+    return _add(mat, scaled, _const(mat, offset, x - 150, y + 60), x, y) if offset else scaled
+
+
+def _custom(mat, code, inputs, x, y, output=unreal.CustomMaterialOutputType.CMOT_FLOAT3):
+    node = _expr(mat, unreal.MaterialExpressionCustom, x, y)
+    node.set_editor_property('code', code)
+    node.set_editor_property('output_type', output)
+    pins = []
+    for name in inputs:
+        pin = unreal.CustomInput()
+        pin.set_editor_property('input_name', name)
+        pins.append(pin)
+    node.set_editor_property('inputs', pins)
+    for name, (source, out) in inputs.items():
+        lib.connect_material_expressions(source, out, node, name)
+    return node
+
+
+def _surface_inputs(mat, kind):
+    """The plain-float feeds every surface kind reads (see SURFACE_CODE)."""
+    gray = unreal.MaterialSamplerType.SAMPLERTYPE_LINEAR_GRAYSCALE
+    feeds = {
+        'M1': (_tex(mat, 'T_Macro', _world_uv(mat, 37, -1600, -600), -1350, -600), 'R'),
+        'M2': (_tex(mat, 'T_Macro', _world_uv(mat, 11, -1600, -400, 0.37), -1350, -400), 'R'),
+        'M3': (_tex(mat, 'T_Macro', _world_uv(mat, 4.3, -1600, -200, 0.71), -1350, -200), 'R'),
+        'D': (_tex(mat, 'T_Turf', _world_uv(mat, 1.1, -1600, 0), -1350, 0, gray), 'R'),
+        'R': (_tex(mat, 'T_RoughTurf', _world_uv(mat, 0.8, -1600, 200), -1350, 200, gray), 'R'),
+        'VC': (_expr(mat, unreal.MaterialExpressionVertexColor, -1350, 400), ''),
+        'H': (_expr(mat, unreal.MaterialExpressionTextureCoordinate, -1350, 550, coordinate_index=1), ''),
+        'E': (_expr(mat, unreal.MaterialExpressionTextureCoordinate, -1350, 650, coordinate_index=2), ''),
+        'N': (_expr(mat, unreal.MaterialExpressionVertexNormalWS, -1350, 750), ''),
+        'Tint': (_expr(mat, unreal.MaterialExpressionVectorParameter, -1350, 850, parameter_name='Tint',
+                       default_value=unreal.LinearColor(*SURFACE_TINT[kind], 1.0)), ''),
+        'Stripes': (_expr(mat, unreal.MaterialExpressionScalarParameter, -1350, 1000, parameter_name='StripeStrength',
+                          default_value=0.12 if kind in ('fairway', 'tee') else 0.08), ''),
+    }
+    if kind == 'bunker':
+        feeds['SC'] = (_tex(mat, 'T_Sand_Color', _world_uv(mat, 0.9, -1600, 1150), -1350, 1150,
+                            unreal.MaterialSamplerType.SAMPLERTYPE_COLOR), 'RGB')
+        feeds['SN'] = (_tex(mat, 'T_Sand_Normal', _world_uv(mat, 0.9, -1600, 1350), -1350, 1350,
+                            unreal.MaterialSamplerType.SAMPLERTYPE_MASKS), 'RGB')
+        local = _expr(mat, unreal.MaterialExpressionFrac, -1450, 1550)
+        lib.connect_material_expressions(_world_uv(mat, 8, -1600, 1550), '', local, '')
+        feeds['L8'] = (_mul(mat, local, '', _const(mat, 8.0, -1450, 1610), '', -1350, 1550), '')
+        position = _expr(mat, unreal.MaterialExpressionWorldPosition, -1900, 1750)
+        height = _expr(mat, unreal.MaterialExpressionComponentMask, -1750, 1750, r=False, g=False, b=True, a=False)
+        lib.connect_material_expressions(position, '', height, '')
+        layers = _expr(mat, unreal.MaterialExpressionFrac, -1450, 1750)
+        lib.connect_material_expressions(_mul(mat, height, '', _const(mat, 1.0 / 12.0, -1750, 1810), '', -1600, 1750), '', layers, '')
+        feeds['ZL'] = (layers, '')
+    return feeds
+
+
+def surface_material(name, kind, roughness, physical):
+    """Island surface: base colour from SURFACE_CODE[kind]; sand also gets a world-space normal (grains, rake lines)."""
     mat = _material(name)
-    vc = _expr(mat, unreal.MaterialExpressionVertexColor, -1200, 0)
-    shade = _add(mat, _mul(mat, vc, 'R', _const(mat, variation, -1200, 200), '', -1000, 100),
-                 _const(mat, 1 - variation * 0.5, -1000, 250), -800, 150)
-    stripe = _add(mat, _mul(mat, vc, 'G', _const(mat, -stripes, -1200, 400), '', -1000, 350),
-                  _const(mat, 1.0, -1000, 450), -800, 400)
-    base = _expr(mat, unreal.MaterialExpressionConstant3Vector, -800, -150,
-                 constant=unreal.LinearColor(colour[0], colour[1], colour[2], 1.0))
-    texture = _expr(mat, unreal.MaterialExpressionTextureSample, -800, 600,
-                    texture=unreal.load_asset(f'{TEXTURE_DEST}/{detail}'),
-                    sampler_type=unreal.MaterialSamplerType.SAMPLERTYPE_LINEAR_GRAYSCALE)
-    grass = _mul(mat, _mul(mat, base, '', shade, '', -600, 0), '', _mul(mat, stripe, '', texture, 'R', -600, 400), '', -400, 200)
-    # Vertex colour B = footpath: paint it in Mesh Paint mode (Blue channel only) to lay dirt paths through the grass.
-    dirt = _expr(mat, unreal.MaterialExpressionConstant3Vector, -800, 800, constant=unreal.LinearColor(*PATH_COLOUR, 1.0))
-    grit = _expr(mat, unreal.MaterialExpressionTextureSample, -800, 950,
-                 texture=unreal.load_asset(f'{TEXTURE_DEST}/T_SandDetail'),
-                 sampler_type=unreal.MaterialSamplerType.SAMPLERTYPE_LINEAR_GRAYSCALE)
-    path = _mul(mat, dirt, '', grit, 'R', -600, 850)
-    result = _expr(mat, unreal.MaterialExpressionLinearInterpolate, -250, 400)
-    lib.connect_material_expressions(grass, '', result, 'A')
-    lib.connect_material_expressions(path, '', result, 'B')
-    lib.connect_material_expressions(vc, 'B', result, 'Alpha')
-    lib.connect_material_property(result, '', unreal.MaterialProperty.MP_BASE_COLOR)
+    feeds = _surface_inputs(mat, kind)
+    used = {k: v for k, v in feeds.items() if k in SURFACE_CODE[kind] or k in ('VC',)}
+    colour = _custom(mat, SURFACE_CODE[kind], used, -700, 0)
+    lib.connect_material_property(colour, '', unreal.MaterialProperty.MP_BASE_COLOR)
     lib.connect_material_property(_const(mat, roughness, -400, 400), '', unreal.MaterialProperty.MP_ROUGHNESS)
+    if kind == 'bunker':
+        mat.set_editor_property('tangent_space_normal', False)
+        normal = _custom(mat, SAND_NORMAL_CODE, {k: feeds[k] for k in ('SN', 'N', 'L8', 'M2', 'M3')}, -700, 400)
+        lib.connect_material_property(normal, '', unreal.MaterialProperty.MP_NORMAL)
     return _finish(mat, physical)
+
+
+GRASS_BLADES_CODE = """
+float3 c = lerp(float3(0.034, 0.092, 0.014), float3(0.080, 0.120, 0.020), saturate(M1 * 2.2 - 0.6));
+c = lerp(c, float3(0.025, 0.080, 0.035), saturate(M2 * 2.0 - 0.9) * 0.7);
+c *= 0.75 + 0.5 * VC.g;
+c = lerp(c, c * float3(1.3, 1.12, 0.75), PIR * 0.55);
+c *= lerp(0.4, 1.2, VC.r);
+return c * Tint.rgb;
+"""
+
+
+def grass_blades_material():
+    """M_GrassBlades: two-sided, dark at the root, lighter toward the tip, every clump its own shade, and the same
+    patchy large-scale colour as the rough under it."""
+    mat = _material('M_GrassBlades')
+    mat.set_editor_property('two_sided', True)
+    feeds = {
+        'M1': (_tex(mat, 'T_Macro', _world_uv(mat, 37, -1600, -600), -1350, -600), 'R'),
+        'M2': (_tex(mat, 'T_Macro', _world_uv(mat, 11, -1600, -400, 0.37), -1350, -400), 'R'),
+        'VC': (_expr(mat, unreal.MaterialExpressionVertexColor, -1350, -200), ''),
+        'PIR': (_expr(mat, unreal.MaterialExpressionPerInstanceRandom, -1350, 0), ''),
+        'Tint': (_expr(mat, unreal.MaterialExpressionVectorParameter, -1350, 200, parameter_name='Tint',
+                       default_value=unreal.LinearColor(1, 1, 1, 1)), ''),
+    }
+    colour = _custom(mat, GRASS_BLADES_CODE, feeds, -700, 0)
+    lib.connect_material_property(colour, '', unreal.MaterialProperty.MP_BASE_COLOR)
+    lib.connect_material_property(_const(mat, 0.85, -400, 300), '', unreal.MaterialProperty.MP_ROUGHNESS)
+    lib.recompile_material(mat)
+    unreal.EditorAssetLibrary.save_loaded_asset(mat)
+    return mat
+
+
+GRASS_SOURCE = ROOT / 'Art' / 'Exports' / 'Grass'
+GRASS_DEST = '/Game/Course/Grass'
+
+
+def import_grass():
+    """The 3D grass clumps (Art/Blender/build_grass.py) and their material. ASkyLinksGrass grows them in game."""
+    import_textures()
+    mat = grass_blades_material()
+    for name in ('SM_GrassClump', 'SM_GrassTuft'):
+        options = unreal.FbxImportUI()
+        options.set_editor_property('import_mesh', True)
+        options.set_editor_property('import_as_skeletal', False)
+        options.set_editor_property('mesh_type_to_import', unreal.FBXImportType.FBXIT_STATIC_MESH)
+        options.set_editor_property('import_materials', False)
+        options.set_editor_property('import_textures', False)
+        data = options.static_mesh_import_data
+        data.set_editor_property('combine_meshes', True)
+        data.set_editor_property('auto_generate_collision', False)
+        data.set_editor_property('generate_lightmap_u_vs', False)
+        data.set_editor_property('vertex_color_import_option', unreal.VertexColorImportOption.REPLACE)
+        data.set_editor_property('normal_import_method', unreal.FBXNormalImportMethod.FBXNIM_IMPORT_NORMALS)
+        mesh = _import(GRASS_SOURCE / f'{name}.fbx', GRASS_DEST, options)
+        assert isinstance(mesh, unreal.StaticMesh), f'{name}.fbx did not import'
+        mesh.set_material(0, mat)
+        body = mesh.get_editor_property('body_setup')
+        if body:
+            body.set_editor_property('collision_trace_flag', unreal.CollisionTraceFlag.CTF_USE_SIMPLE_AS_COMPLEX)
+        unreal.EditorAssetLibrary.save_loaded_asset(mesh)
+    print(f'GRASS ready in {GRASS_DEST}: press Play to see it grow on the rough and along the bunker lips')
 
 
 def rock_material(name, detail, physical):
@@ -179,7 +382,7 @@ def plain_material(name, colour, roughness, physical=None, specular=None):
 
 def build_materials():
     import_textures()
-    materials = {slot: grass_material(*spec) for slot, spec in GRASS.items()}
+    materials = {slot: surface_material(*spec) for slot, spec in GRASS.items()}
     materials['IslandRock'] = rock_material(*ROCK)
     materials['Water'] = plain_material('M_Island_Water', (0.015, 0.06, 0.08), 0.06, 'PM_Water', specular=0.8)
     plain_material(SEA, (0.01, 0.05, 0.1), 0.15)
@@ -209,6 +412,12 @@ def import_mesh(name, materials, collide=True):
         key = next((k for k in materials if slot_name == k or slot_name.startswith(k + '_') or slot_name.startswith(k + '.')), None)
         assert key, f'{name}: unexpected material slot {slot_name}'
         mesh.set_material(index, materials[key])
+    if name.endswith('_IslandTop') or '_Floater' in name:
+        # UV1 holds hole-local metres (hundreds): half-float UVs would make the mowing stripes jagged.
+        meshes = unreal.get_editor_subsystem(unreal.StaticMeshEditorSubsystem)
+        build = meshes.get_lod_build_settings(mesh, 0)
+        build.set_editor_property('use_full_precision_u_vs', True)
+        meshes.set_lod_build_settings(mesh, 0, build)
     if collide:
         # The ball and the buggy need the real surface (and its per-face physical material), not boxes.
         body = mesh.get_editor_property('body_setup')

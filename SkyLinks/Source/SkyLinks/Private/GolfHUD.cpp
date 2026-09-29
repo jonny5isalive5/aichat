@@ -8,6 +8,8 @@
 #include "GolfPlayerState.h"
 #include "GolfSessionSubsystem.h"
 #include "GolfVoiceSubsystem.h"
+#include "SkyLinksGrass.h"
+#include "EngineUtils.h"
 #include "Engine/GameInstance.h"
 #include "CanvasItem.h"
 #include "Engine/Canvas.h"
@@ -183,6 +185,18 @@ EGolfHudButton AGolfHUD::HitTest(const FVector2D& ScreenPosition, int32& OutPayl
 }
 
 // ---------------------------------------------------------------- frame
+
+void AGolfHUD::BeginPlay()
+{
+	Super::BeginPlay();
+	// 3D grass is purely visual and grows around this machine's camera, so every player gets their own.
+	if (!TActorIterator<ASkyLinksGrass>(GetWorld()))
+	{
+		FActorSpawnParameters Params;
+		Params.Owner = this;
+		GetWorld()->SpawnActor<ASkyLinksGrass>(ASkyLinksGrass::StaticClass(), FTransform::Identity, Params);
+	}
+}
 
 void AGolfHUD::DrawHUD()
 {
