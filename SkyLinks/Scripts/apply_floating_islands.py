@@ -950,6 +950,23 @@ def lift_floaters(clearance=45.0):
     print(f'FLOATERS: {lifted} lifted to at least {clearance:.0f} m above the course')
 
 
+def finish_course():
+    """Everything after an island rebuild, in one go: new materials, every island refreshed (each saved as it is
+    done, so after a crash just run this again and it carries on), floating islands lifted clear, bridges in,
+    course checked and saved."""
+    update_materials()
+    for _ in range(len(HOLES) + 2):
+        pending = [n for n in HOLES if (lambda g: g and _surface_tag(n) not in [str(t) for t in g.tags])(
+            next((a for a in _all() if a.get_actor_label() == f'GolfHole{n:02d}'), None))]
+        refresh_remaining(per_run=2)
+        if not pending:
+            break
+    lift_floaters()
+    validate_course()
+    unreal.get_editor_subsystem(unreal.LevelEditorSubsystem).save_current_level()
+    print('COURSE FINISHED: all islands refreshed, floaters lifted, course checked and saved.')
+
+
 def update_materials():
     """Rebuild the island materials only (nothing in the level moves), e.g. after a material change."""
     build_materials()
