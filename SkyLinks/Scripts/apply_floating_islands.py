@@ -152,7 +152,7 @@ float cut = 1 - smoothstep(1.0, 2.2, E.y);
 c = lerp(c, float3(0.050, 0.140, 0.022) * (0.8 + 0.3 * D), cut * 0.75);
 c *= 1 - 0.3 * (1 - smoothstep(0.0, 0.7, E.x));
 c *= Tint.rgb;
-return lerp(c, float3(0.23, 0.16, 0.09) * (0.75 + 0.3 * D), smoothstep(0.4, 0.6, VC.b + (D - 0.8) * 0.9));
+return lerp(c, float3(0.23, 0.16, 0.09) * (0.75 + 0.3 * D), smoothstep(0.1, -0.06, P.x + (D - 0.8) * 0.25));
 """,
     'fairway': """
 float3 c = float3(0.058, 0.165, 0.026);
@@ -164,7 +164,7 @@ c *= lerp(1 - Stripes, 1 + Stripes, s);
 c *= 1 - 0.08 * (1 - smoothstep(0.3, 0.9, E.y));
 c = lerp(c, float3(0.035, 0.095, 0.015) * (0.6 + 0.6 * R), (1 - smoothstep(0.0, 0.6, E.x)) * 0.7);
 c *= Tint.rgb;
-return lerp(c, float3(0.23, 0.16, 0.09) * (0.75 + 0.3 * D), smoothstep(0.4, 0.6, VC.b + (D - 0.8) * 0.9));
+return lerp(c, float3(0.23, 0.16, 0.09) * (0.75 + 0.3 * D), smoothstep(0.1, -0.06, P.x + (D - 0.8) * 0.25));
 """,
     'green': """
 float3 c = float3(0.070, 0.215, 0.034);
@@ -185,7 +185,7 @@ c *= (0.9 + 0.2 * M3) * (0.8 + 0.3 * D);
 float s = smoothstep(0.4, 0.6, abs(frac(H.x / 4.0) - 0.5) * 2);
 c *= lerp(1 - Stripes, 1 + Stripes, s);
 c *= Tint.rgb;
-return lerp(c, float3(0.23, 0.16, 0.09) * (0.75 + 0.3 * D), smoothstep(0.4, 0.6, VC.b + (D - 0.8) * 0.9));
+return lerp(c, float3(0.23, 0.16, 0.09) * (0.75 + 0.3 * D), smoothstep(0.1, -0.06, P.x + (D - 0.8) * 0.25));
 """,
     'bunker': """
 float3 c = SC * (0.9 + 0.2 * M3);
@@ -257,6 +257,7 @@ def _surface_inputs(mat, kind):
         'VC': (_expr(mat, unreal.MaterialExpressionVertexColor, -1350, 400), ''),
         'H': (_expr(mat, unreal.MaterialExpressionTextureCoordinate, -1350, 550, coordinate_index=1), ''),
         'E': (_expr(mat, unreal.MaterialExpressionTextureCoordinate, -1350, 650, coordinate_index=2), ''),
+        'P': (_expr(mat, unreal.MaterialExpressionTextureCoordinate, -1350, 700, coordinate_index=3), ''),
         'N': (_expr(mat, unreal.MaterialExpressionVertexNormalWS, -1350, 750), ''),
         'Tint': (_expr(mat, unreal.MaterialExpressionVectorParameter, -1350, 850, parameter_name='Tint',
                        default_value=unreal.LinearColor(*SURFACE_TINT[kind], 1.0)), ''),

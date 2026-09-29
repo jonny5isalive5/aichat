@@ -326,12 +326,22 @@ def hole_paths(number, layout):
     return cart, paths
 
 
-def bunker_relief(x, y, layout):
-    """Height change from the bunkers: a sand floor sunk by each bunker's depth behind a short steep face, and a
-    small grassy lip round the rim, so they read as real hollows."""
-    dz = np.zeros(len(x))
-    pts = shapely.points(x, y)
+def bunker_floors(layout, ground):
+    """Each bunker's floor is dug into the slope rather than draped over it; this is the mean height of its rim."""
+    floors = []
     for b, depth in zip(layout['bunkers'], layout.get('bunker_depths', [])):
+        ring = b.exterior
+        rim = np.array([ring.interpolate(i / 64, normalized=True).coords[0] for i in range(64)])
+        floors.append(float(np.mean(ground(rim[:, 0], rim[:, 1]))))
+    return floors
+
+
+def bunker_relief(x, y, h, layout, floors):
+    """The bunkers cut into the ground h: inside, a steep face dropping to the level sand floor (tall on the uphill
+    side, short on the downhill side); outside, a small grassy lip round the rim, so they read as real hollows."""
+    h = h.copy()
+    pts = shapely.points(x, y)
+    for b, depth, floor in zip(layout['bunkers'], layout.get('bunker_depths', []), floors):
         minx, miny, maxx, maxy = b.bounds
         near = (x > minx - 3) & (x < maxx + 3) & (y > miny - 3) & (y < maxy + 3)
         if not near.any():
@@ -341,8 +351,12 @@ def bunker_relief(x, y, layout):
         wall = min(2.2, 0.35 * math.sqrt(b.area / math.pi) + 0.8)
         # Grass lip: zero on the sand's edge, rising to a crest ~0.6 m out and easing back into the turf by 2.4 m.
         lip = 0.2 * depth * np.sin(np.pi * np.clip(edge / 2.4, 0, 1)) ** 1.5
-        dz[near] += np.where(inside, -depth * B.smooth(edge / wall), lip)
-    return dz
+        w = B.smooth(edge / wall)
+        # Nearly level sand (a third of the slope left in it), always at least 40% of the depth below the grass:
+        # a clear cut face on the uphill side, a low lip on the downhill side.
+        sand = np.minimum(0.35 * h[near] + 0.65 * floor - depth, h[near] - 0.4 * depth)
+        h[near] = np.where(inside, h[near] * (1 - w) + sand * w, h[near] + lip)
+    return h
 
 
 # Each hole's big shape, in turn round the course so neighbours differ: how the ground falls from tee to green.
@@ -386,6 +400,7 @@ def landform(number, layout):
     wall_left, wall_right = BANKS * spec.get('wall_left', 3.0), BANKS * spec.get('wall_right', 3.0)
     green_lift = spec.get('green', 0.0)
     fair, green, tee = layout['fairways'], layout['green'], layout['tee']
+    land_edge = layout['land'].exterior
     water = layout.get('water')
 
     def shape(x, y):
@@ -394,21 +409,25 @@ def landform(number, layout):
         pts = shapely.points(x, y)
         h = profile(t) + camber * np.clip(lat, -35, 35)
         fd = shapely.distance(fair, pts)
-        h = h + np.where(lat > 0, wall_right, wall_left) * B.smooth((fd - 2) / 16)
+        # Banks and humps ease off toward the cliff edge, so the rim stays gentle where it meets the rock.
+        rim = B.smooth(shapely.distance(land_edge, pts) / 14)
+        h = h + np.where(lat > 0, wall_right, wall_left) * B.smooth((fd - 2) / 16) * rim
         # Rolling ground: broad swales and humps down the fairway too, not just in the rough.
-        h = h + 1.4 * B.fbm(x / 45, y / 45, 3, number + 300)
+        h = h + 1.4 * B.fbm(x / 45, y / 45, 3, number + 300) * rim
         return h, pts
 
     water_level = 0.0
     if water is not None:
         wx, wy = np.asarray(water.exterior.coords).T if water.geom_type == 'Polygon' else \
             np.concatenate([np.asarray(g.exterior.coords) for g in water.geoms]).T
-        water_level = min(float(np.mean(shape(wx, wy)[0])), -0.3)
+        water_level = float(np.mean(shape(wx, wy)[0]))
+        if water.distance(tee) < 40:
+            water_level = min(water_level, -0.4)  # water just off the tee lies below it
     layout['water_offset'] = water_level
     clat = -cx * uy + cy * ux
     green_level = float(profile(1.0) + camber * np.clip(clat, -35, 35) + green_lift)
-    if water is not None:
-        green_level = max(green_level, water_level + 0.8)
+    if water is not None and water.distance(green) < 30:
+        green_level = max(green_level, water_level + 0.8)  # a green beside water stands above it
 
     def fn(x, y):
         x, y = np.asarray(x, float), np.asarray(y, float)
@@ -426,15 +445,50 @@ def landform(number, layout):
     return fn
 
 
+def path_bed(local_h, cart):
+    """Set the buggy path into the ground: level across its width (cut into slopes like a terrace) and sunk a
+    little below the grass, with soft shoulders either side."""
+    if cart is None:
+        return local_h
+    half = CART_WIDTH / 2
+
+    def fn(x, y):
+        x, y = np.asarray(x, float), np.asarray(y, float)
+        h = local_h(x, y)
+        pts = shapely.points(x, y)
+        d = shapely.distance(cart, pts)
+        near = d < half + 2.5
+        if not near.any():
+            return h
+        along = shapely.line_locate_point(cart, pts[near])
+        centre = shapely.get_coordinates(shapely.line_interpolate_point(cart, along))
+        level = local_h(centre[:, 0], centre[:, 1]) - 0.12
+        w = 1 - B.smooth((d[near] - half) / 2.5)
+        h = h.copy()
+        h[near] = h[near] * (1 - w) + level * w
+        return h
+    return fn
+
+
 def height_fn(number, layout):
     """Local surface height (m, relative to the tee) as a function of local x, y."""
     plain = dict(layout, bunkers=[])  # the old shallow round dips are replaced by bunker_relief
     land_shape = landform(number, layout)
     level = layout['water_offset']
 
+    def ground(x, y):
+        x, y = np.asarray(x, float), np.asarray(y, float)
+        return B.top_height(x, y, plain, number) + land_shape(x, y)
+    floors = bunker_floors(layout, ground)
+    cx, cy = layout['cup']
+    cup_level = float(ground(np.array([cx]), np.array([cy]))[0])
+
     def base(x, y):
         x, y = np.asarray(x, float), np.asarray(y, float)
-        return B.top_height(x, y, plain, number) + land_shape(x, y) + bunker_relief(x, y, layout)
+        h = bunker_relief(x, y, ground(x, y), layout, floors)
+        # A level patch round the hole so the cup sits flush on a sloping green.
+        w = 1 - B.smooth((np.hypot(x - cx, y - cy) - 0.6) / 1.6)
+        return h * (1 - w) + cup_level * w
     water = layout.get('water')
     if water is None:
         return base
@@ -904,7 +958,15 @@ def surface_uvs(layout, xy):
             if not poly.is_empty:
                 rings.append(poly.exterior)
     edge_d = shapely.distance(unary_union(rings), pts)
-    return [('Hole', xy), ('Edges', np.column_stack([np.minimum(bunker_d, 10.0), np.minimum(edge_d, 10.0)]))]
+    # UV3 'Path': signed metres to the buggy path's edge (negative on it). The path outline is in the mesh, so the
+    # zero line of this runs exactly along it: the material draws a clean edge there whatever the triangles do.
+    paths = layout.get('paths')
+    if paths is not None and not paths.is_empty:
+        sd = shapely.distance(paths.boundary, pts) * np.where(shapely.contains_xy(paths, xy[:, 0], xy[:, 1]), -1.0, 1.0)
+    else:
+        sd = np.full(len(xy), 10.0)
+    return [('Hole', xy), ('Edges', np.column_stack([np.minimum(bunker_d, 10.0), np.minimum(edge_d, 10.0)])),
+            ('Path', np.column_stack([np.clip(sd, -10.0, 10.0), np.zeros(len(xy))]))]
 
 
 def build_hole(number, rng):
@@ -919,6 +981,7 @@ def build_hole(number, rng):
     if paths is not None and not SOFT_PATHS:
         # Path border plus a second outline 0.3 m out: the dirt fades to grass across that thin, even band.
         layout = dict(layout, extra_lines=[paths, paths.buffer(0.3, 8)])
+    local_h = path_bed(local_h, cart)
     xy, tris, attrs = B.triangulate_top(layout)
     z = local_h(xy[:, 0], xy[:, 1])
     top_cols = B.top_colours(xy[:, 0], xy[:, 1], number)
@@ -969,7 +1032,7 @@ def build_hole(number, rng):
         floater_name = f'{name}_Floater{i + 1:02d}'
         far = np.full((len(verts), 2), 10.0)  # no bunkers or fairways on a floater: plain rough
         rock_obj = B.make_mesh(floater_name, verts, f_tris, f_mats, ['Rough', 'IslandRock'], cols,
-                               extra_uvs=[('Hole', np.zeros((len(verts), 2))), ('Edges', far)])
+                               extra_uvs=[('Hole', np.zeros((len(verts), 2))), ('Edges', far), ('Path', far)])
         ivy = Parts()
         add_vines(ivy, poly, fn, number, rng, density=0.8)
         add_cliff_vines(ivy, rv, ut, rd, poly, number, rng, per_metre=0.5)
