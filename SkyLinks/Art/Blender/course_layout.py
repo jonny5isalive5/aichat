@@ -119,13 +119,13 @@ HOLES = {
             ponds=[ellipse(90, -8, 38, 50)], streams=[], footbridges=[],
             landform=dict(kind='plunge', drop=8.0, camber=0.0, wall_left=3.0, wall_right=3.0, green=0.5),
             mix={'Pine': 5, 'Oak_B': 2, 'Birch': 1, 'Bush_Round': 2}),
-    # The water now runs right along the fairway's right edge and the fairway tips toward it.
+    # A pond sits in the middle of the landing zone: lay up short, squeeze past either side, or carry it.
     9: dict(name='Long Water', par=4, aim=(240, -5),
             fairways=[path([(25, 0), (160, -2), (305, -12)], 32)],
             green=((336, -20), 16), bunkers=[(215, -18, 6), (250, -22, 5), (318, -39, 5), (353, -3, 5), (349, -37, 4)],
             woods=[ellipse(160, -52, 120, 12)],
-            ponds=[ellipse(190, 33, 112, 16, -4)], streams=[], footbridges=[],
-            landform=dict(kind='downhill', drop=6.0, camber=-0.05, wall_left=5.0, wall_right=1.0, green=0.6),
+            ponds=[ellipse(172, -3, 26, 10, -4)], streams=[], footbridges=[],
+            landform=dict(kind='downhill', drop=6.0, camber=-0.04, wall_left=5.0, wall_right=3.0, green=0.6),
             mix={'Oak_A': 3, 'Oak_B': 2, 'Poplar': 2, 'Bush_Flowering': 3, 'Bush_Round': 2}),
     10: dict(name='Over the Top', par=3, aim=(160, -10),
              fairways=[path([(120, -18), (135, -15)], 16)],
@@ -181,13 +181,13 @@ HOLES = {
              ponds=[ellipse(204, 2, 30, 14, 25)], streams=[], footbridges=[],
              landform=dict(kind='downhill', drop=6.0, camber=0.05, wall_left=1.5, wall_right=4.0, green=0.8),
              mix={'Pine': 3, 'Oak_A': 2, 'Bush_Round': 3}),
-    # Tee perched above the harbour: water all down the right of the landing zone and guarding the green's right.
+    # Tee perched high above the fairway; a pond guards the green's right.
     17: dict(name='Harbour Wall', par=4, aim=(215, -5),
              fairways=[path([(30, 0), (170, 0), (260, -20)], 32)],
              green=((302, -36), 15), bunkers=[ellipse(250, -42, 22, 6, 20), (198, -12, 6)],
              woods=[ellipse(140, -45, 100, 12)],
-             ponds=[ellipse(195, 34, 80, 16, -8), ellipse(322, 4, 22, 26)], streams=[], footbridges=[],
-             landform=dict(kind='plunge', drop=7.0, camber=-0.05, wall_left=4.0, wall_right=1.0, green=0.5),
+             ponds=[ellipse(322, 4, 22, 26)], streams=[], footbridges=[],
+             landform=dict(kind='plunge', drop=7.0, camber=-0.05, wall_left=4.0, wall_right=3.0, green=0.5),
              mix={'Oak_A': 2, 'Oak_B': 2, 'Poplar': 3, 'Bush_Round': 3}),
     # Home hole: carry the waste bunker, then up to a raised last green with a pond short left.
     18: dict(name='Home Waste', par=4, aim=(240, -8),

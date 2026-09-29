@@ -1252,7 +1252,7 @@ def render_course(layouts):
         bpy.ops.render.render(write_still=True)
 
 
-def settle_heights(grade=0.2):
+def settle_heights(grade=0.1):
     """The landforms move each green well above or below its tee, so re-seat every island's height along the chain
     (hole 1 stays put): each rope bridge from a green to the next tee climbs or falls at most `grade`."""
     layouts = {n: layout_for(n) for n in C.PLACE}
