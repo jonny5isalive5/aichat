@@ -183,8 +183,27 @@ void AGolfBall::StepFlightMode(float Dt)
 	GolfPhysics::StepFlight(Sim, SimWind, Dt);
 
 	FHitResult Hit;
-	if (GolfPhysics::SweepBall(GetWorld(), Previous, Sim.Location, Hit, this))
+	const AActor* Through = GetWorld()->GetTimeSeconds() < PassThroughUntil ? PassThrough.Get() : nullptr;
+	if (GolfPhysics::SweepBall(GetWorld(), Previous, Sim.Location, Hit, this, Through))
 	{
+		if (GolfPhysics::IsFoliageHit(Hit))
+		{
+			// Trees and bushes: the ball clatters off branches and leaves, loses most of its pace and kicks off at
+			// a random angle. Landing on top of a canopy it drops through the leaves to the ground instead.
+			const FVector N = Hit.ImpactNormal;
+			Sim.Location = Hit.Location + N * 2.f;
+			Sim.SpinRate = 0.f;
+			FVector Out = FMath::GetReflectionVector(Sim.Velocity, N) * FMath::FRandRange(0.15f, 0.35f);
+			Out = FRotator(FMath::FRandRange(-25.f, 25.f), FMath::FRandRange(-45.f, 45.f), 0.f).RotateVector(Out);
+			Sim.Velocity = Out;
+			if (N.Z > 0.35f || Out.Size() < 250.f)
+			{
+				PassThrough = Hit.GetActor();
+				PassThroughUntil = GetWorld()->GetTimeSeconds() + 1.5f;
+				Sim.Velocity = FVector(Out.X * 0.3f, Out.Y * 0.3f, -FMath::Abs(Out.Z) * 0.3f);
+			}
+			return;
+		}
 		const EGolfLie Lie = GolfPhysics::LieFromHit(Hit);
 		Sim.Location = Hit.Location + Hit.ImpactNormal * 0.1f;
 

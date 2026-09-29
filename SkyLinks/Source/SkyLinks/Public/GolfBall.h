@@ -106,6 +106,10 @@ private:
 	/** Below this height (60 m under the shot's start) the ball has fallen off the islands. */
 	float FallLimit = -6000.f;
 	FVector SimWind = FVector::ZeroVector;
+
+	/** After landing on top of a canopy the ball drops through that tree's leaves for a moment. */
+	TWeakObjectPtr<const AActor> PassThrough;
+	float PassThroughUntil = 0.f;
 	FVector Cup = FVector::ZeroVector;
 	float CupRadius = 8.f;
 	float Accumulator = 0.f;
