@@ -77,6 +77,7 @@ def _import(filename, destination, options=None):
 
 SURFACE_TEXTURES = {  # Art/Blender/surface_textures.py: name -> (compression, sRGB)
     'T_Sand_Color': ('TC_DEFAULT', True), 'T_Sand_Normal': ('TC_MASKS', False),
+    'T_BallDimples': ('TC_MASKS', False),
     'T_Turf': ('TC_GRAYSCALE', False), 'T_RoughTurf': ('TC_GRAYSCALE', False), 'T_Macro': ('TC_GRAYSCALE', False),
 }
 
@@ -349,6 +350,33 @@ def debris_material():
     return mat
 
 
+BALL_NORMAL_CODE = """
+float3 n = SN * 2 - 1;
+n.xy *= 0.8;
+return normalize(n);
+"""
+
+
+def make_golf_ball():
+    """M_GolfBall in /Game/Course/Ball: glossy white with hex-packed dimples (the ball loads it by path)."""
+    path = '/Game/Course/Ball'
+    name = 'M_GolfBall'
+    mat = unreal.load_asset(f'{path}/{name}') if unreal.EditorAssetLibrary.does_asset_exist(f'{path}/{name}') else \
+        tools.create_asset(name, path, unreal.Material, unreal.MaterialFactoryNew())
+    lib.delete_all_material_expressions(mat)
+    white = _expr(mat, unreal.MaterialExpressionConstant3Vector, -500, 0, constant=unreal.LinearColor(0.86, 0.86, 0.84, 1))
+    lib.connect_material_property(white, '', unreal.MaterialProperty.MP_BASE_COLOR)
+    lib.connect_material_property(_const(mat, 0.3, -500, 150), '', unreal.MaterialProperty.MP_ROUGHNESS)
+    lib.connect_material_property(_const(mat, 0.6, -500, 250), '', unreal.MaterialProperty.MP_SPECULAR)
+    uv = _expr(mat, unreal.MaterialExpressionTextureCoordinate, -1200, 400, u_tiling=8.0, v_tiling=4.6)
+    dimples = _tex(mat, 'T_BallDimples', uv, -1000, 400, unreal.MaterialSamplerType.SAMPLERTYPE_MASKS)
+    normal = _custom(mat, BALL_NORMAL_CODE, {'SN': (dimples, 'RGB')}, -600, 400)
+    lib.connect_material_property(normal, '', unreal.MaterialProperty.MP_NORMAL)
+    lib.recompile_material(mat)
+    unreal.EditorAssetLibrary.save_loaded_asset(mat)
+    return mat
+
+
 GRASS_SOURCE = ROOT / 'Art' / 'Exports' / 'Grass'
 GRASS_DEST = '/Game/Course/Grass'
 
@@ -356,6 +384,7 @@ GRASS_DEST = '/Game/Course/Grass'
 def import_grass():
     """The 3D grass clumps (Art/Blender/build_grass.py) and their material. ASkyLinksGrass grows them in game."""
     import_textures()
+    make_golf_ball()
     blades = grass_blades_material()
     debris = debris_material()
     for name in ('SM_GrassClump', 'SM_GrassTuft', 'SM_WindLeaf', 'SM_WindStraw'):

@@ -58,7 +58,7 @@ public:
 
 	/** Drawn size relative to a regulation ball. This is deliberately oversized for readable phone play; physics size is unchanged. */
 	UPROPERTY(EditDefaultsOnly, Category = "Golf")
-	float VisualScale = 3.f;
+	float VisualScale = 2.f;
 
 	/** How far behind the ball the chase camera trails. */
 	UPROPERTY(EditDefaultsOnly, Category = "Golf|Camera")
@@ -110,6 +110,13 @@ private:
 	/** After landing on top of a canopy the ball drops through that tree's leaves for a moment. */
 	TWeakObjectPtr<const AActor> PassThrough;
 	float PassThroughUntil = 0.f;
+
+	/** Trees and bushes are also tested by shape (canopy ellipsoid + trunk from each mesh's bounds), so the ball
+	 *  hits them even where a mesh has no collision set up. Gathered at each launch. */
+	TArray<TWeakObjectPtr<class UInstancedStaticMeshComponent>> Foliage;
+	void GatherFoliage();
+	bool HitFoliageShape(const FVector& Point, FVector& OutNormal, const AActor*& OutOwner) const;
+	void BounceOffFoliage(const FVector& Point, const FVector& Normal, const AActor* Owner);
 	FVector Cup = FVector::ZeroVector;
 	float CupRadius = 8.f;
 	float Accumulator = 0.f;

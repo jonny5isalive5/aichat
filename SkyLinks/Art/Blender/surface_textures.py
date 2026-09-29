@@ -85,8 +85,30 @@ def macro():
     save_grey('T_Macro', value)
 
 
+def ball_dimples():
+    """Golf ball dimples: a hex-packed grid of shallow round cups (tiles 8 across, 4 down on the ball's UVs)."""
+    w, h = 256, 222  # one hex period: 8 dimples across, 4 rows of pairs down (32 px apart)
+    a = w / 8
+    y, x = np.mgrid[0:h, 0:w].astype(float)
+    height = np.zeros((h, w))
+    for oy, ox in ((0.0, 0.0), (a * 3 ** 0.5 / 2, a / 2)):
+        # distance to the nearest lattice point of this sub-grid (wrapping)
+        dy = (y - oy) % (a * 3 ** 0.5)
+        dy = np.minimum(dy, a * 3 ** 0.5 - dy)
+        dx = (x - ox) % a
+        dx = np.minimum(dx, a - dx)
+        r = np.sqrt(dx ** 2 + dy ** 2) / (a * 0.46)
+        height = np.minimum(height, np.where(r < 1, -(1 - r ** 2), 0.0))
+    dxh = (np.roll(height, -1, 1) - np.roll(height, 1, 1)) * 6
+    dyh = (np.roll(height, -1, 0) - np.roll(height, 1, 0)) * 6
+    normal = np.stack([-dxh, dyh, np.ones_like(dxh)], -1)
+    normal /= np.linalg.norm(normal, axis=-1, keepdims=True)
+    Image.fromarray(((normal * 0.5 + 0.5) * 255).astype(np.uint8)).save(OUT / 'T_BallDimples.png')
+
+
 if __name__ == '__main__':
     OUT.mkdir(parents=True, exist_ok=True)
+    ball_dimples()
     sand()
     turf()
     macro()

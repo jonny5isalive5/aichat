@@ -8,6 +8,8 @@
 #include "Materials/MaterialInstanceDynamic.h"
 #include "Net/UnrealNetwork.h"
 #include "UObject/ConstructorHelpers.h"
+#include "Components/InstancedStaticMeshComponent.h"
+#include "EngineUtils.h"
 
 
 AGolfBall::AGolfBall()
@@ -53,7 +55,12 @@ void AGolfBall::BeginPlay()
 	Super::BeginPlay();
 	// Clean white finish. Done here rather than in the constructor so no material instance is
 	// created on the class default object.
-	if (UMaterialInstanceDynamic* BallMaterial = Mesh->CreateAndSetMaterialInstanceDynamic(0))
+	// A dimpled white golf ball (Scripts/apply_floating_islands.py, make_golf_ball), else plain white.
+	if (UMaterialInterface* Dimpled = LoadObject<UMaterialInterface>(nullptr, TEXT("/Game/Course/Ball/M_GolfBall.M_GolfBall")))
+	{
+		Mesh->SetMaterial(0, Dimpled);
+	}
+	else if (UMaterialInstanceDynamic* BallMaterial = Mesh->CreateAndSetMaterialInstanceDynamic(0))
 	{
 		BallMaterial->SetVectorParameterValue(TEXT("Color"), FLinearColor::White);
 	}
@@ -85,9 +92,95 @@ void AGolfBall::MulticastLaunch_Implementation(FVector Start, FVector Velocity, 
 	Accumulator = SimTime = RestTimer = 0.f;
 	Mode = Velocity.Z > 1.f ? EMode::Flight : EMode::Roll;
 
+	GatherFoliage();
+
 	// Start the chase camera directly behind the shot line.
 	ChaseYaw = FVector(Velocity.X, Velocity.Y, 0.f).Rotation().Yaw;
 	UpdateChaseCamera(0.f, true);
+}
+
+void AGolfBall::GatherFoliage()
+{
+	Foliage.Reset();
+	for (TActorIterator<AActor> It(GetWorld()); It; ++It)
+	{
+		TInlineComponentArray<UInstancedStaticMeshComponent*> Components(*It);
+		for (UInstancedStaticMeshComponent* Component : Components)
+		{
+			// Instanced meshes that block things and stand taller than a tuft: trees, bushes (not the grass).
+			const UStaticMesh* MeshAsset = Component ? Component->GetStaticMesh() : nullptr;
+			if (MeshAsset && Component->GetCollisionEnabled() != ECollisionEnabled::NoCollision
+				&& MeshAsset->GetBoundingBox().GetSize().Z > 60.f && Component->GetInstanceCount() > 0)
+			{
+				Foliage.Add(Component);
+			}
+		}
+	}
+}
+
+bool AGolfBall::HitFoliageShape(const FVector& Point, FVector& OutNormal, const AActor*& OutOwner) const
+{
+	for (const TWeakObjectPtr<UInstancedStaticMeshComponent>& Weak : Foliage)
+	{
+		const UInstancedStaticMeshComponent* Component = Weak.Get();
+		if (!Component)
+		{
+			continue;
+		}
+		const FBox Bounds = Component->GetStaticMesh()->GetBoundingBox();
+		const FVector Size = Bounds.GetSize();
+		const FVector Mid = Bounds.GetCenter();
+		const bool bTree = Size.Z > 300.f;
+		// Canopy (a bush's whole body) as an ellipsoid inside the mesh bounds; trees also get a trunk.
+		const FVector CanopyCentre(Mid.X, Mid.Y, Bounds.Min.Z + Size.Z * (bTree ? 0.64f : 0.5f));
+		const FVector CanopyRadii(Size.X * (bTree ? 0.4f : 0.45f), Size.Y * (bTree ? 0.4f : 0.45f), Size.Z * (bTree ? 0.33f : 0.5f));
+		const float TrunkTop = CanopyCentre.Z - CanopyRadii.Z;
+
+		for (const int32 Instance : Component->GetInstancesOverlappingSphere(Point, 30.f, true))
+		{
+			FTransform Transform;
+			if (!Component->GetInstanceTransform(Instance, Transform, true))
+			{
+				continue;
+			}
+			const FVector Local = Transform.InverseTransformPosition(Point);
+			const FVector E = (Local - CanopyCentre) / CanopyRadii;
+			if (E.SizeSquared() < 1.f)
+			{
+				OutNormal = Transform.TransformVectorNoScale(((Local - CanopyCentre) / (CanopyRadii * CanopyRadii)).GetSafeNormal()).GetSafeNormal();
+				OutOwner = Component->GetOwner();
+				return true;
+			}
+			const FVector2D Off(Local.X - Mid.X, Local.Y - Mid.Y);
+			if (bTree && Local.Z > Bounds.Min.Z && Local.Z < TrunkTop && Off.Size() < 30.f)
+			{
+				OutNormal = Transform.TransformVectorNoScale(FVector(Off.X, Off.Y, 0.f).GetSafeNormal()).GetSafeNormal();
+				OutOwner = Component->GetOwner();
+				return true;
+			}
+		}
+	}
+	return false;
+}
+
+void AGolfBall::BounceOffFoliage(const FVector& Point, const FVector& Normal, const AActor* Owner)
+{
+	// Trees and bushes: the ball clatters off branches and leaves, loses most of its pace and kicks off at an
+	// odd angle. Landing on top of a canopy it drops through the leaves to the ground instead. The "random"
+	// comes from the hit point so every machine simulating this ball agrees.
+	FRandomStream Random(static_cast<int32>(GetTypeHash(Point.GridSnap(5.f))));
+	const FVector N = Normal.IsNearlyZero() ? FVector::UpVector : Normal;
+	Sim.Location = Point + N * 3.f;
+	Sim.SpinRate = 0.f;
+	FVector Out = FMath::GetReflectionVector(Sim.Velocity, N) * Random.FRandRange(0.15f, 0.35f);
+	Out = FRotator(Random.FRandRange(-25.f, 25.f), Random.FRandRange(-45.f, 45.f), 0.f).RotateVector(Out);
+	Sim.Velocity = Out;
+	if (N.Z > 0.35f || Out.Size() < 250.f)
+	{
+		PassThrough = Owner;
+		PassThroughUntil = GetWorld()->GetTimeSeconds() + 1.5f;
+		Sim.Velocity = FVector(Out.X * 0.3f, Out.Y * 0.3f, -FMath::Abs(Out.Z) * 0.3f);
+	}
 }
 
 void AGolfBall::PlaceAt(const FVector& Location, bool bOnTee)
@@ -182,26 +275,24 @@ void AGolfBall::StepFlightMode(float Dt)
 	const FVector Previous = Sim.Location;
 	GolfPhysics::StepFlight(Sim, SimWind, Dt);
 
+	if (GetWorld()->GetTimeSeconds() >= PassThroughUntil)
+	{
+		FVector Normal;
+		const AActor* Owner = nullptr;
+		if (HitFoliageShape(Sim.Location, Normal, Owner))
+		{
+			BounceOffFoliage(Sim.Location, Normal, Owner);
+			return;
+		}
+	}
+
 	FHitResult Hit;
 	const AActor* Through = GetWorld()->GetTimeSeconds() < PassThroughUntil ? PassThrough.Get() : nullptr;
 	if (GolfPhysics::SweepBall(GetWorld(), Previous, Sim.Location, Hit, this, Through))
 	{
 		if (GolfPhysics::IsFoliageHit(Hit))
 		{
-			// Trees and bushes: the ball clatters off branches and leaves, loses most of its pace and kicks off at
-			// a random angle. Landing on top of a canopy it drops through the leaves to the ground instead.
-			const FVector N = Hit.ImpactNormal;
-			Sim.Location = Hit.Location + N * 2.f;
-			Sim.SpinRate = 0.f;
-			FVector Out = FMath::GetReflectionVector(Sim.Velocity, N) * FMath::FRandRange(0.15f, 0.35f);
-			Out = FRotator(FMath::FRandRange(-25.f, 25.f), FMath::FRandRange(-45.f, 45.f), 0.f).RotateVector(Out);
-			Sim.Velocity = Out;
-			if (N.Z > 0.35f || Out.Size() < 250.f)
-			{
-				PassThrough = Hit.GetActor();
-				PassThroughUntil = GetWorld()->GetTimeSeconds() + 1.5f;
-				Sim.Velocity = FVector(Out.X * 0.3f, Out.Y * 0.3f, -FMath::Abs(Out.Z) * 0.3f);
-			}
+			BounceOffFoliage(Hit.Location, Hit.ImpactNormal, Hit.GetActor());
 			return;
 		}
 		const EGolfLie Lie = GolfPhysics::LieFromHit(Hit);

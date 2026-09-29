@@ -9,7 +9,7 @@ public class SkyLinks : ModuleRules
 		PublicDependencyModuleNames.AddRange(new string[]
 		{
 			"Core", "CoreUObject", "Engine", "InputCore", "EnhancedInput",
-			"PhysicsCore", "NetCore", "Foliage", "OnlineSubsystem", "OnlineSubsystemUtils",
+			"PhysicsCore", "NetCore", "RenderCore", "Foliage", "OnlineSubsystem", "OnlineSubsystemUtils",
 			"OnlineSubsystemEOS", "VoiceChat", "EOSSDK"
 		});
 
