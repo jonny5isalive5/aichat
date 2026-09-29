@@ -842,7 +842,8 @@ def refresh_remaining(per_run=3):
         return
     for number, golf_hole in pending[:per_run]:
         refresh_islands([number], bridges=False)
-        golf_hole.tags = [t for t in golf_hole.tags if not str(t).startswith('Surface:')] + [unreal.Name(_surface_tag(number))]
+        golf_hole.modify()
+        golf_hole.set_editor_property('tags', [t for t in golf_hole.tags if not str(t).startswith('Surface:')] + [unreal.Name(_surface_tag(number))])
         unreal.get_editor_subsystem(unreal.LevelEditorSubsystem).save_current_level()
         unreal.SystemLibrary.collect_garbage()
     left = len(pending) - min(per_run, len(pending))
