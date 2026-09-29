@@ -9,7 +9,6 @@
 #include "Net/UnrealNetwork.h"
 #include "UObject/ConstructorHelpers.h"
 
-using namespace GolfPhysics;
 
 AGolfBall::AGolfBall()
 {
@@ -32,8 +31,8 @@ AGolfBall::AGolfBall()
 	// The visual is deliberately enlarged (VisualScale). Collision and the physics sweeps still use
 	// GolfPhysics::BallRadius, so this does not make shots easier or alter rolls.
 	// Engine sphere is 100 cm across. Lift the enlarged mesh so it still sits on the ground.
-	Mesh->SetRelativeScale3D(FVector(BallRadius * 2.f * VisualScale / 100.f));
-	Mesh->SetRelativeLocation(FVector(0.f, 0.f, BallRadius * (VisualScale - 1.f)));
+	Mesh->SetRelativeScale3D(FVector(GolfPhysics::BallRadius * 2.f * VisualScale / 100.f));
+	Mesh->SetRelativeLocation(FVector(0.f, 0.f, GolfPhysics::BallRadius * (VisualScale - 1.f)));
 
 	ChaseArm = CreateDefaultSubobject<USpringArmComponent>(TEXT("ChaseArm"));
 	ChaseArm->SetupAttachment(Root);
@@ -129,10 +128,10 @@ void AGolfBall::Tick(float DeltaSeconds)
 	}
 
 	Accumulator += FMath::Min(DeltaSeconds, 0.1f);
-	while (Accumulator >= FixedStep && Mode != EMode::Rest)
+	while (Accumulator >= GolfPhysics::FixedStep && Mode != EMode::Rest)
 	{
-		Simulate(FixedStep);
-		Accumulator -= FixedStep;
+		Simulate(GolfPhysics::FixedStep);
+		Accumulator -= GolfPhysics::FixedStep;
 	}
 	SetActorLocation(Sim.Location);
 	UpdateChaseCamera(DeltaSeconds, false);
@@ -181,19 +180,19 @@ bool AGolfBall::IsOverCup() const
 void AGolfBall::StepFlightMode(float Dt)
 {
 	const FVector Previous = Sim.Location;
-	StepFlight(Sim, SimWind, Dt);
+	GolfPhysics::StepFlight(Sim, SimWind, Dt);
 
 	FHitResult Hit;
-	if (SweepBall(GetWorld(), Previous, Sim.Location, Hit, this))
+	if (GolfPhysics::SweepBall(GetWorld(), Previous, Sim.Location, Hit, this))
 	{
-		const EGolfLie Lie = LieFromHit(Hit);
+		const EGolfLie Lie = GolfPhysics::LieFromHit(Hit);
 		Sim.Location = Hit.Location + Hit.ImpactNormal * 0.1f;
 
 		if (Lie == EGolfLie::Water)       { Finish(EGolfShotResult::Water); return; }
 		if (Lie == EGolfLie::OutOfBounds) { Finish(EGolfShotResult::OutOfBounds); return; }
 		if (IsOverCup())                  { BeginHoling(); return; }
 
-		const FGolfSurfaceParams& Surface = GetSurface(Lie);
+		const FGolfSurfaceParams& Surface = GolfPhysics::GetSurface(Lie);
 		const FVector N = Hit.ImpactNormal;
 		const float NormalSpeed = FVector::DotProduct(Sim.Velocity, N);
 		const FVector NormalPart = N * NormalSpeed;
@@ -224,22 +223,22 @@ void AGolfBall::StepRollMode(float Dt)
 	const UWorld* World = GetWorld();
 
 	FHitResult Ground;
-	if (!SweepBall(World, Sim.Location + FVector(0.f, 0.f, 3.f), Sim.Location - FVector(0.f, 0.f, 6.f), Ground, this) || Ground.ImpactNormal.Z < 0.3f)
+	if (!GolfPhysics::SweepBall(World, Sim.Location + FVector(0.f, 0.f, 3.f), Sim.Location - FVector(0.f, 0.f, 6.f), Ground, this) || Ground.ImpactNormal.Z < 0.3f)
 	{
 		// Rolled off an edge.
 		Mode = EMode::Flight;
 		return;
 	}
 
-	const EGolfLie Lie = LieFromHit(Ground);
+	const EGolfLie Lie = GolfPhysics::LieFromHit(Ground);
 	if (Lie == EGolfLie::Water)       { Finish(EGolfShotResult::Water); return; }
 	if (Lie == EGolfLie::OutOfBounds) { Finish(EGolfShotResult::OutOfBounds); return; }
 
 	const FVector N = Ground.ImpactNormal;
 	Sim.Location = Ground.Location + N * 0.1f;
 
-	const FGolfSurfaceParams& Surface = GetSurface(Lie);
-	const FVector Slope = FVector::VectorPlaneProject(FVector(0.f, 0.f, -Gravity), N);
+	const FGolfSurfaceParams& Surface = GolfPhysics::GetSurface(Lie);
+	const FVector Slope = FVector::VectorPlaneProject(FVector(0.f, 0.f, -GolfPhysics::Gravity), N);
 	FVector Velocity = FVector::VectorPlaneProject(Sim.Velocity, N) + Slope * Dt;
 
 	float Speed = Velocity.Size();
@@ -259,9 +258,9 @@ void AGolfBall::StepRollMode(float Dt)
 
 	const FVector Target = Sim.Location + Velocity * Dt;
 	FHitResult Blocker;
-	if (SweepBall(World, Sim.Location, Target, Blocker, this))
+	if (GolfPhysics::SweepBall(World, Sim.Location, Target, Blocker, this))
 	{
-		const EGolfLie BlockerLie = LieFromHit(Blocker);
+		const EGolfLie BlockerLie = GolfPhysics::LieFromHit(Blocker);
 		if (BlockerLie == EGolfLie::Water)       { Finish(EGolfShotResult::Water); return; }
 		if (BlockerLie == EGolfLie::OutOfBounds) { Finish(EGolfShotResult::OutOfBounds); return; }
 
@@ -332,9 +331,9 @@ void AGolfBall::Finish(EGolfShotResult Result)
 EGolfLie AGolfBall::ProbeLie(const FVector& At) const
 {
 	FHitResult Hit;
-	if (SweepBall(GetWorld(), At + FVector(0.f, 0.f, 5.f), At - FVector(0.f, 0.f, 20.f), Hit, this))
+	if (GolfPhysics::SweepBall(GetWorld(), At + FVector(0.f, 0.f, 5.f), At - FVector(0.f, 0.f, 20.f), Hit, this))
 	{
-		return LieFromHit(Hit);
+		return GolfPhysics::LieFromHit(Hit);
 	}
 	return EGolfLie::Rough;
 }

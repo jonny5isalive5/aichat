@@ -9,9 +9,9 @@
 
 namespace
 {
-	constexpr float ProbeSpacing = 60.f;   // cm between the bunker-finding probes
-	constexpr float TraceUp = 20000.f;     // traces run from well above the camera...
-	constexpr float TraceDown = 60000.f;   // ...to well below it (islands float at different heights)
+	constexpr float GrassProbeSpacing = 60.f;   // cm between the bunker-finding probes
+	constexpr float GrassTraceUp = 20000.f;     // traces run from well above the camera...
+	constexpr float GrassTraceDown = 60000.f;   // ...to well below it (islands float at different heights)
 }
 
 ASkyLinksGrass::ASkyLinksGrass()
@@ -145,7 +145,7 @@ void ASkyLinksGrass::FillCell(const FIntPoint& Key, float ViewZ, int32& Traces)
 	auto Ground = [&](float X, float Y, FHitResult& Hit, EPhysicalSurface& Surface)
 	{
 		++Traces;
-		if (!World->LineTraceSingleByObjectType(Hit, FVector(X, Y, ViewZ + TraceUp), FVector(X, Y, ViewZ - TraceDown), Objects, Params))
+		if (!World->LineTraceSingleByObjectType(Hit, FVector(X, Y, ViewZ + GrassTraceUp), FVector(X, Y, ViewZ - GrassTraceDown), Objects, Params))
 		{
 			return false;
 		}
@@ -180,7 +180,7 @@ void ASkyLinksGrass::FillCell(const FIntPoint& Key, float ViewZ, int32& Traces)
 	// Bunker lips: probe a fine grid for sand; every grass probe beside a sand probe gets a few tufts.
 	if (LoadedTuft)
 	{
-		const int32 Side = FMath::CeilToInt(CellSize / ProbeSpacing);
+		const int32 Side = FMath::CeilToInt(CellSize / GrassProbeSpacing);
 		TArray<uint8> Sand;
 		Sand.SetNumZeroed((Side + 2) * (Side + 2));
 		// Probes include a ring just outside the cell, so edges on the cell border are found from both sides.
@@ -190,11 +190,11 @@ void ASkyLinksGrass::FillCell(const FIntPoint& Key, float ViewZ, int32& Traces)
 			{
 				FHitResult Hit;
 				EPhysicalSurface Surface;
-				const bool bHit = Ground(Origin.X + (X + 0.5f) * ProbeSpacing, Origin.Y + (Y + 0.5f) * ProbeSpacing, Hit, Surface);
+				const bool bHit = Ground(Origin.X + (X + 0.5f) * GrassProbeSpacing, Origin.Y + (Y + 0.5f) * GrassProbeSpacing, Hit, Surface);
 				Sand[(Y + 1) * (Side + 2) + (X + 1)] = !bHit ? 2 : Surface == SURFACE_Bunker ? 1 : 0;
 			}
 		}
-		const int32 PerProbe = FMath::Max(1, FMath::RoundToInt(LipDensity * ProbeSpacing / 100.f));
+		const int32 PerProbe = FMath::Max(1, FMath::RoundToInt(LipDensity * GrassProbeSpacing / 100.f));
 		for (int32 Y = 0; Y < Side; ++Y)
 		{
 			for (int32 X = 0; X < Side; ++X)
@@ -208,8 +208,8 @@ void ASkyLinksGrass::FillCell(const FIntPoint& Key, float ViewZ, int32& Traces)
 				{
 					FHitResult Hit;
 					EPhysicalSurface Surface;
-					const float PX = Origin.X + (X + Random.FRand()) * ProbeSpacing;
-					const float PY = Origin.Y + (Y + Random.FRand()) * ProbeSpacing;
+					const float PX = Origin.X + (X + Random.FRand()) * GrassProbeSpacing;
+					const float PY = Origin.Y + (Y + Random.FRand()) * GrassProbeSpacing;
 					if (Ground(PX, PY, Hit, Surface) && (Surface == SURFACE_Rough || Surface == SURFACE_Fairway || Surface == SURFACE_Green))
 					{
 						Tufts.Add(Place(Hit, 1.f, 1.f));
