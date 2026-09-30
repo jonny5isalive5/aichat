@@ -1213,7 +1213,13 @@ def portal_views(size=512):
     target.set_editor_property('size_y', size)
     target.set_editor_property('render_target_format', unreal.TextureRenderTargetFormat.RTF_RGBA8_SRGB)
     world = unreal.get_editor_subsystem(unreal.UnrealEditorSubsystem).get_editor_world()
+    # Clear away any camera left behind by an earlier run that stopped part way.
+    for actor in everything:
+        if isinstance(actor, unreal.SceneCapture2D) and (actor.get_actor_label() == 'PortalViewCamera'
+                                                           or actor.get_actor_label().startswith('SceneCapture2D')):
+            actors.destroy_actor(actor)
     camera = actors.spawn_actor_from_class(unreal.SceneCapture2D, unreal.Vector(0, 0, 0), unreal.Rotator(0, 0, 0))
+    camera.set_actor_label('PortalViewCamera')
     capture = camera.capture_component2d
     capture.set_editor_property('texture_target', target)
     capture.set_editor_property('capture_source', unreal.SceneCaptureSource.SCS_FINAL_COLOR_LDR)
@@ -1221,51 +1227,54 @@ def portal_views(size=512):
     capture.set_editor_property('capture_every_frame', False)
     capture.set_editor_property('capture_on_movement', False)
     done = 0
-    for label, entry in sorted(portals.items()):
-        # Portal_01_02_Out leads on to hole 2 (look out of the _In portal the way you'd drive on); Portal_01_02_In
-        # leads back to hole 1 (look out of the _Out portal back into hole 1).
-        parts = label.split('_')
-        onward = label.endswith('_Out')
-        exit_portal = portals.get(label[:-4] + '_In' if onward else label[:-3] + '_Out')
-        if not exit_portal:
-            continue
-        number = parts[2] if onward else parts[1]
-        yaw = exit_portal.get_actor_rotation().yaw + (0.0 if onward else 180.0)
-        forward = exit_portal.get_actor_forward_vector() * (1.0 if onward else -1.0)
-        base = exit_portal.get_actor_location()
-        eye = unreal.Vector(base.x + forward.x * 150, base.y + forward.y * 150, base.z + 230)
-        camera.set_actor_location_and_rotation(eye, unreal.Rotator(0, -4, yaw), False, True)
-        capture.set_editor_property('hidden_actors', [exit_portal])
-        capture.capture_scene()
-        # How bright the middle of the shot came out (0-255): a black shot means the capture didn't render.
-        middle = unreal.RenderingLibrary.read_render_target_raw_pixel(world, target, size // 2, size // 2)
-        brightness = (middle.r + middle.g + middle.b) / 3 * (255 if isinstance(middle.r, float) else 1)
-        tag = f"{number}{'' if onward else 'b'}"  # 02 = view of hole 2 ahead; 01b = view back into hole 1
-        name = f'T_PortalView_{tag}'
-        instance_name = f'MI_PortalView_{tag}'
-        instance_path = f'{PORTAL_VIEW_DIR}/{instance_name}'
-        instance = unreal.load_asset(instance_path) if unreal.EditorAssetLibrary.does_asset_exist(instance_path) else \
-            tools.create_asset(instance_name, PORTAL_VIEW_DIR, unreal.MaterialInstanceConstant, unreal.MaterialInstanceConstantFactoryNew())
-        instance.set_editor_property('parent', swirl)
-        # Re-shooting: let go of the old picture, then replace it (same name, so nothing else changes).
-        lib.set_material_instance_texture_parameter_value(instance, 'View', unreal.load_asset(VIEW_PLACEHOLDER))
-        if unreal.EditorAssetLibrary.does_asset_exist(f'{PORTAL_VIEW_DIR}/{name}'):
-            unreal.EditorAssetLibrary.delete_asset(f'{PORTAL_VIEW_DIR}/{name}')
-        texture = unreal.RenderingLibrary.render_target_create_static_texture2d_editor_only(target, name)
-        if not texture:
-            print(f'PORTAL VIEW {label}: NO TEXTURE MADE (brightness {brightness:.0f})  <- send this line to Claude')
-            continue
-        unreal.EditorAssetLibrary.save_loaded_asset(texture)
-        lib.set_material_instance_texture_parameter_value(instance, 'View', texture)
-        lib.set_material_instance_scalar_parameter_value(instance, 'ShowView', 1.0)
-        unreal.EditorAssetLibrary.save_loaded_asset(instance)
-        ring = entry.get_editor_property('ring')
-        ring.set_material(_swirl_slot(ring.get_editor_property('static_mesh')), instance)
-        done += 1
-        print(f"PORTAL VIEW {label}: {'ahead to' if onward else 'back to'} hole {int(number)}, "
-              f"{texture.get_path_name() if texture else 'NO TEXTURE MADE'}, brightness {brightness:.0f}"
-              f"{'  <- BLACK: send this line to Claude' if brightness < 3 else ''}")
-    actors.destroy_actor(camera)
+    try:
+        for label, entry in sorted(portals.items()):
+            # Portal_01_02_Out leads on to hole 2 (look out of the _In portal the way you'd drive on); Portal_01_02_In
+            # leads back to hole 1 (look out of the _Out portal back into hole 1).
+            parts = label.split('_')
+            onward = label.endswith('_Out')
+            exit_portal = portals.get(label[:-4] + '_In' if onward else label[:-3] + '_Out')
+            if not exit_portal:
+                continue
+            number = parts[2] if onward else parts[1]
+            yaw = exit_portal.get_actor_rotation().yaw + (0.0 if onward else 180.0)
+            forward = exit_portal.get_actor_forward_vector() * (1.0 if onward else -1.0)
+            base = exit_portal.get_actor_location()
+            eye = unreal.Vector(base.x + forward.x * 150, base.y + forward.y * 150, base.z + 230)
+            camera.set_actor_location_and_rotation(eye, unreal.Rotator(0, -4, yaw), False, True)
+            capture.clear_hidden_components()
+            capture.hide_actor_components(exit_portal)  # don't photograph the ring you're standing in front of
+            capture.capture_scene()
+            # How bright the middle of the shot came out (0-255): a black shot means the capture didn't render.
+            middle = unreal.RenderingLibrary.read_render_target_raw_pixel(world, target, size // 2, size // 2)
+            brightness = (middle.r + middle.g + middle.b) / 3 * (255 if isinstance(middle.r, float) else 1)
+            tag = f"{number}{'' if onward else 'b'}"  # 02 = view of hole 2 ahead; 01b = view back into hole 1
+            name = f'T_PortalView_{tag}'
+            instance_name = f'MI_PortalView_{tag}'
+            instance_path = f'{PORTAL_VIEW_DIR}/{instance_name}'
+            instance = unreal.load_asset(instance_path) if unreal.EditorAssetLibrary.does_asset_exist(instance_path) else \
+                tools.create_asset(instance_name, PORTAL_VIEW_DIR, unreal.MaterialInstanceConstant, unreal.MaterialInstanceConstantFactoryNew())
+            instance.set_editor_property('parent', swirl)
+            # Re-shooting: let go of the old picture, then replace it (same name, so nothing else changes).
+            lib.set_material_instance_texture_parameter_value(instance, 'View', unreal.load_asset(VIEW_PLACEHOLDER))
+            if unreal.EditorAssetLibrary.does_asset_exist(f'{PORTAL_VIEW_DIR}/{name}'):
+                unreal.EditorAssetLibrary.delete_asset(f'{PORTAL_VIEW_DIR}/{name}')
+            texture = unreal.RenderingLibrary.render_target_create_static_texture2d_editor_only(target, name)
+            if not texture:
+                print(f'PORTAL VIEW {label}: NO TEXTURE MADE (brightness {brightness:.0f})  <- send this line to Claude')
+                continue
+            unreal.EditorAssetLibrary.save_loaded_asset(texture)
+            lib.set_material_instance_texture_parameter_value(instance, 'View', texture)
+            lib.set_material_instance_scalar_parameter_value(instance, 'ShowView', 1.0)
+            unreal.EditorAssetLibrary.save_loaded_asset(instance)
+            ring = entry.get_editor_property('ring')
+            ring.set_material(_swirl_slot(ring.get_editor_property('static_mesh')), instance)
+            done += 1
+            print(f"PORTAL VIEW {label}: {'ahead to' if onward else 'back to'} hole {int(number)}, "
+                  f"{texture.get_path_name() if texture else 'NO TEXTURE MADE'}, brightness {brightness:.0f}"
+                  f"{'  <- BLACK: send this line to Claude' if brightness < 3 else ''}")
+    finally:
+        actors.destroy_actor(camera)  # always, even if a shot fails
     unreal.get_editor_subsystem(unreal.LevelEditorSubsystem).save_current_level()
     print(f'PORTAL VIEWS DONE: {done} portals show the hole they lead to')
 
