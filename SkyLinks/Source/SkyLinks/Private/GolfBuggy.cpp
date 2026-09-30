@@ -186,7 +186,11 @@ bool AGolfBuggy::TryPortal(const FVector& Start)
 	FVector Exit;
 	FRotator Facing;
 	Portal->ExitFor(GetActorLocation(), GetActorRotation(), Direction, Exit, Facing);
-	FVector Ground = Exit + FVector(0.f, 0.f, RideHeight);
+	// Find the real ground first (the exit can be on rising ground, well above the portal's foot), then settle
+	// the four wheels on it.
+	FVector Surface = Exit;
+	ASkyLinksPortal::FindGround(GetWorld(), Exit, Surface, this);
+	FVector Ground = Surface + FVector(0.f, 0.f, RideHeight);
 	FRotator Rotation = Facing;
 	bool bWater = false;
 	SampleGround(Ground, Facing.Yaw, Ground, Rotation, bWater);

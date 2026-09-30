@@ -50,6 +50,11 @@ public:
 	UPROPERTY(EditAnywhere, Category = "Portal")
 	FString Sign;
 
+	/** The sign reads towards the side you drive in from: the back (-X) for the portal that leads on to the next
+	 *  hole, the front (+X) for the one by the tee that leads back. */
+	UPROPERTY(EditAnywhere, Category = "Portal")
+	bool bSignFacesBack = false;
+
 	/** The stone ring and its swirling surface (looks only, no collision). */
 	UPROPERTY(VisibleAnywhere, Category = "Portal")
 	TObjectPtr<UStaticMeshComponent> Ring;
@@ -64,6 +69,10 @@ public:
 	/** Where something that went through this portal (Direction as from FindCrossed) at Location with Rotation
 	 *  comes out (ground height of the target's base; callers settle it onto the ground themselves). */
 	void ExitFor(const FVector& Location, const FRotator& Rotation, int32 Direction, FVector& OutLocation, FRotator& OutRotation) const;
+
+	/** The ground under Location (trees and the like ignored), searched from well above it so a spot on rising
+	 *  ground isn't missed. Returns false if there's none; OutGround is on the surface. */
+	static bool FindGround(const UWorld* World, const FVector& Location, FVector& OutGround, const AActor* Ignore = nullptr);
 
 	/** True when Location is where something leaving some portal would come out (server check on a driver's hop). */
 	static bool IsNearAnExit(const UWorld* World, const FVector& Location, float Tolerance);
