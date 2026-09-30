@@ -1,7 +1,8 @@
-"""Import the owner's golfer and golf animations into /Game/Characters/Eccentric.
+"""Import the golfers and their animations: the man into /Game/Characters/Eccentric, his wife into
+/Game/Characters/Diva (AGolfCharacter picks the folder by the player's choice of golfer).
 
-The player is the Meshy "Eccentric Golfer": Art/Blender/build_eccentric_golfer.py writes his body and every
-clip below (retargeted onto him) to Art/Golfer/Eccentric/, which this imports. The old Tripo golfer's assets in
+Art/Blender/build_eccentric_golfer.py writes each body and every clip below (retargeted onto them) to
+Art/Golfer/Eccentric/ and Art/Golfer/Diva/, which this imports. The old Tripo golfer's assets in
 /Game/Characters/Golfer are left alone. What follows describes the source clips the retarget starts from.
 
 Run in the editor (Aura's execute_unreal_python, or Tools > Execute Python Script). No map changes.
@@ -22,9 +23,15 @@ Art/Blender/retarget_walk_idle.py retargets them onto the golfer (Fixed/). Re-ru
 from pathlib import Path
 import unreal
 
-SOURCE = Path(unreal.Paths.project_dir()) / 'Art' / 'Golfer' / 'Eccentric'
-DEST = '/Game/Characters/Eccentric'
-ANIM_DEST = DEST + '/Animations'
+GOLFERS = ('Eccentric', 'Diva')  # Art/Golfer/<name> -> /Game/Characters/<name>
+SOURCE = DEST = ANIM_DEST = None
+
+
+def use_golfer(name):
+    global SOURCE, DEST, ANIM_DEST
+    SOURCE = Path(unreal.Paths.project_dir()) / 'Art' / 'Golfer' / name
+    DEST = f'/Game/Characters/{name}'
+    ANIM_DEST = DEST + '/Animations'
 
 # Mixamo file name -> asset name the game looks for (A_Drive, A_Chip, ... are loaded by AGolfCharacter).
 ANIMATIONS = {
@@ -46,6 +53,7 @@ ANIMATIONS = {
     'Exiting Car': 'A_ExitBuggy',
     'Walking': 'A_Walk',   # Fixed/ copies retargeted onto the golfer by Art/Blender/retarget_walk_idle.py
     'Idle': 'A_Idle',
+    'Running': 'A_Run',    # Goofy Running (Meshy rig): the jog and run
 }
 NEEDS_REDOWNLOAD = {}
 
@@ -75,8 +83,8 @@ def import_body():
     skeleton = mesh.get_editor_property('skeleton')
     assert skeleton, 'No skeleton created for SK_Golfer'
     height = mesh.get_bounds().box_extent.z * 2
-    print(f'BODY SK_Golfer skeleton {skeleton.get_path_name()} height {height:.1f} cm (the game scales it to 180 cm)')
-    assert 120 < height < 220, f'SK_Golfer is {height:.1f} cm tall; expected about 171 (import scale is wrong)'
+    print(f'BODY SK_Golfer skeleton {skeleton.get_path_name()} height {height:.1f} cm (the game scales it to its height)')
+    assert 120 < height < 220, f'SK_Golfer is {height:.1f} cm tall; expected about 170 (import scale is wrong)'
     return skeleton
 
 
@@ -116,7 +124,17 @@ def import_clubs():
         print(f'CLUB {name} length {mesh.get_bounds().box_extent.z * 2:.1f} cm')
 
 
-def import_golfer(include_idle_walk=False):
+def import_golfer(golfers=GOLFERS, include_idle_walk=False):
+    """Both golfers by default; import_golfer(['Diva']) for just one."""
+    imported = []
+    for name in golfers:
+        use_golfer(name)
+        print(f'===== {name}')
+        imported += import_one(include_idle_walk)
+    return imported
+
+
+def import_one(include_idle_walk=False):
     skeleton = import_body()
     import_clubs()
     wanted = dict(ANIMATIONS)
@@ -129,8 +147,9 @@ def import_golfer(include_idle_walk=False):
     return imported
 
 
-def reimport_animations(names):
-    """Re-import only these clips, e.g. reimport_animations(['A_Chip', 'A_Putt']) after fixing them."""
+def reimport_animations(names, golfer='Eccentric'):
+    """Re-import only these clips, e.g. reimport_animations(['A_Chip', 'A_Putt'], 'Diva') after fixing them."""
+    use_golfer(golfer)
     skeleton = unreal.load_asset(f'{DEST}/SK_Golfer').get_editor_property('skeleton')
     return [name for source, name in ANIMATIONS.items() if name in names and import_animation(skeleton, source, name)]
 

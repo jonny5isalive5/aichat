@@ -59,8 +59,46 @@ AGolfCharacter::AGolfCharacter()
 	Camera->SetupAttachment(CameraArm);
 	Camera->SetFieldOfView(70.f);
 
-	auto Path = [](const TCHAR* Name) { return FSoftObjectPath(FString::Printf(TEXT("/Game/Characters/Eccentric/%s.%s"), Name, Name)); };
-	auto Anim = [](const TCHAR* Name) { return FSoftObjectPath(FString::Printf(TEXT("/Game/Characters/Eccentric/Animations/%s.%s"), Name, Name)); };
+	PointAssetsAt(0);
+
+	// Walking between shots: turn toward where you're going (the camera follows behind).
+	UCharacterMovementComponent* Movement = GetCharacterMovement();
+	Movement->bOrientRotationToMovement = false;
+	Movement->RotationRate = FRotator(0.f, 540.f, 0.f);
+	Movement->MaxWalkSpeed = WalkSpeed;
+	Movement->BrakingDecelerationWalking = 1400.f;
+}
+
+namespace
+{
+	/** The golfers a player can be. Speeds are measured from each one's own walk and run clips (feet don't skate). */
+	struct FGolferBodyInfo
+	{
+		const TCHAR* Folder;   // /Game/Characters/<Folder>: SK_Golfer, clubs, Animations/A_*
+		float Height;          // cm in game
+		float WalkAnimSpeed;   // cm/s the walk clip covers at play rate 1
+		float RunAnimSpeed;    // cm/s the run clip covers at play rate 1
+		float WalkSpeed;       // cm/s at pace 0
+		float RunSpeed;        // cm/s at pace 1
+		float JogFromSpeed;    // cm/s where the legs change to the run clip
+	};
+	const FGolferBodyInfo GolferBodies[] = {
+		{ TEXT("Eccentric"), 180.f, 83.f, 137.f, 120.f, 330.f, 200.f },  // the man
+		{ TEXT("Diva"), 172.f, 125.f, 205.f, 130.f, 400.f, 240.f },      // his wife
+	};
+}
+
+int32 AGolfCharacter::NumBodies()
+{
+	return UE_ARRAY_COUNT(GolferBodies);
+}
+
+void AGolfCharacter::PointAssetsAt(uint8 InBody)
+{
+	const FGolferBodyInfo& Info = GolferBodies[FMath::Clamp<int32>(InBody, 0, NumBodies() - 1)];
+	const FString Folder = FString::Printf(TEXT("/Game/Characters/%s"), Info.Folder);
+	auto Path = [&Folder](const TCHAR* Name) { return FSoftObjectPath(FString::Printf(TEXT("%s/%s.%s"), *Folder, Name, Name)); };
+	auto Anim = [&Folder](const TCHAR* Name) { return FSoftObjectPath(FString::Printf(TEXT("%s/Animations/%s.%s"), *Folder, Name, Name)); };
 	GolferMeshAsset = TSoftObjectPtr<USkeletalMesh>(Path(TEXT("SK_Golfer")));
 	DriveAnim = TSoftObjectPtr<UAnimSequence>(Anim(TEXT("A_Drive")));
 	ChipAnim = TSoftObjectPtr<UAnimSequence>(Anim(TEXT("A_Chip")));
@@ -76,15 +114,53 @@ AGolfCharacter::AGolfCharacter()
 	IdleAnim = TSoftObjectPtr<UAnimSequence>(Anim(TEXT("A_Idle")));
 	WalkAnim = TSoftObjectPtr<UAnimSequence>(Anim(TEXT("A_Walk")));
 	RunAnim = TSoftObjectPtr<UAnimSequence>(Anim(TEXT("A_Run")));
-
-	// Walking between shots: turn toward where you're going (the camera follows behind).
-	UCharacterMovementComponent* Movement = GetCharacterMovement();
-	Movement->bOrientRotationToMovement = false;
-	Movement->RotationRate = FRotator(0.f, 540.f, 0.f);
-	Movement->MaxWalkSpeed = WalkSpeed;
-	Movement->BrakingDecelerationWalking = 1400.f;
 	IronClubAsset = TSoftObjectPtr<UStaticMesh>(Path(TEXT("SM_Club_Iron")));
 	PutterClubAsset = TSoftObjectPtr<UStaticMesh>(Path(TEXT("SM_Club_Putter")));
+	GolferHeight = Info.Height;
+	WalkAnimSpeed = Info.WalkAnimSpeed;
+	RunAnimSpeed = Info.RunAnimSpeed;
+	WalkSpeed = Info.WalkSpeed;
+	RunSpeed = Info.RunSpeed;
+	JogFromSpeed = Info.JogFromSpeed;
+}
+
+void AGolfCharacter::ChooseBody(uint8 InBody)
+{
+	InBody = static_cast<uint8>(FMath::Clamp<int32>(InBody, 0, NumBodies() - 1));
+	if (!HasAuthority())
+	{
+		ServerChooseBody(InBody);
+		return;
+	}
+	Body = InBody;
+	ApplyBody(); // (the listen server's own copy; everyone else through OnRep_Body)
+}
+
+void AGolfCharacter::ServerChooseBody_Implementation(uint8 InBody)
+{
+	ChooseBody(InBody);
+}
+
+void AGolfCharacter::OnRep_Body()
+{
+	ApplyBody();
+}
+
+void AGolfCharacter::ApplyBody()
+{
+	PointAssetsAt(Body);
+	GetMesh()->SetSkeletalMesh(nullptr);
+	LocomotionClip.Reset();
+	LoadBody();
+	ApplyPace();
+	if (bRoaming)
+	{
+		UpdateLocomotion();
+	}
+	else
+	{
+		PlaceClub();
+	}
 }
 
 void AGolfCharacter::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifetimeProps) const
@@ -94,6 +170,7 @@ void AGolfCharacter::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLi
 	DOREPLIFETIME(AGolfCharacter, AimYaw);
 	DOREPLIFETIME(AGolfCharacter, bPuttingStance);
 	DOREPLIFETIME(AGolfCharacter, bRoaming);
+	DOREPLIFETIME(AGolfCharacter, Body);
 }
 
 void AGolfCharacter::BeginPlay()

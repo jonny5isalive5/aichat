@@ -62,6 +62,7 @@ void AGolfPlayerController::SetupInputComponent()
 	InputComponent->BindKey(EKeys::F, IE_Pressed, this, &AGolfPlayerController::OnPlayShotKey);
 	InputComponent->BindKey(EKeys::M, IE_Pressed, this, &AGolfPlayerController::ToggleMicrophone);
 	InputComponent->BindKey(EKeys::LeftShift, IE_Pressed, this, &AGolfPlayerController::OnRunKeyPressed);
+	InputComponent->BindKey(EKeys::C, IE_Pressed, this, &AGolfPlayerController::OnSwapBodyKey);
 	InputComponent->BindKey(EKeys::LeftShift, IE_Released, this, &AGolfPlayerController::OnRunKeyReleased);
 }
 
@@ -219,6 +220,14 @@ void AGolfPlayerController::OnUseKey()
 	else if (IsDriving() || GetBuggyInReach())
 	{
 		ServerToggleBuggy();
+	}
+}
+
+void AGolfPlayerController::OnSwapBodyKey()
+{
+	if (AGolfCharacter* Golfer = GetMyGolfer())
+	{
+		Golfer->ChooseBody(static_cast<uint8>((Golfer->GetBody() + 1) % AGolfCharacter::NumBodies()));
 	}
 }
 

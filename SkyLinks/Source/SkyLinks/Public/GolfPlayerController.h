@@ -206,6 +206,8 @@ private:
 	float CurrentPace = 0.f;
 	bool bRunKey = false;
 	void OnRunKeyPressed() { bRunKey = true; }
+	/** C: swap to the other golfer (for testing, until the main menu picks). */
+	void OnSwapBodyKey();
 	void OnRunKeyReleased() { bRunKey = false; }
 
 	// Lobby

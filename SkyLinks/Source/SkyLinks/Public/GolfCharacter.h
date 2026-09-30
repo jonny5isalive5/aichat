@@ -134,6 +134,11 @@ public:
 	/** Above this ground speed (cm/s) the legs switch from the walk clip to the run clip (a jog, then a run). */
 	UPROPERTY(EditDefaultsOnly, Category = "Golf|Walking") float JogFromSpeed = 310.f;
 
+	/** Which golfer this player is (0 the man, 1 his wife): the main menu will set it; C swaps it for now. */
+	void ChooseBody(uint8 InBody);
+	uint8 GetBody() const { return Body; }
+	static int32 NumBodies();
+
 	/** How fast to go on foot, 0 (walk) .. 1 (run). Local player: set every frame; sent on to the server. */
 	void SetPace(float InPace);
 	float GetPace() const { return Pace; }
@@ -181,6 +186,18 @@ protected:
 
 	UFUNCTION(Server, Unreliable)
 	void ServerSetPace(float InPace);
+
+	UFUNCTION(Server, Reliable)
+	void ServerChooseBody(uint8 InBody);
+
+	UPROPERTY(ReplicatedUsing = OnRep_Body)
+	uint8 Body = 0;
+
+	UFUNCTION()
+	void OnRep_Body();
+	void ApplyBody();
+	/** Point every mesh / clip / club reference at this body's folder and take its size and speeds. */
+	void PointAssetsAt(uint8 InBody);
 
 	float Pace = 0.f;
 	void ApplyPace();

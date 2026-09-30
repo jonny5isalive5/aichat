@@ -1,6 +1,11 @@
-"""The Meshy "Eccentric Golfer" as the player: body for Unreal plus every golf clip retargeted onto him.
+"""The Meshy golfers as players: body for Unreal plus every golf clip retargeted onto them.
 
-    python Art/Blender/build_eccentric_golfer.py      (bpy module, Blender 4.2)
+    python Art/Blender/build_eccentric_golfer.py -- man      (bpy module, Blender 4.2; "woman", or both by default)
+
+The man ("Eccentric Golfer", Art/Golfer/Meshy_Eccentric_Golfer -> Art/Golfer/Eccentric) and his wife ("Retro
+Fairway Diva", Art/Golfer/Meshy_Eccentric_Woman -> Art/Golfer/Diva) are the same Meshy rig, so they're built the
+same way. Both get the old golfer's golf clips, and Goofy Running (made on the Meshy rig) as their jog / run; the
+woman walks with her own Meshy walk, the man with the old golfer's.
 
 Reads Art/Golfer/Meshy_Eccentric_Golfer/ (Meshy export: Character_output.fbx is the body bound in its rest pose;
 the Walking "withSkin" FBX has the same skeleton with mixamorig bone names, used only to rename the bones, as its
@@ -23,24 +28,58 @@ when seated in the buggy clips, where the hips keep the seat's real height.
 from pathlib import Path
 
 import bpy
-from mathutils import Matrix, Quaternion
+from mathutils import Matrix, Quaternion, Vector
+
+import sys
 
 ROOT = Path(__file__).resolve().parents[2]
 GOLFER = ROOT / 'Art' / 'Golfer'
-MESHY = GOLFER / 'Meshy_Eccentric_Golfer'
-BODY_FBX = MESHY / 'Meshy_AI_Eccentric_Golfer_biped_Character_output.fbx'
-NAMES_FBX = MESHY / 'Meshy_AI_Eccentric_Golfer_biped_Animation_Walking_withSkin.fbx'
-TEXTURE = 'Meshy_AI_Eccentric_Golfer_biped_texture_0'
-OUT = GOLFER / 'Eccentric'
+RUN_FBX = GOLFER / 'Meshy_Eccentric_Woman' / 'Goofy Running.fbx'
 
-OLD_SCALE = 1.9    # AGolfCharacter scaled the old golfer by this
-GAME_SCALE = 1.05  # ...and this one about this much (AGolfCharacter::GolferHeight 180 cm / his 171 cm)
+OLD_SCALE = 1.9    # AGolfCharacter scaled the old golfer (whose clips these mostly are) by this
 TRIANGLES = 32000  # mobile budget for the body
+
+# Per character: Meshy folder and file prefix, output folder (Art/Golfer/<out>, /Game/Characters/<out>), height in
+# game (cm; keep AGolfCharacter's body table in step) and whether the Meshy walk replaces the old golfer's.
+CHARACTERS = {
+    'man': dict(folder='Meshy_Eccentric_Golfer', prefix='Meshy_AI_Eccentric_Golfer_biped', out='Eccentric',
+                material='M_EccentricGolfer', height=180.0, own_walk=False),
+    'woman': dict(folder='Meshy_Eccentric_Woman', prefix='Meshy_AI_Retro_Fairway_Diva_biped', out='Diva',
+                  material='M_FairwayDiva', height=172.0, own_walk=True),
+}
 
 CLIPS = ['Golf Drive', 'Golf Drive alt1', 'Golf Drive Setup', 'Golf Tee Up', 'Golf Chip',
          'Golf Chip (replay if long shit in)', 'Golf Putt', 'Golf Putt Victory', 'Golf Putt Victory on long putt',
          'Golf Putt Failure missed putt', 'Golf Bad Shot', 'Hokey Pokey hole in one', 'Silly Dancing celebrate',
-         'Silly Dancing celebrate alt1', 'Entering Car', 'Exiting Car', 'Walking', 'Idle']
+         'Silly Dancing celebrate alt1', 'Entering Car', 'Exiting Car', 'Walking', 'Idle', 'Running']
+
+# Set by build_body for the character being built.
+MESHY = BODY_FBX = NAMES_FBX = OUT = None
+TEXTURE = MATERIAL = ''
+GAME_SCALE = 1.0
+MESHY_NAMES = {}  # Meshy bone name -> Mixamo name, for clips made on the Meshy rig
+
+
+def use_character(key):
+    global MESHY, BODY_FBX, NAMES_FBX, OUT, TEXTURE, MATERIAL
+    c = CHARACTERS[key]
+    MESHY = GOLFER / c['folder']
+    BODY_FBX = MESHY / f"{c['prefix']}_Character_output.fbx"
+    NAMES_FBX = MESHY / f"{c['prefix']}_Animation_Walking_withSkin.fbx"
+    TEXTURE = f"{c['prefix']}_texture_0"
+    MATERIAL = c['material']
+    OUT = GOLFER / c['out']
+    return c
+
+
+def clip_source(name, character):
+    """(fbx, native): the old golfer's clip, or one made on the Meshy rig (native: in place, hips scaled by size)."""
+    if name == 'Running':
+        return RUN_FBX, True
+    if name == 'Walking' and character['own_walk']:
+        return NAMES_FBX, True
+    fixed = GOLFER / 'Animations' / 'Fixed' / f'{name}.fbx'
+    return (fixed if fixed.is_file() else GOLFER / 'Animations' / f'{name}.fbx'), False
 
 
 def short(name):
@@ -76,6 +115,8 @@ def build_body():
     for o in named:
         bpy.data.objects.remove(o)
     assert len(set(renames.values())) == len(renames), f'bone names clash: {renames}'
+    MESHY_NAMES.clear()
+    MESHY_NAMES.update(renames)
     for old, new_name in renames.items():
         group = body.vertex_groups.get(old)
         if group:
@@ -111,7 +152,7 @@ def build_body():
         bpy.ops.object.modifier_apply(modifier='Decimate')
 
     # One PBR material from the loose Meshy maps.
-    mat = bpy.data.materials.new('M_EccentricGolfer')
+    mat = bpy.data.materials.new(MATERIAL)
     mat.use_nodes = True
     nodes, links = mat.node_tree.nodes, mat.node_tree.links
     bsdf = nodes['Principled BSDF']
@@ -145,6 +186,12 @@ def build_body():
     print(f'BODY Golfer.fbx: {sum(len(p.vertices) - 2 for p in body.data.polygons)} triangles, '
           f'{len(arm.data.bones)} bones, head top {height:.2f} m')
 
+    # Scale in game: the height asked for over the model's own height (AGolfCharacter scales the same way).
+    global GAME_SCALE
+    corners = [body.matrix_world @ Vector(v) for v in body.bound_box]
+    GAME_SCALE = CHARACTER['height'] / 100.0 / (max(c.z for c in corners) - min(c.z for c in corners))
+    print(f'SCALE in game x{GAME_SCALE:.3f}')
+
     # Retarget onto a mesh-free copy of the rig (fast), exported under the name Armature.
     rig = arm.copy()
     rig.data = arm.data
@@ -166,8 +213,7 @@ def rest_direction(arm, bone):
 
 
 def retarget(dst, name):
-    fixed = GOLFER / 'Animations' / 'Fixed' / f'{name}.fbx'
-    path = fixed if fixed.is_file() else GOLFER / 'Animations' / f'{name}.fbx'
+    path, native = clip_source(name, CHARACTER)
     if not path.is_file():
         print(f'MISSING {name}')
         return
@@ -180,7 +226,8 @@ def retarget(dst, name):
     if dst.animation_data is None:
         dst.animation_data_create()
     dst.animation_data.action = bpy.data.actions.new(name)
-    src_bones = {short(b.name): b for b in src.pose.bones}
+    # Clips made on the Meshy rig carry Meshy bone names: match them through the rename made for the body.
+    src_bones = {short(MESHY_NAMES.get(b.name, b.name)): b for b in src.pose.bones}
     pairs = [(b, src_bones[short(b.name)]) for b in dst.pose.bones if short(b.name) in src_bones]
     order = {b.name: len(b.parent_recursive) for b, _ in pairs}
     pairs.sort(key=lambda pair: order[pair[0].name])
@@ -189,7 +236,18 @@ def retarget(dst, name):
     src_rest_hips = src.matrix_world @ src_hips.bone.head_local
     dst_rest_hips = dst.matrix_world @ dst_hips.bone.head_local
     lift = dst_rest_hips.z / src_rest_hips.z
-    travel = OLD_SCALE / GAME_SCALE
+    travel = lift if native else OLD_SCALE / GAME_SCALE
+    # Meshy clips walk or run forward: take that out (the character moves them), noting the speed it matched.
+    drift = Vector((0.0, 0.0, 0.0))
+    if native:
+        scene.frame_set(first)
+        start = src.matrix_world @ src_hips.head
+        scene.frame_set(last)
+        drift = (src.matrix_world @ src_hips.head) - start
+        drift.z = 0.0
+        seconds = (last - first) / scene.render.fps
+        speed = drift.length * lift * GAME_SCALE * 100 / max(seconds, 1e-3)
+        print(f'SPEED {name}: the clip moves {speed:.0f} cm/s in game at play rate 1 (now in place)')
     src_rest = {s.name: rest_rotation(src, s) for _, s in pairs}
     # Target rest, swung to point the way the source bone points at rest (Meshy A-pose -> Mixamo T-pose).
     # Buggy clips: seated, the hips must be at the seat's real height, not a leg-length ratio of it.
@@ -212,7 +270,7 @@ def retarget(dst, name):
             pose = (src.matrix_world @ s.matrix).to_quaternion()
             world_rot = pose @ src_rest[s.name].inverted() @ aligned[d.name]
             if d is dst_hips:
-                offset = src.matrix_world @ s.head - src_rest_hips
+                offset = src.matrix_world @ s.head - src_rest_hips - drift * ((f - first) / max(last - first, 1))
                 offset.x *= travel
                 offset.y *= travel
                 offset.z *= lift
@@ -242,14 +300,22 @@ def retarget(dst, name):
     bpy.ops.export_scene.fbx(filepath=str(out), use_selection=True, object_types={'ARMATURE'}, add_leaf_bones=False,
                              bake_anim=True, bake_anim_use_all_actions=False, bake_anim_use_nla_strips=False,
                              bake_anim_force_startend_keying=True, bake_anim_simplify_factor=0.0)
-    print(f'RETARGETED {name}: {len(pairs)} bones, {last - first + 1} frames{" (fixed)" if path == fixed else ""}')
+    print(f'RETARGETED {name}: {len(pairs)} bones, {last - first + 1} frames ({path.name})')
+
+
+CHARACTER = None
 
 
 def main():
-    bpy.ops.wm.read_factory_settings(use_empty=True)
-    rig = build_body()
-    for clip in CLIPS:
-        retarget(rig, clip)
+    global CHARACTER
+    args = sys.argv[sys.argv.index('--') + 1:] if '--' in sys.argv else []
+    for key in [a for a in args if a in CHARACTERS] or list(CHARACTERS):
+        bpy.ops.wm.read_factory_settings(use_empty=True)
+        CHARACTER = use_character(key)
+        print(f'===== {key}: {CHARACTER["out"]}')
+        rig = build_body()
+        for clip in CLIPS:
+            retarget(rig, clip)
 
 
 main()
