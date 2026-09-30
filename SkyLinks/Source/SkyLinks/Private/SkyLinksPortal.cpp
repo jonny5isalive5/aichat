@@ -41,36 +41,51 @@ void ASkyLinksPortal::BeginPlay()
 	Super::BeginPlay();
 	Hologram->SetText(FText::FromString(Sign));
 	Hologram->SetVisibility(!Sign.IsEmpty());
-	// Ticks for the hologram everywhere but a dedicated server, and for walkers through entry portals on the server.
+	// Ticks for the hologram everywhere but a dedicated server, and on the server for people walking through.
 	SetActorTickEnabled(!IsRunningDedicatedServer() || (HasAuthority() && Target != nullptr));
 }
 
-bool ASkyLinksPortal::Crossed(const FVector& From, const FVector& To) const
+int32 ASkyLinksPortal::Crossing(const FVector& From, const FVector& To) const
 {
 	const FVector Base = GetActorLocation();
 	const FVector Normal = GetActorForwardVector().GetSafeNormal2D();
 	const float Before = FVector::DotProduct(From - Base, Normal);
 	const float After = FVector::DotProduct(To - Base, Normal);
-	if (Before >= 0.f || After < 0.f)
+	int32 Direction = 0;
+	if (Before < 0.f && After >= 0.f)
 	{
-		return false; // Only going through forwards counts.
+		Direction = 1;   // through the way the portal faces
+	}
+	else if (Before > 0.f && After <= 0.f)
+	{
+		Direction = -1;  // through the other way
+	}
+	if (Direction == 0)
+	{
+		return 0;
 	}
 	const float T = Before / (Before - After);
 	const FVector Hit = FMath::Lerp(From, To, T) - Base;
 	const FVector Side = FVector::CrossProduct(FVector::UpVector, Normal);
 	const float Lateral = FMath::Abs(FVector::DotProduct(Hit, Side));
-	return Lateral <= OpeningRadius && Hit.Z > -150.f && Hit.Z < OpeningHeight;
+	return Lateral <= OpeningRadius && Hit.Z > -150.f && Hit.Z < OpeningHeight ? Direction : 0;
 }
 
-ASkyLinksPortal* ASkyLinksPortal::FindCrossed(const UWorld* World, const FVector& From, const FVector& To)
+ASkyLinksPortal* ASkyLinksPortal::FindCrossed(const UWorld* World, const FVector& From, const FVector& To, int32& OutDirection)
 {
+	OutDirection = 0;
 	if (!World)
 	{
 		return nullptr;
 	}
 	for (TActorIterator<ASkyLinksPortal> It(World); It; ++It)
 	{
-		if (It->Target && It->Crossed(From, To))
+		if (!It->Target)
+		{
+			continue;
+		}
+		OutDirection = It->Crossing(From, To);
+		if (OutDirection != 0)
 		{
 			return *It;
 		}
@@ -86,8 +101,9 @@ bool ASkyLinksPortal::IsNearAnExit(const UWorld* World, const FVector& Location,
 	}
 	for (TActorIterator<ASkyLinksPortal> It(World); It; ++It)
 	{
-		const ASkyLinksPortal* Exit = It->Target;
-		if (Exit && FVector::Dist2D(Location, Exit->GetActorLocation() + Exit->GetActorForwardVector() * It->ExitDistance) < Tolerance)
+		const FVector Out = It->GetActorForwardVector().GetSafeNormal2D() * It->ExitDistance;
+		if (FVector::Dist2D(Location, It->GetActorLocation() + Out) < Tolerance
+			|| FVector::Dist2D(Location, It->GetActorLocation() - Out) < Tolerance)
 		{
 			return true;
 		}
@@ -95,17 +111,18 @@ bool ASkyLinksPortal::IsNearAnExit(const UWorld* World, const FVector& Location,
 	return false;
 }
 
-void ASkyLinksPortal::ExitFor(const FVector& Location, const FRotator& Rotation, FVector& OutLocation, FRotator& OutRotation) const
+void ASkyLinksPortal::ExitFor(const FVector& Location, const FRotator& Rotation, int32 Direction, FVector& OutLocation, FRotator& OutRotation) const
 {
 	check(Target);
-	// Keep the heading relative to the portal: straight in, straight out.
+	// Keep the heading relative to the portal: straight in, straight out, whichever way you went through.
 	const float Turn = Target->GetActorRotation().Yaw - GetActorRotation().Yaw;
 	OutRotation = FRotator(0.f, Rotation.Yaw + Turn, 0.f);
 	// And the sideways offset from the middle of the opening.
 	const FVector Side = FVector::CrossProduct(FVector::UpVector, GetActorForwardVector().GetSafeNormal2D());
 	const float Lateral = FMath::Clamp(FVector::DotProduct(Location - GetActorLocation(), Side), -OpeningRadius, OpeningRadius);
-	const FVector TargetSide = FVector::CrossProduct(FVector::UpVector, Target->GetActorForwardVector().GetSafeNormal2D());
-	OutLocation = Target->GetActorLocation() + Target->GetActorForwardVector().GetSafeNormal2D() * ExitDistance + TargetSide * Lateral;
+	const FVector TargetForward = Target->GetActorForwardVector().GetSafeNormal2D();
+	const FVector TargetSide = FVector::CrossProduct(FVector::UpVector, TargetForward);
+	OutLocation = Target->GetActorLocation() + TargetForward * (ExitDistance * Direction) + TargetSide * Lateral;
 }
 
 void ASkyLinksPortal::FaceHologram(float DeltaSeconds)
@@ -152,15 +169,19 @@ void ASkyLinksPortal::Tick(float DeltaSeconds)
 			continue;
 		}
 		const FVector Now = Golfer->GetActorLocation();
-		if (const FVector* Before = Walkers.Find(Golfer))
+		const FVector* Before = Walkers.Find(Golfer);
+		// A jump of more than 10 m in one tick is someone arriving through a portal, not walking: ignore it
+		// (otherwise the line from the old island to the new one could look like a step through this portal).
+		if (Before && FVector::Dist(*Before, Now) < 1000.f)
 		{
 			// Characters' origins are at the middle of the capsule: compare their feet.
 			const FVector Drop(0.f, 0.f, Golfer->GetSimpleCollisionHalfHeight());
-			if (Crossed(*Before - Drop, Now - Drop))
+			const int32 Direction = Crossing(*Before - Drop, Now - Drop);
+			if (Direction != 0)
 			{
 				FVector Exit;
 				FRotator Facing;
-				ExitFor(Now, Golfer->GetActorRotation(), Exit, Facing);
+				ExitFor(Now, Golfer->GetActorRotation(), Direction, Exit, Facing);
 				Golfer->TeleportTo(Exit + Drop + FVector(0.f, 0.f, 20.f), Facing);
 				Walkers.Remove(Golfer);
 				continue;

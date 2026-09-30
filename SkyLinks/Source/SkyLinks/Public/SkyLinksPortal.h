@@ -8,10 +8,11 @@ class UStaticMeshComponent;
 class UTextRenderComponent;
 
 /**
- * A portal between islands: drive the buggy (or walk) through the ring and you come out of the Target portal
- * on the next island, heading the same way relative to it and at the same speed. The actor's origin is on the
- * ground at the foot of the ring and it faces (+X) the way you drive through it. Entry portals have a Target;
- * arrival portals don't (they are one-way, so you can't bounce straight back).
+ * A portal between islands: drive the buggy (or walk) through the ring and you come out of its Target portal
+ * on the other island, heading the same way relative to it and at the same speed. Pairs point at each other,
+ * so they work both ways: through the end-of-hole portal to the next tee, and back again. The actor's origin is
+ * on the ground at the foot of the ring; it faces (+X) the way you travel on to the next hole, and whichever way
+ * you go through one, you come out of the other on the far side going the same way.
  *
  * The buggy checks for portals itself while it drives (it is simulated on the driver's machine); players on foot
  * are teleported by the portal on the server. Placed by Scripts/apply_floating_islands.py (isl.portals()).
@@ -25,7 +26,7 @@ public:
 	ASkyLinksPortal();
 	virtual void Tick(float DeltaSeconds) override;
 
-	/** Where you come out. None: an arrival portal (nothing happens when you go through it). */
+	/** Where you come out (the other portal of the pair). None: a portal that goes nowhere. */
 	UPROPERTY(EditAnywhere, Category = "Portal")
 	TObjectPtr<ASkyLinksPortal> Target;
 
@@ -45,7 +46,7 @@ public:
 	UPROPERTY(EditAnywhere, Category = "Portal")
 	float ExitDistance = 450.f;
 
-	/** The hologram sign floating above the ring, e.g. "HOLE 2 >" (set by the editor script). */
+	/** The hologram sign floating above the ring, e.g. "HOLE 2  THIS WAY" (set by the editor script). */
 	UPROPERTY(EditAnywhere, Category = "Portal")
 	FString Sign;
 
@@ -56,12 +57,13 @@ public:
 	UPROPERTY(VisibleAnywhere, Category = "Portal")
 	TObjectPtr<UTextRenderComponent> Hologram;
 
-	/** The entry portal whose opening the segment From -> To passes through going forward, if any. */
-	static ASkyLinksPortal* FindCrossed(const UWorld* World, const FVector& From, const FVector& To);
+	/** The portal whose opening the segment From -> To passes through, if any, and which way
+	 *  (OutDirection +1: the way it faces, -1: the other way). */
+	static ASkyLinksPortal* FindCrossed(const UWorld* World, const FVector& From, const FVector& To, int32& OutDirection);
 
-	/** Where something that entered this portal at Location with Rotation comes out (ground height of the
-	 *  target's base; callers settle it onto the ground themselves). */
-	void ExitFor(const FVector& Location, const FRotator& Rotation, FVector& OutLocation, FRotator& OutRotation) const;
+	/** Where something that went through this portal (Direction as from FindCrossed) at Location with Rotation
+	 *  comes out (ground height of the target's base; callers settle it onto the ground themselves). */
+	void ExitFor(const FVector& Location, const FRotator& Rotation, int32 Direction, FVector& OutLocation, FRotator& OutRotation) const;
 
 	/** True when Location is where something leaving some portal would come out (server check on a driver's hop). */
 	static bool IsNearAnExit(const UWorld* World, const FVector& Location, float Tolerance);
@@ -71,7 +73,8 @@ protected:
 	virtual void OnConstruction(const FTransform& Transform) override;
 
 private:
-	bool Crossed(const FVector& From, const FVector& To) const;
+	/** +1 / -1 if From -> To goes through the opening (with / against the way it faces), else 0. */
+	int32 Crossing(const FVector& From, const FVector& To) const;
 
 	void FaceHologram(float DeltaSeconds);
 	float HologramTime = 0.f;

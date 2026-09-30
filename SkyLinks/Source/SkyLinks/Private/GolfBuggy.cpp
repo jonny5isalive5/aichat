@@ -177,14 +177,15 @@ void AGolfBuggy::MulticastTeleport_Implementation(FVector Location, FRotator Rot
 
 bool AGolfBuggy::TryPortal(const FVector& Start)
 {
-	ASkyLinksPortal* Portal = ASkyLinksPortal::FindCrossed(GetWorld(), Start, GetActorLocation());
+	int32 Direction = 0;
+	ASkyLinksPortal* Portal = ASkyLinksPortal::FindCrossed(GetWorld(), Start, GetActorLocation(), Direction);
 	if (!Portal)
 	{
 		return false;
 	}
 	FVector Exit;
 	FRotator Facing;
-	Portal->ExitFor(GetActorLocation(), GetActorRotation(), Exit, Facing);
+	Portal->ExitFor(GetActorLocation(), GetActorRotation(), Direction, Exit, Facing);
 	FVector Ground = Exit + FVector(0.f, 0.f, RideHeight);
 	FRotator Rotation = Facing;
 	bool bWater = false;

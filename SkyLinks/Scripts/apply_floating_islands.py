@@ -1091,7 +1091,10 @@ return c + float3(1.2, 1.4, 1.6) * pow(saturate(1.0 - r), 6.0) * (1.0 - 0.8 * Sh
 """
 
 VIEW_UV_CODE = """
-return float2(UV.x, 1.0 - UV.y);
+// Seen from behind the portal (looking the way it faces) the picture reads left to right as shot; from in
+// front (the way you drive through it backwards) the disc is seen from its other side, so mirror it.
+float mirror = dot(normalize(CameraDir), normalize(AxisX)) > 0.0 ? 1.0 : 0.0;
+return float2(lerp(UV.x, 1.0 - UV.x, mirror), 1.0 - UV.y);
 """
 
 
@@ -1103,7 +1106,16 @@ def swirl_material():
     mat.set_editor_property('shading_model', unreal.MaterialShadingModel.MSM_UNLIT)
     mat.set_editor_property('two_sided', True)
     uv = _expr(mat, unreal.MaterialExpressionTextureCoordinate, -1100, 0)
-    flipped = _custom(mat, VIEW_UV_CODE, {'UV': (uv, '')}, -900, 250, output=unreal.CustomMaterialOutputType.CMOT_FLOAT2)
+    axis = _expr(mat, unreal.MaterialExpressionTransform, -1100, 400,
+                 transform_source_type=unreal.MaterialVectorCoordTransformSource.TRANSFORMSOURCE_LOCAL,
+                 transform_type=unreal.MaterialVectorCoordTransform.TRANSFORM_WORLD)
+    lib.connect_material_expressions(_expr(mat, unreal.MaterialExpressionConstant3Vector, -1300, 400,
+                                           constant=unreal.LinearColor(1.0, 0.0, 0.0, 0.0)), '', axis, '')
+    flipped = _custom(mat, VIEW_UV_CODE, {
+        'UV': (uv, ''),
+        'CameraDir': (_expr(mat, unreal.MaterialExpressionCameraVectorWS, -1100, 550), ''),
+        'AxisX': (axis, ''),
+    }, -900, 250, output=unreal.CustomMaterialOutputType.CMOT_FLOAT2)
     view = _expr(mat, unreal.MaterialExpressionTextureSampleParameter2D, -700, 250, parameter_name='View',
                  texture=unreal.load_asset(f'{TEXTURE_DEST}/T_Macro'),
                  sampler_type=unreal.MaterialSamplerType.SAMPLERTYPE_COLOR)
@@ -1123,7 +1135,7 @@ def swirl_material():
 
 def apply_portals(materials, links):
     """The portal pairs from Course_links.json: at the end of each hole where the buggy path leaves the island,
-    and on the next hole's tee island, with a hologram sign over the one you drive into."""
+    and on the next hole's tee island. They work both ways, each with a hologram sign saying where it goes."""
     folder = 'Course/Portals'
     for actor in _all():
         if str(actor.get_folder_path()) == folder:
@@ -1147,8 +1159,11 @@ def apply_portals(materials, links):
             portal.set_folder_path(folder)
             portal.get_editor_property('ring').set_static_mesh(ring)
             placed[end] = portal
+        # Both ways: the end-of-hole portal leads on to the next tee, the one by the tee leads back.
         placed['out'].set_editor_property('target', placed['in'])
+        placed['in'].set_editor_property('target', placed['out'])
         placed['out'].set_editor_property('sign', f"HOLE {link['to']}  THIS WAY")
+        placed['in'].set_editor_property('sign', f"BACK TO HOLE {link['from']}")
         print(f"PORTAL {link['from']} -> {link['to']}")
 
 
@@ -1174,15 +1189,14 @@ def _swirl_slot(mesh):
 
 
 def portal_views(size=512):
-    """Bake a picture of the next hole into every entry portal, so you see its tee through the swirl. A camera
-    stands just in front of each arrival portal looking the way you'll drive out, takes one shot, and the shot is
-    saved as T_PortalView_nn and shown in the portal leading there (no cost while playing). Run again after
-    changing a hole (trees, floaters) to re-shoot them all."""
+    """Bake a picture of where each portal leads into its swirl: through the end-of-hole portal you see the next
+    tee, through the one by the tee you see back into the hole before. A camera stands just past the portal you'd
+    come out of, looking the way you'd be driving, takes one shot, and it's saved (T_PortalView_02, _01b...) and
+    shown in the portal (no cost while playing). Run again after changing a hole (trees, floaters)."""
     swirl = swirl_material()
     everything = _all()
     portals = {a.get_actor_label(): a for a in everything if str(a.get_folder_path()) == 'Course/Portals'}
-    arrivals = {label: a for label, a in portals.items() if label.endswith('_In')}
-    if not arrivals:
+    if not portals:
         print('PORTAL VIEWS: no portals in the level yet - run isl.portals() first')
         return
     target_path = f'{PORTAL_VIEW_DIR}/RT_PortalView'
@@ -1200,20 +1214,25 @@ def portal_views(size=512):
     capture.set_editor_property('capture_every_frame', False)
     capture.set_editor_property('capture_on_movement', False)
     done = 0
-    for label, arrival in sorted(arrivals.items()):
-        number = label.split('_')[2]  # Portal_01_02_In -> 02
-        entry = portals.get(label[:-3] + '_Out')
-        if not entry:
+    for label, entry in sorted(portals.items()):
+        # Portal_01_02_Out leads on to hole 2 (look out of the _In portal the way you'd drive on); Portal_01_02_In
+        # leads back to hole 1 (look out of the _Out portal back into hole 1).
+        parts = label.split('_')
+        onward = label.endswith('_Out')
+        exit_portal = portals.get(label[:-4] + '_In' if onward else label[:-3] + '_Out')
+        if not exit_portal:
             continue
-        yaw = arrival.get_actor_rotation().yaw
-        forward = arrival.get_actor_forward_vector()
-        base = arrival.get_actor_location()
+        number = parts[2] if onward else parts[1]
+        yaw = exit_portal.get_actor_rotation().yaw + (0.0 if onward else 180.0)
+        forward = exit_portal.get_actor_forward_vector() * (1.0 if onward else -1.0)
+        base = exit_portal.get_actor_location()
         eye = unreal.Vector(base.x + forward.x * 150, base.y + forward.y * 150, base.z + 230)
         camera.set_actor_location_and_rotation(eye, unreal.Rotator(0, -4, yaw), False, True)
-        capture.set_editor_property('hidden_actors', [arrival])
+        capture.set_editor_property('hidden_actors', [exit_portal])
         capture.capture_scene()
-        name = f'T_PortalView_{number}'
-        instance_name = f'MI_PortalView_{number}'
+        tag = f"{number}{'' if onward else 'b'}"  # 02 = view of hole 2 ahead; 01b = view back into hole 1
+        name = f'T_PortalView_{tag}'
+        instance_name = f'MI_PortalView_{tag}'
         instance_path = f'{PORTAL_VIEW_DIR}/{instance_name}'
         instance = unreal.load_asset(instance_path) if unreal.EditorAssetLibrary.does_asset_exist(instance_path) else \
             tools.create_asset(instance_name, PORTAL_VIEW_DIR, unreal.MaterialInstanceConstant, unreal.MaterialInstanceConstantFactoryNew())
@@ -1230,7 +1249,7 @@ def portal_views(size=512):
         ring = entry.get_editor_property('ring')
         ring.set_material(_swirl_slot(ring.get_editor_property('static_mesh')), instance)
         done += 1
-        print(f'PORTAL VIEW hole {int(number)}: {texture.get_name()}')
+        print(f"PORTAL VIEW {label}: {'ahead to' if onward else 'back to'} hole {int(number)}")
     actors.destroy_actor(camera)
     unreal.get_editor_subsystem(unreal.LevelEditorSubsystem).save_current_level()
     print(f'PORTAL VIEWS DONE: {done} portals show the hole they lead to')
