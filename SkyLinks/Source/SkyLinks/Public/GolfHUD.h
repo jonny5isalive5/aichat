@@ -34,7 +34,8 @@ enum class EGolfHudButton : uint8
 	VoicePanelBackground,
 	MutePlayer,
 	Buggy,
-	LobbyPanel
+	LobbyPanel,
+	WalkGo
 };
 
 /**
@@ -104,7 +105,8 @@ private:
 	/** Part of a ring: from StartDegrees (0 = right, clockwise on screen) sweeping SweepDegrees. */
 	void Arc(const FVector2D& Center, float Radius, float StartDegrees, float SweepDegrees, const FLinearColor& Color, float Thickness);
 	void Line(const FVector2D& A, const FVector2D& B, const FLinearColor& Color, float Thickness);
-	void Label(const FString& Text, const FVector2D& Position, float Height, const FLinearColor& Color, bool bCenter);
+	/** bRight: Position is the right end of the text (and its vertical middle). */
+	void Label(const FString& Text, const FVector2D& Position, float Height, const FLinearColor& Color, bool bCenter, bool bRight = false);
 	/** Panel heading: small spaced capitals over a hairline rule with a bright lead-in segment. */
 	void Heading(const FString& Text, const FVector2D& Position, float Width, float Height, bool bCenter = false);
 	/** Bottom-middle message banner (announcements, hints). */

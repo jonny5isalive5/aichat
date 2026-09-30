@@ -1,4 +1,5 @@
 #include "GolfHUD.h"
+#include "GolfCharacter.h"
 #include "GolfBall.h"
 #include "GolfBuggy.h"
 #include "GolfGameState.h"
@@ -181,11 +182,17 @@ void AGolfHUD::Line(const FVector2D& A, const FVector2D& B, const FLinearColor& 
 	Canvas->DrawItem(Item);
 }
 
-void AGolfHUD::Label(const FString& Text, const FVector2D& Position, float Height, const FLinearColor& Color, bool bCenter)
+void AGolfHUD::Label(const FString& Text, const FVector2D& Position, float Height, const FLinearColor& Color, bool bCenter, bool bRight)
 {
 	UFont* Font = GEngine->GetLargeFont();
 	const float Scale = Height * U / FMath::Max(1.f, (float)Font->GetMaxCharHeight());
-	FCanvasTextItem Item(Position, FText::FromString(Text), Font, Color);
+	FVector2D Where = Position;
+	if (bRight)
+	{
+		Where.X -= Font->GetStringSize(*Text) * Scale;
+		Where.Y -= Height * U * 0.5f;
+	}
+	FCanvasTextItem Item(Where, FText::FromString(Text), Font, Color);
 	Item.Scale = FVector2D(Scale, Scale);
 	Item.bCentreX = bCenter;
 	Item.bCentreY = bCenter;
@@ -932,15 +939,51 @@ void AGolfHUD::DrawWalking(AGolfPlayerController* Controller)
 	Disc(Knob, 0.6f * U, Palette::White);
 	Label(TEXT("DRAG TO WALK"), Pad + FVector2D(0.f, 8.6f * U), 1.4f, Palette::Dim, true);
 
+	// GO bar on the right: hold it to go, slide up while holding to speed up (walk, fast walk, jog, run).
+	{
+		const FVector2D Size(8.f * U, 30.f * U);
+		const FVector2D Top(Canvas->ClipX - 6.f * U - Size.X, Canvas->ClipY - 7.f * U - Size.Y);
+		const bool bHeld = Controller->IsPaceHeld();
+		const float Pace = Controller->GetWalkPace();
+		Gradient(Top, Size, FLinearColor(0.05f, 0.1f, 0.18f, 0.55f), FLinearColor(0.02f, 0.05f, 0.1f, 0.7f));
+		// Fill from the bottom up to the pace, brighter while held.
+		const float Filled = bHeld ? FMath::Max(0.1f, Pace) : 0.f;
+		if (Filled > 0.f)
+		{
+			const float Height = Size.Y * Filled;
+			Gradient(FVector2D(Top.X, Top.Y + Size.Y - Height), FVector2D(Size.X, Height),
+				FLinearColor(0.35f, 0.95f, 0.75f, 0.85f), FLinearColor(0.1f, 0.55f, 0.45f, 0.85f));
+		}
+		// A tick and name at each gait: walk, fast walk, jog, run.
+		for (int32 Step = 0; Step < 4; ++Step)
+		{
+			const float Y = Top.Y + Size.Y * (1.f - (Step + 0.5f) / 4.f);
+			Line(FVector2D(Top.X, Y), FVector2D(Top.X + 1.4f * U, Y), Palette::Hairline, 0.12f * U);
+			const bool bThis = bHeld && FMath::Clamp(FMath::FloorToInt(Pace * 4.f), 0, 3) == Step;
+			Label(AGolfCharacter::GaitName((Step + 0.5f) / 4.f), FVector2D(Top.X - 1.f * U, Y), bThis ? 1.6f : 1.2f,
+				bThis ? Palette::White : Palette::Dim, false, true);
+		}
+		const FVector2D Frame[4] = { Top, Top + FVector2D(Size.X, 0.f), Top + Size, Top + FVector2D(0.f, Size.Y) };
+		for (int32 Edge = 0; Edge < 4; ++Edge)
+		{
+			Line(Frame[Edge], Frame[(Edge + 1) % 4], bHeld ? Palette::Glow : Palette::Trim, 0.15f * U);
+		}
+		Label(TEXT("GO"), FVector2D(Top.X + Size.X * 0.5f, Top.Y + Size.Y - 3.f * U), 2.4f, Palette::White, true);
+		Label(TEXT("HOLD, SLIDE UP"), FVector2D(Top.X + Size.X * 0.5f, Top.Y + Size.Y + 2.4f * U), 1.3f, Palette::Dim, true);
+		Buttons.Add({ EGolfHudButton::WalkGo, Top + Size * 0.5f, 0.f, 0, Size });
+	}
+
+	// Tee up / get in sit to the left of the GO bar.
+	const FVector2D Action(Canvas->ClipX - 30.f * U, Canvas->ClipY - 12.f * U);
 	if (Controller->CanTeeUp())
 	{
-		RoundButton(EGolfHudButton::Start, FVector2D(Canvas->ClipX - 11.f * U, Canvas->ClipY - 12.f * U), 6.f * U, TEXT("TEE UP"), Palette::Accept);
-		Label(TEXT("[ E ]"), FVector2D(Canvas->ClipX - 11.f * U, Canvas->ClipY - 3.8f * U), 1.5f, Palette::Dim, true);
+		RoundButton(EGolfHudButton::Start, Action, 6.f * U, TEXT("TEE UP"), Palette::Accept);
+		Label(TEXT("[ E ]"), Action + FVector2D(0.f, 8.2f * U), 1.5f, Palette::Dim, true);
 	}
 	else if (Controller->GetBuggyInReach())
 	{
-		RoundButton(EGolfHudButton::Buggy, FVector2D(Canvas->ClipX - 11.f * U, Canvas->ClipY - 12.f * U), 6.f * U, TEXT("GET IN"), Palette::Accept);
-		Label(TEXT("[ E ]"), FVector2D(Canvas->ClipX - 11.f * U, Canvas->ClipY - 3.8f * U), 1.5f, Palette::Dim, true);
+		RoundButton(EGolfHudButton::Buggy, Action, 6.f * U, TEXT("GET IN"), Palette::Accept);
+		Label(TEXT("[ E ]"), Action + FVector2D(0.f, 8.2f * U), 1.5f, Palette::Dim, true);
 	}
 }
 

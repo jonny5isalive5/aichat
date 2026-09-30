@@ -75,6 +75,7 @@ AGolfCharacter::AGolfCharacter()
 	ExitBuggyAnim = TSoftObjectPtr<UAnimSequence>(Anim(TEXT("A_ExitBuggy")));
 	IdleAnim = TSoftObjectPtr<UAnimSequence>(Anim(TEXT("A_Idle")));
 	WalkAnim = TSoftObjectPtr<UAnimSequence>(Anim(TEXT("A_Walk")));
+	RunAnim = TSoftObjectPtr<UAnimSequence>(Anim(TEXT("A_Run")));
 
 	// Walking between shots: turn toward where you're going (the camera follows behind).
 	UCharacterMovementComponent* Movement = GetCharacterMovement();
@@ -155,6 +156,7 @@ void AGolfCharacter::LoadBody()
 	GetMesh()->VisibilityBasedAnimTickOption = EVisibilityBasedAnimTickOption::AlwaysTickPoseAndRefreshBones;
 	IdleAnim.LoadSynchronous();
 	WalkAnim.LoadSynchronous();
+	RunAnim.LoadSynchronous();
 	HoldAddressPose();
 }
 
@@ -615,6 +617,7 @@ void AGolfCharacter::ApplyRoaming()
 	Movement->MaxWalkSpeed = WalkSpeed;
 	Movement->bOrientRotationToMovement = true;
 	Movement->SetMovementMode(MOVE_Walking);
+	ApplyPace();
 
 	// Follow camera: over the shoulder, trailing the golfer's heading with a little lag.
 	CameraArm->SetUsingAbsoluteLocation(false);
@@ -637,8 +640,11 @@ void AGolfCharacter::UpdateLocomotion()
 		return;
 	}
 	const float Speed = GetVelocity().Size2D();
-	const bool bWalking = Speed > 15.f;
-	UAnimSequence* Clip = (bWalking ? WalkAnim : IdleAnim).Get();
+	const bool bMoving = Speed > 15.f;
+	// Walk and fast walk on the walk clip; jog and run on the run clip (when there is one), each sped up or slowed
+	// to the ground speed so the feet don't skate.
+	const bool bRunning = bMoving && Speed > JogFromSpeed && RunAnim.Get();
+	UAnimSequence* Clip = (bRunning ? RunAnim : bMoving ? WalkAnim : IdleAnim).Get();
 	if (!Clip)
 	{
 		Clip = WalkAnim.Get() ? WalkAnim.Get() : IdleAnim.Get();
@@ -652,8 +658,47 @@ void AGolfCharacter::UpdateLocomotion()
 		GetMesh()->PlayAnimation(Clip, true);
 		LocomotionClip = Clip;
 	}
-	// Match the stride to the ground speed so the feet don't skate.
-	GetMesh()->SetPlayRate(Clip == WalkAnim.Get() ? FMath::Clamp(Speed / WalkAnimSpeed, 0.6f, 2.6f) : 1.f);
+	float Rate = 1.f;
+	if (Clip == RunAnim.Get())
+	{
+		Rate = FMath::Clamp(Speed / RunAnimSpeed, 0.6f, 1.6f);
+	}
+	else if (Clip == WalkAnim.Get())
+	{
+		Rate = FMath::Clamp(Speed / WalkAnimSpeed, 0.6f, 2.8f);
+	}
+	GetMesh()->SetPlayRate(Rate);
+}
+
+void AGolfCharacter::SetPace(float InPace)
+{
+	InPace = FMath::Clamp(InPace, 0.f, 1.f);
+	if (FMath::IsNearlyEqual(InPace, Pace, 0.01f))
+	{
+		return;
+	}
+	Pace = InPace;
+	ApplyPace();
+	if (!HasAuthority())
+	{
+		ServerSetPace(InPace); // The server moves the character too, so it needs the same top speed.
+	}
+}
+
+void AGolfCharacter::ServerSetPace_Implementation(float InPace)
+{
+	Pace = FMath::Clamp(InPace, 0.f, 1.f);
+	ApplyPace();
+}
+
+void AGolfCharacter::ApplyPace()
+{
+	GetCharacterMovement()->MaxWalkSpeed = FMath::Lerp(WalkSpeed, RunSpeed, Pace);
+}
+
+FString AGolfCharacter::GaitName(float InPace)
+{
+	return InPace < 0.25f ? TEXT("WALK") : InPace < 0.5f ? TEXT("FAST WALK") : InPace < 0.75f ? TEXT("JOG") : TEXT("RUN");
 }
 
 void AGolfCharacter::MulticastStandBesideBuggy_Implementation(AGolfBuggy* Buggy)

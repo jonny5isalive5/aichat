@@ -76,6 +76,9 @@ public:
 	/** A buggy close enough to get into with E (mine, or a free one before the round), or null. */
 	AGolfBuggy* GetBuggyInReach() const;
 	FVector2D GetWalkStick() const { return TouchWalk; }
+	/** On foot: the GO bar is held (or W / the stick is pushed), and how fast, 0 walk .. 1 run. */
+	bool IsPaceHeld() const { return PaceFingers > 0; }
+	float GetWalkPace() const { return CurrentPace; }
 	/** Lobby, host on foot by the first tee: E tees up and starts the round. */
 	bool CanTeeUp() const;
 	/** Only the host can start the round (listen server's own player, or playing solo). */
@@ -127,7 +130,7 @@ public:
 	static constexpr float FullPowerSwipe = 0.45f;
 
 private:
-	enum class ETouchRole : uint8 { None, Aim, Swipe, Steer, Gas, Reverse, Walk };
+	enum class ETouchRole : uint8 { None, Aim, Swipe, Steer, Gas, Reverse, Walk, Pace };
 
 	void OnTouchPressed(ETouchIndex::Type FingerIndex, FVector Location);
 	void OnTouchMoved(ETouchIndex::Type FingerIndex, FVector Location);
@@ -197,6 +200,13 @@ private:
 
 	// Walking: the left-thumb stick (-1..1, +Y forward).
 	FVector2D TouchWalk = FVector2D::ZeroVector;
+	/** Fingers holding the GO bar, how far up it they've slid (0..1), and the pace being used this frame. */
+	int32 PaceFingers = 0;
+	float TouchPace = 0.f;
+	float CurrentPace = 0.f;
+	bool bRunKey = false;
+	void OnRunKeyPressed() { bRunKey = true; }
+	void OnRunKeyReleased() { bRunKey = false; }
 
 	// Lobby
 	bool bLobbyPanelHidden = false;

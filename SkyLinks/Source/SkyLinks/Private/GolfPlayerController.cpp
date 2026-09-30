@@ -61,6 +61,8 @@ void AGolfPlayerController::SetupInputComponent()
 	InputComponent->BindKey(EKeys::S, IE_Released, this, &AGolfPlayerController::OnThrottleBackReleased);
 	InputComponent->BindKey(EKeys::F, IE_Pressed, this, &AGolfPlayerController::OnPlayShotKey);
 	InputComponent->BindKey(EKeys::M, IE_Pressed, this, &AGolfPlayerController::ToggleMicrophone);
+	InputComponent->BindKey(EKeys::LeftShift, IE_Pressed, this, &AGolfPlayerController::OnRunKeyPressed);
+	InputComponent->BindKey(EKeys::LeftShift, IE_Released, this, &AGolfPlayerController::OnRunKeyReleased);
 }
 
 void AGolfPlayerController::ToggleMicrophone()
@@ -229,10 +231,18 @@ void AGolfPlayerController::UpdateWalking()
 	}
 	// W/S and A/D (the keys also used for throttle and aim), plus the left-thumb stick; relative to the camera.
 	FVector2D Stick(FMath::Clamp(AimInput, -1.f, 1.f) + TouchWalk.X, FMath::Clamp(KeyThrottle, -1.f, 1.f) + TouchWalk.Y);
+	// Holding GO walks on the way you're facing (the stick, if pushed, still says which way).
+	if (PaceFingers > 0 && Stick.IsNearlyZero(0.2f))
+	{
+		Stick = FVector2D(0.f, 1.f);
+	}
 	if (Stick.SizeSquared() > 1.f)
 	{
 		Stick.Normalize();
 	}
+	// How fast: sliding up the held GO bar, or Shift on a keyboard; otherwise a walk.
+	CurrentPace = PaceFingers > 0 ? TouchPace : bRunKey ? 1.f : 0.f;
+	Golfer->SetPace(CurrentPace);
 	if (Stick.IsNearlyZero(0.05f))
 	{
 		return;
@@ -743,6 +753,12 @@ bool AGolfPlayerController::HandleButton(const FVector2D& Screen, int32 Finger)
 	switch (Hud ? Hud->HitTest(Screen, Payload) : EGolfHudButton::None)
 	{
 	case EGolfHudButton::Start: ServerRequestStart(); return true;
+	case EGolfHudButton::WalkGo:
+		// Hold to go; slide up while holding to go faster (see OnTouchMoved).
+		TouchRoles[Finger] = ETouchRole::Pace;
+		++PaceFingers;
+		TouchPace = 0.f;
+		return true;
 	case EGolfHudButton::Microphone: ToggleMicrophone(); return true;
 	case EGolfHudButton::VoicePanel: bVoicePanelOpen = !bVoicePanelOpen; return true;
 	case EGolfHudButton::VoicePanelBackground: return true;
@@ -915,6 +931,10 @@ void AGolfPlayerController::OnTouchMoved(ETouchIndex::Type FingerIndex, FVector 
 		TouchWalk = Offset.SizeSquared() > 1.f ? Offset.GetSafeNormal() : Offset;
 		break;
 	}
+	case ETouchRole::Pace:
+		// Up from where the finger went down: a quarter of the screen height takes you from a walk to a run.
+		TouchPace = FMath::Clamp((TouchStarts[Finger].Y - Screen.Y) / (0.25f * ViewportHeight()), 0.f, 1.f);
+		break;
 	case ETouchRole::Steer:
 		// Steering is relative to where the thumb went down.
 		TouchSteer = FMath::Clamp((Screen.X - TouchStarts[Finger].X) / (0.15f * ViewportHeight()), -1.f, 1.f);
@@ -942,6 +962,13 @@ void AGolfPlayerController::OnTouchReleased(ETouchIndex::Type FingerIndex, FVect
 		break;
 	case ETouchRole::Walk:
 		TouchWalk = FVector2D::ZeroVector;
+		break;
+	case ETouchRole::Pace:
+		PaceFingers = FMath::Max(0, PaceFingers - 1);
+		if (PaceFingers == 0)
+		{
+			TouchPace = 0.f;
+		}
 		break;
 	case ETouchRole::Gas:
 		GasFingers = FMath::Max(0, GasFingers - 1);

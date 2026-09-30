@@ -124,8 +124,21 @@ public:
 	/** Ground speed (cm/s) the walk clip matches at play rate 1: about two 72 cm steps per 1.4 s cycle. */
 	UPROPERTY(EditDefaultsOnly, Category = "Golf|Animations") float WalkAnimSpeed = 105.f;
 
-	/** On-foot top speed, cm/s (a brisk walk). */
-	UPROPERTY(EditDefaultsOnly, Category = "Golf|Walking") float WalkSpeed = 240.f;
+	UPROPERTY(EditDefaultsOnly, Category = "Golf|Animations") TSoftObjectPtr<UAnimSequence> RunAnim;
+	/** Ground speed (cm/s) the run clip matches at play rate 1 (slower = a jog, faster = a sprint). */
+	UPROPERTY(EditDefaultsOnly, Category = "Golf|Animations") float RunAnimSpeed = 420.f;
+
+	/** On-foot speed at pace 0 (a walk) and pace 1 (a run), cm/s. The player sets the pace by sliding up the GO bar. */
+	UPROPERTY(EditDefaultsOnly, Category = "Golf|Walking") float WalkSpeed = 170.f;
+	UPROPERTY(EditDefaultsOnly, Category = "Golf|Walking") float RunSpeed = 600.f;
+	/** Above this ground speed (cm/s) the legs switch from the walk clip to the run clip (a jog, then a run). */
+	UPROPERTY(EditDefaultsOnly, Category = "Golf|Walking") float JogFromSpeed = 310.f;
+
+	/** How fast to go on foot, 0 (walk) .. 1 (run). Local player: set every frame; sent on to the server. */
+	void SetPace(float InPace);
+	float GetPace() const { return Pace; }
+	/** WALK / FAST WALK / JOG / RUN for a pace. */
+	static FString GaitName(float InPace);
 
 	/** The Mixamo car clips are slow for a golf cart; play them faster. */
 	UPROPERTY(EditDefaultsOnly, Category = "Golf|Buggy") float BuggyAnimRate = 1.5f;
@@ -165,6 +178,12 @@ protected:
 
 	UFUNCTION(Server, Unreliable)
 	void ServerSetAim(float InAimYaw);
+
+	UFUNCTION(Server, Unreliable)
+	void ServerSetPace(float InPace);
+
+	float Pace = 0.f;
+	void ApplyPace();
 
 	UFUNCTION()
 	void OnRep_Address();
