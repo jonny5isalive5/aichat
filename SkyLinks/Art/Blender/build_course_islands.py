@@ -152,10 +152,11 @@ def reshape_bunkers(number, layout):
             d = d / (np.linalg.norm(d) + 1e-9)
             centre = (gc.x + d[0] * (gr + 0.9 * r), gc.y + d[1] * (gr + 0.9 * r))
             # Tight to the green with a thin grass collar (outlines that cross each other upset the mesher).
-            shape = organic_blob(centre, r, rng, (1.0, 1.5), 90.0).difference(green.buffer(0.8)).difference(fair.buffer(1.0))
+            shape = organic_blob(centre, r, rng, (1.0, 1.5), 90.0).difference(green.buffer(0.8))
             depth = rng.uniform(1.1, 1.9)
         elif r > 14:
-            shape = organic_blob((c.x, c.y), r, rng, (0.9, 1.3), 20.0).difference(fair.buffer(1.0))
+            # Whole: where it reaches the fairway the sand cuts into it (a half bunker with a straight edge looked odd).
+            shape = organic_blob((c.x, c.y), r, rng, (0.9, 1.3), 20.0)
             depth = rng.uniform(0.5, 0.9)
         else:
             # On the fairway: wholly inside it, a metre in from its edge.
@@ -970,7 +971,8 @@ def forest_plan(number, layout, height_local, rng):
                              + [b.buffer(3) for b in layout['bunkers']]
                              + ([layout['water'].buffer(2.5)] if layout.get('water') is not None else [])
                              + ([layout['paths'].buffer(2.5)] if layout.get('paths') is not None else [])
-                             + ([stadium_zone(layout)] if layout.get('stadium') else []))
+                             + ([stadium_zone(layout)] if layout.get('stadium') else [])
+                             + [Point(*spot).buffer(9) for spot in ANCHORS.get(number, {}).values()])
     mix = C.HOLES[number]['mix'] if number in C.HOLES else {'Oak_A': 3, 'Oak_B': 3, 'Poplar': 1, 'Birch': 2, 'Bush_Round': 2, 'Bush_Flowering': 1}
     kinds, weights = zip(*mix.items())
     woods = layout.get('woods')
@@ -1321,6 +1323,66 @@ def bridge_anchor_points(layouts):
     return out
 
 
+PORTAL_YAWS = {}  # hole n -> (yaw of the portal behind n's green, yaw of the one behind n+1's tee), world degrees
+
+
+def portal_spot(layout, centre, forward, distances, turns, clear):
+    """First spot at one of `distances` from `centre` along `forward` turned by one of `turns` (degrees) that has
+    room for a portal ring: well inside the island and clear of greens, bunkers, water and the stadium."""
+    land_room = layout['land'].buffer(-8)
+    blocked = unary_union([layout['green'].buffer(4), layout['tee'].buffer(3)]
+                          + [b.buffer(3) for b in layout['bunkers']]
+                          + ([layout['water'].buffer(4)] if layout.get('water') is not None else [])
+                          + ([stadium_zone(layout)] if layout.get('stadium') else []) + clear)
+    base = math.atan2(forward[1], forward[0])
+    for turn in turns:
+        for dist in distances:
+            a = base + math.radians(turn)
+            p = Point(centre[0] + math.cos(a) * dist, centre[1] + math.sin(a) * dist)
+            if land_room.contains(p) and not blocked.contains(p):
+                return (p.x, p.y), math.degrees(base)
+    return None, math.degrees(base)
+
+
+def portal_anchor_points(layouts):
+    """Where the portals go, in the same form as bridge_anchor_points ({n: (ax, ay, bx, by)} world metres): one
+    behind hole n's green (past the cup, facing on), its partner just behind hole n+1's tee facing down that hole.
+    Out in the open, so you can drive straight through; the buggy paths are routed to them. Yaws in PORTAL_YAWS."""
+    out = {}
+    for n in range(1, max(C.PLACE)):
+        if n not in layouts or n + 1 not in layouts:
+            continue
+        la, lb = layouts[n][0], layouts[n + 1][0]
+        cup = np.array(la['cup'], float)
+        tee_a = np.array(la['tee'].centroid.coords[0])
+        on = cup - tee_a
+        on /= np.linalg.norm(on)
+        gr = math.sqrt(la['green'].area / math.pi)
+        spot_a, yaw_a = portal_spot(la, cup, on, [gr + 11, gr + 15, gr + 8, gr + 20],
+                                    [0, 25, -25, 50, -50, 80, -80, 110, -110], [])
+        tee_b = np.array(lb['tee'].centroid.coords[0])
+        cup_b = np.array(lb['cup'], float)
+        down = cup_b - tee_b
+        down /= np.linalg.norm(down)
+        spot_b, yaw_b = portal_spot(lb, tee_b, -down, [14, 18, 11, 24], [0, 30, -30, 60, -60, 90, -90], [])
+        if spot_a is None or spot_b is None:
+            print(f'PORTAL {n}->{n + 1}: no room ({"green" if spot_a is None else "tee"} end), keeping the edge spot')
+            continue
+        ax, ay = C.to_world(n, *spot_a)
+        bx, by = C.to_world(n + 1, *spot_b)
+        out[n] = (float(ax), float(ay), float(bx), float(by))
+        # Both face the way you travel on: past the green, and down the next hole (the tee spot looked back).
+        PORTAL_YAWS[n] = (yaw_a + C.PLACE[n][1], yaw_b + 180.0 + C.PLACE[n + 1][1])
+    edge = bridge_anchor_points(layouts)
+    for n, spots in edge.items():
+        if n not in out:
+            out[n] = spots
+            ax, ay, bx, by = spots
+            yaw = math.degrees(math.atan2(by - ay, bx - ax))
+            PORTAL_YAWS[n] = (yaw, yaw)
+    return out
+
+
 def build_bridges(layouts, rng):
     """Rope bridge from each hole's green end to the next hole's tee island."""
     bridges = []
@@ -1402,13 +1464,12 @@ def portal_mesh(rng):
 
 
 def build_portals(layouts, rng):
-    """Portals instead of rope bridges: one at the end of each hole where the buggy path runs off the island, and
-    its partner on the next hole's tee island. Both face the way you travel (from the leaving island towards the
-    next), so you drive into one and out of the other heading on into the island. The islands no longer have to
-    sit at bridgeable heights. Returns [{from, to, out: [x, y, z, yaw], in: [x, y, z, yaw]}] (world m, deg)."""
+    """Portals instead of rope bridges: one behind each hole's green and its partner just behind the next hole's
+    tee (portal_anchor_points). Both face the way you travel on, so you drive through the one past the green and
+    come out of the other heading down the next hole. The islands no longer have to sit at bridgeable heights. Returns [{from, to, out: [x, y, z, yaw], in: [x, y, z, yaw]}] (world m, deg)."""
     portal_mesh(random.Random(4242))
     portals = []
-    anchors = bridge_anchor_points(layouts)
+    anchors = portal_anchor_points(layouts)
     for n in range(1, max(C.PLACE)):
         if n not in anchors:
             continue
@@ -1417,9 +1478,9 @@ def build_portals(layouts, rng):
         ax, ay, bx, by = anchors[n]
         za = float(ha(*[np.array([v]) for v in C.to_local(n, ax, ay)])[0]) + C.PLACE[n][2]
         zb = float(hb(*[np.array([v]) for v in C.to_local(n + 1, bx, by)])[0]) + C.PLACE[n + 1][2]
-        yaw = math.degrees(math.atan2(by - ay, bx - ax))
-        portals.append({'from': n, 'to': n + 1, 'out': [round(ax, 3), round(ay, 3), round(za - 0.05, 3), round(yaw, 2)],
-                        'in': [round(bx, 3), round(by, 3), round(zb - 0.05, 3), round(yaw, 2)]})
+        yaw_a, yaw_b = PORTAL_YAWS[n]
+        portals.append({'from': n, 'to': n + 1, 'out': [round(ax, 3), round(ay, 3), round(za - 0.05, 3), round(yaw_a, 2)],
+                        'in': [round(bx, 3), round(by, 3), round(zb - 0.05, 3), round(yaw_b, 2)]})
         print(f'PORTAL {n}->{n + 1}: {za:.1f} m -> {zb:.1f} m')
     return portals
 
@@ -1550,8 +1611,9 @@ def main():
         return
     global SOFT_PATHS
     SOFT_PATHS = '--soft-paths' in args
-    # Buggy paths start at the bridge you arrive on (the car park on hole 1) and end at the one you leave on.
-    for n, (ax, ay, bx, by) in bridge_anchor_points(layouts).items():
+    # Buggy paths start at the portal (or bridge) you arrive by (the car park on hole 1) and end at the one you
+    # leave by.
+    for n, (ax, ay, bx, by) in (portal_anchor_points(layouts) if PORTALS else bridge_anchor_points(layouts)).items():
         ANCHORS.setdefault(n, {})['out'] = tuple(float(v) for v in C.to_local(n, ax, ay))
         ANCHORS.setdefault(n + 1, {})['in'] = tuple(float(v) for v in C.to_local(n + 1, bx, by))
     ANCHORS.setdefault(1, {})['in'] = CAR_PARK_EXIT
