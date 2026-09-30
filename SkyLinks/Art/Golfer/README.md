@@ -1,5 +1,13 @@
 # Golfer
 
+**The player is now the Meshy "Eccentric Golfer"** (`Meshy_Eccentric_Golfer/`, the owner's Meshy export).
+`Art/Blender/build_eccentric_golfer.py` turns it into `Eccentric/Golfer.fbx` (about 171 cm, 32k triangles,
+Mixamo bone names) and retargets every clip listed below onto him (`Eccentric/Animations/`).
+`Scripts/import_golfer.py` imports those to `/Game/Characters/Eccentric`, which `AGolfCharacter` loads; the game
+scales the body to `GolferHeight` (180 cm). The old Tripo golfer below is kept as the source of the clips.
+
+# Golfer
+
 The owner's golfer: a Tripo-generated model, rigged in Mixamo (33-bone `mixamorig` skeleton, no finger
 bones), with golf animations downloaded from Mixamo on that same character.
 

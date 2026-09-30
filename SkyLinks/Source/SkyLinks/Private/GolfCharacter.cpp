@@ -59,8 +59,8 @@ AGolfCharacter::AGolfCharacter()
 	Camera->SetupAttachment(CameraArm);
 	Camera->SetFieldOfView(70.f);
 
-	auto Path = [](const TCHAR* Name) { return FSoftObjectPath(FString::Printf(TEXT("/Game/Characters/Golfer/%s.%s"), Name, Name)); };
-	auto Anim = [](const TCHAR* Name) { return FSoftObjectPath(FString::Printf(TEXT("/Game/Characters/Golfer/Animations/%s.%s"), Name, Name)); };
+	auto Path = [](const TCHAR* Name) { return FSoftObjectPath(FString::Printf(TEXT("/Game/Characters/Eccentric/%s.%s"), Name, Name)); };
+	auto Anim = [](const TCHAR* Name) { return FSoftObjectPath(FString::Printf(TEXT("/Game/Characters/Eccentric/Animations/%s.%s"), Name, Name)); };
 	GolferMeshAsset = TSoftObjectPtr<USkeletalMesh>(Path(TEXT("SK_Golfer")));
 	DriveAnim = TSoftObjectPtr<UAnimSequence>(Anim(TEXT("A_Drive")));
 	ChipAnim = TSoftObjectPtr<UAnimSequence>(Anim(TEXT("A_Chip")));
@@ -149,7 +149,8 @@ void AGolfCharacter::LoadBody()
 	}
 	// Feet on the ground at the bottom of the capsule, facing the actor's forward.
 	GetMesh()->SetRelativeLocationAndRotation(FVector(0.f, 0.f, -GetCapsuleComponent()->GetScaledCapsuleHalfHeight()), FRotator(0.f, MeshYawOffset, 0.f));
-	GetMesh()->SetRelativeScale3D(FVector(GolferScale));
+	const float BodyHeight = GetMesh()->GetSkeletalMeshAsset()->GetImportedBounds().BoxExtent.Z * 2.f;
+	GetMesh()->SetRelativeScale3D(FVector(BodyHeight > 1.f ? GolferHeight / BodyHeight : 1.f));
 	GetMesh()->SetAnimationMode(EAnimationMode::AnimationSingleNode);
 	GetMesh()->VisibilityBasedAnimTickOption = EVisibilityBasedAnimTickOption::AlwaysTickPoseAndRefreshBones;
 	IdleAnim.LoadSynchronous();

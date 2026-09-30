@@ -1,4 +1,8 @@
-"""Import the owner's Mixamo golfer and golf animations into /Game/Characters/Golfer.
+"""Import the owner's golfer and golf animations into /Game/Characters/Eccentric.
+
+The player is the Meshy "Eccentric Golfer": Art/Blender/build_eccentric_golfer.py writes his body and every
+clip below (retargeted onto him) to Art/Golfer/Eccentric/, which this imports. The old Tripo golfer's assets in
+/Game/Characters/Golfer are left alone. What follows describes the source clips the retarget starts from.
 
 Run in the editor (Aura's execute_unreal_python, or Tools > Execute Python Script). No map changes.
 AGolfCharacter loads these exact asset paths at runtime, so once this has run the golfer replaces the
@@ -18,8 +22,8 @@ Art/Blender/retarget_walk_idle.py retargets them onto the golfer (Fixed/). Re-ru
 from pathlib import Path
 import unreal
 
-SOURCE = Path(unreal.Paths.project_dir()) / 'Art' / 'Golfer'
-DEST = '/Game/Characters/Golfer'
+SOURCE = Path(unreal.Paths.project_dir()) / 'Art' / 'Golfer' / 'Eccentric'
+DEST = '/Game/Characters/Eccentric'
 ANIM_DEST = DEST + '/Animations'
 
 # Mixamo file name -> asset name the game looks for (A_Drive, A_Chip, ... are loaded by AGolfCharacter).
@@ -71,14 +75,13 @@ def import_body():
     skeleton = mesh.get_editor_property('skeleton')
     assert skeleton, 'No skeleton created for SK_Golfer'
     height = mesh.get_bounds().box_extent.z * 2
-    print(f'BODY SK_Golfer skeleton {skeleton.get_path_name()} height {height:.1f} cm (the game scales it 1.9x)')
+    print(f'BODY SK_Golfer skeleton {skeleton.get_path_name()} height {height:.1f} cm (the game scales it to 180 cm)')
+    assert 120 < height < 220, f'SK_Golfer is {height:.1f} cm tall; expected about 171 (import scale is wrong)'
     return skeleton
 
 
 def import_animation(skeleton, source_name, asset_name):
-    # Art/Blender/fix_swing_clips.py writes cleaned copies (feet planted) of glitchy clips to Animations/Fixed.
-    fixed = SOURCE / 'Animations' / 'Fixed' / f'{source_name}.fbx'
-    path = fixed if fixed.is_file() else SOURCE / 'Animations' / f'{source_name}.fbx'
+    path = SOURCE / 'Animations' / f'{source_name}.fbx'  # already retargeted (and cleaned) by the build
     if not path.is_file():
         print(f'MISSING {path.name}')
         return None
@@ -94,7 +97,7 @@ def import_animation(skeleton, source_name, asset_name):
     if not isinstance(anim, unreal.AnimSequence):
         print(f'FAILED {source_name} -> {asset_name}')
         return None
-    print(f'ANIM {asset_name:18s} {anim.get_play_length():6.2f} s  <- {source_name}{" (fixed)" if path == fixed else ""}')
+    print(f'ANIM {asset_name:18s} {anim.get_play_length():6.2f} s  <- {source_name}')
     return anim
 
 

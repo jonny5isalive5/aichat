@@ -18,8 +18,8 @@ class AGolfBuggy;
  * the replicated ball location and aim. Between shots (and in the lobby) the golfer roams: walks
  * under the player's control with a follow camera, and movement replicates like any character.
  *
- * The body is the owner's Mixamo-rigged golfer (/Game/Characters/Golfer, imported by
- * Scripts/import_golfer.py). Animations play directly on the mesh (no Anim Blueprint needed):
+ * The body is the owner's Meshy "Eccentric Golfer" with the golf clips retargeted onto him
+ * (/Game/Characters/Eccentric, built by Art/Blender/build_eccentric_golfer.py, imported by Scripts/import_golfer.py). Animations play directly on the mesh (no Anim Blueprint needed):
  * the first frame of a swing is the address pose, and the swing plays when a shot is struck.
  * Until the assets exist the character shows a placeholder cylinder.
  */
@@ -97,9 +97,10 @@ public:
 	UPROPERTY(EditDefaultsOnly, Category = "Golf|Body")
 	TSoftObjectPtr<USkeletalMesh> GolferMeshAsset;
 
-	/** The Mixamo golfer was rigged at about 95 cm tall; 1.9 makes it about 180 cm. Animations scale with it. */
+	/** Standing height in game (cm). The body is scaled to it from its own size (the Meshy golfer is about
+	 *  171 cm, so about 1.05x); animations scale with it. */
 	UPROPERTY(EditDefaultsOnly, Category = "Golf|Body")
-	float GolferScale = 1.9f;
+	float GolferHeight = 180.f;
 
 	/** Mixamo characters face +Y after import; -90 turns them to face the actor's forward. */
 	UPROPERTY(EditDefaultsOnly, Category = "Golf|Body")
