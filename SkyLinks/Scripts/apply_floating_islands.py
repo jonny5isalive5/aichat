@@ -1090,6 +1090,10 @@ float3 c = lerp(swirl, lerp(through, swirl, veil), ShowView);
 return c + float3(1.2, 1.4, 1.6) * pow(saturate(1.0 - r), 6.0) * (1.0 - 0.8 * ShowView);
 """
 
+# A colour texture for the View slot until a picture is baked. (It must be a colour texture: a greyscale one
+# such as T_Macro doesn't match the slot's colour sampler and the whole material fails to compile - black.)
+VIEW_PLACEHOLDER = '/Engine/EngineResources/DefaultTexture'  # Unreal's own default for colour texture samples
+
 VIEW_UV_CODE = """
 // Seen from behind the portal (looking the way it faces) the picture reads left to right as shot; from in
 // front (the way you drive through it backwards) the disc is seen from its other side, so mirror it.
@@ -1117,7 +1121,7 @@ def swirl_material():
         'AxisX': (axis, ''),
     }, -900, 250, output=unreal.CustomMaterialOutputType.CMOT_FLOAT2)
     view = _expr(mat, unreal.MaterialExpressionTextureSampleParameter2D, -700, 250, parameter_name='View',
-                 texture=unreal.load_asset(f'{TEXTURE_DEST}/T_Macro'),
+                 texture=unreal.load_asset(VIEW_PLACEHOLDER),
                  sampler_type=unreal.MaterialSamplerType.SAMPLERTYPE_COLOR)
     lib.connect_material_expressions(flipped, '', view, 'UVs')
     show = _expr(mat, unreal.MaterialExpressionScalarParameter, -700, 450, parameter_name='ShowView', default_value=0.0)
@@ -1244,7 +1248,7 @@ def portal_views(size=512):
             tools.create_asset(instance_name, PORTAL_VIEW_DIR, unreal.MaterialInstanceConstant, unreal.MaterialInstanceConstantFactoryNew())
         instance.set_editor_property('parent', swirl)
         # Re-shooting: let go of the old picture, then replace it (same name, so nothing else changes).
-        lib.set_material_instance_texture_parameter_value(instance, 'View', unreal.load_asset(f'{TEXTURE_DEST}/T_Macro'))
+        lib.set_material_instance_texture_parameter_value(instance, 'View', unreal.load_asset(VIEW_PLACEHOLDER))
         if unreal.EditorAssetLibrary.does_asset_exist(f'{PORTAL_VIEW_DIR}/{name}'):
             unreal.EditorAssetLibrary.delete_asset(f'{PORTAL_VIEW_DIR}/{name}')
         texture = unreal.RenderingLibrary.render_target_create_static_texture2d_editor_only(target, name)
