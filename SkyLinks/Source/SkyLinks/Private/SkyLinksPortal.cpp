@@ -1,6 +1,7 @@
 #include "SkyLinksPortal.h"
 #include "SkyLinks.h"
 #include "GolfCharacter.h"
+#include "GolfPhysics.h"
 #include "Components/StaticMeshComponent.h"
 #include "Components/TextRenderComponent.h"
 #include "GameFramework/PlayerController.h"
@@ -34,6 +35,7 @@ void ASkyLinksPortal::OnConstruction(const FTransform& Transform)
 	Super::OnConstruction(Transform);
 	Hologram->SetText(FText::FromString(Sign));
 	Hologram->SetVisibility(!Sign.IsEmpty());
+	Hologram->SetWorldRotation(FRotator(0.f, GetActorRotation().Yaw + (bSignFacesBack ? 180.f : 0.f), 0.f));
 }
 
 void ASkyLinksPortal::BeginPlay()
@@ -93,6 +95,28 @@ ASkyLinksPortal* ASkyLinksPortal::FindCrossed(const UWorld* World, const FVector
 	return nullptr;
 }
 
+bool ASkyLinksPortal::FindGround(const UWorld* World, const FVector& Location, FVector& OutGround, const AActor* Ignore)
+{
+	if (!World)
+	{
+		return false;
+	}
+	FCollisionQueryParams Params(SCENE_QUERY_STAT(PortalGround), false, Ignore);
+	Params.bReturnPhysicalMaterial = true;
+	TArray<FHitResult> Hits;
+	const FVector Top = Location + FVector(0.f, 0.f, 3000.f);
+	World->LineTraceMultiByObjectType(Hits, Top, Location - FVector(0.f, 0.f, 4000.f), FCollisionObjectQueryParams(ECC_WorldStatic), Params);
+	for (const FHitResult& Hit : Hits)
+	{
+		if (Hit.bBlockingHit && !GolfPhysics::IsFoliageHit(Hit) && Hit.ImpactNormal.Z > 0.5f)
+		{
+			OutGround = Hit.ImpactPoint;
+			return true;
+		}
+	}
+	return false;
+}
+
 bool ASkyLinksPortal::IsNearAnExit(const UWorld* World, const FVector& Location, float Tolerance)
 {
 	if (!World)
@@ -131,18 +155,11 @@ void ASkyLinksPortal::FaceHologram(float DeltaSeconds)
 	{
 		return;
 	}
-	// Bob gently and always turn to face this player's camera, with a faint flicker, like a projection.
+	// Fixed facing the side you drive in from (so it reads as "through here"), bobbing gently with a faint
+	// flicker, like a projection.
 	HologramTime += DeltaSeconds;
 	const FVector Base = GetActorLocation() + FVector(0.f, 0.f, HologramHeight + 18.f * FMath::Sin(HologramTime * 1.6f));
-	FRotator Facing = GetActorRotation();
-	if (const APlayerController* Controller = GetWorld()->GetFirstPlayerController())
-	{
-		if (Controller->PlayerCameraManager)
-		{
-			const FVector ToCamera = Controller->PlayerCameraManager->GetCameraLocation() - Base;
-			Facing = FRotator(0.f, ToCamera.Rotation().Yaw, 0.f);
-		}
-	}
+	const FRotator Facing(0.f, GetActorRotation().Yaw + (bSignFacesBack ? 180.f : 0.f), 0.f);
 	Hologram->SetWorldLocationAndRotation(Base, Facing);
 	const uint8 Glow = static_cast<uint8>(215 + 40 * FMath::Abs(FMath::Sin(HologramTime * 7.3f) * FMath::Sin(HologramTime * 2.1f)));
 	Hologram->SetTextRenderColor(FColor(Glow / 3, Glow, 255));
@@ -182,7 +199,9 @@ void ASkyLinksPortal::Tick(float DeltaSeconds)
 				FVector Exit;
 				FRotator Facing;
 				ExitFor(Now, Golfer->GetActorRotation(), Direction, Exit, Facing);
-				Golfer->TeleportTo(Exit + Drop + FVector(0.f, 0.f, 20.f), Facing);
+				FVector Ground = Exit;
+				FindGround(GetWorld(), Exit, Ground, Golfer);
+				Golfer->TeleportTo(Ground + Drop + FVector(0.f, 0.f, 20.f), Facing);
 				Walkers.Remove(Golfer);
 				continue;
 			}

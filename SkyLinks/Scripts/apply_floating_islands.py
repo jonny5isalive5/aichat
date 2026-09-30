@@ -1164,6 +1164,9 @@ def apply_portals(materials, links):
         placed['in'].set_editor_property('target', placed['out'])
         placed['out'].set_editor_property('sign', f"HOLE {link['to']}  THIS WAY")
         placed['in'].set_editor_property('sign', f"BACK TO HOLE {link['from']}")
+        # Each sign reads towards the side you drive in from.
+        placed['out'].set_editor_property('sign_faces_back', True)
+        placed['in'].set_editor_property('sign_faces_back', False)
         print(f"PORTAL {link['from']} -> {link['to']}")
 
 
@@ -1230,6 +1233,9 @@ def portal_views(size=512):
         camera.set_actor_location_and_rotation(eye, unreal.Rotator(0, -4, yaw), False, True)
         capture.set_editor_property('hidden_actors', [exit_portal])
         capture.capture_scene()
+        # How bright the middle of the shot came out (0-255): a black shot means the capture didn't render.
+        middle = unreal.RenderingLibrary.read_render_target_raw_pixel(world, target, size // 2, size // 2)
+        brightness = (middle.r + middle.g + middle.b) / 3 * (255 if isinstance(middle.r, float) else 1)
         tag = f"{number}{'' if onward else 'b'}"  # 02 = view of hole 2 ahead; 01b = view back into hole 1
         name = f'T_PortalView_{tag}'
         instance_name = f'MI_PortalView_{tag}'
@@ -1242,6 +1248,9 @@ def portal_views(size=512):
         if unreal.EditorAssetLibrary.does_asset_exist(f'{PORTAL_VIEW_DIR}/{name}'):
             unreal.EditorAssetLibrary.delete_asset(f'{PORTAL_VIEW_DIR}/{name}')
         texture = unreal.RenderingLibrary.render_target_create_static_texture2d_editor_only(target, name)
+        if not texture:
+            print(f'PORTAL VIEW {label}: NO TEXTURE MADE (brightness {brightness:.0f})  <- send this line to Claude')
+            continue
         unreal.EditorAssetLibrary.save_loaded_asset(texture)
         lib.set_material_instance_texture_parameter_value(instance, 'View', texture)
         lib.set_material_instance_scalar_parameter_value(instance, 'ShowView', 1.0)
@@ -1249,7 +1258,9 @@ def portal_views(size=512):
         ring = entry.get_editor_property('ring')
         ring.set_material(_swirl_slot(ring.get_editor_property('static_mesh')), instance)
         done += 1
-        print(f"PORTAL VIEW {label}: {'ahead to' if onward else 'back to'} hole {int(number)}")
+        print(f"PORTAL VIEW {label}: {'ahead to' if onward else 'back to'} hole {int(number)}, "
+              f"{texture.get_path_name() if texture else 'NO TEXTURE MADE'}, brightness {brightness:.0f}"
+              f"{'  <- BLACK: send this line to Claude' if brightness < 3 else ''}")
     actors.destroy_actor(camera)
     unreal.get_editor_subsystem(unreal.LevelEditorSubsystem).save_current_level()
     print(f'PORTAL VIEWS DONE: {done} portals show the hole they lead to')
