@@ -10,6 +10,7 @@ class UStaticMesh;
 class USpringArmComponent;
 class UCameraComponent;
 class ACameraActor;
+class ASkyLinksPortal;
 
 USTRUCT()
 struct FBuggyNetState
