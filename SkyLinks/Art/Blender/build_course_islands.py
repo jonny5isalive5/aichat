@@ -24,6 +24,7 @@ import numpy as np
 import heapq
 
 import shapely
+import shapely.ops
 from shapely import affinity
 from mathutils import Vector
 from shapely.geometry import LineString, MultiPolygon, Point, Polygon, box
@@ -200,6 +201,7 @@ CART_WIDTH = 3.2        # m
 CART_OFFSET = 7.0       # m: the path likes to run this far off the edge of the fairway, in the rough
 ANCHORS = {}            # hole -> {'in': (x, y), 'out': (x, y)} local metres; filled in main() from the bridges
 CAR_PARK_EXIT = (-73.0, -30.0)  # hole 1: the edge of the clubhouse pad nearest the first tee
+SHOULDER_MIN, SHOULDER_MAX = 2.5, 6.0  # m of bank either side of a buggy path (wider where the cut is deep)
 HAND_PATHS = set()      # holes whose buggy paths the owner laid by hand
 SOFT_PATHS = False      # --soft-paths: no path borders in the mesh (fallback if the mesher chokes on them)
 
@@ -451,26 +453,52 @@ def landform(number, layout):
 
 def path_bed(local_h, cart):
     """Set the buggy path into the ground: level across its width (cut into slopes like a terrace) and sunk a
-    little below the grass, with soft shoulders either side."""
+    little below the grass, with soft shoulders either side. The path is taken in short pieces and every piece
+    within reach has its say, so where a hairpin brings two legs of the path close together the ground between
+    them slopes from one level to the other instead of snapping to whichever leg is nearest (a wall). Shoulders
+    widen where the cut or fill is deep, so a bed cut into a steep slope gets a bank, not a cliff."""
     if cart is None:
         return local_h
     half = CART_WIDTH / 2
+    reach = half + SHOULDER_MAX
+    lines = list(cart.geoms) if hasattr(cart, 'geoms') else [cart]
+    pieces = []
+    for line in lines:
+        steps = max(1, int(np.ceil(line.length / 3.0)))
+        marks = np.linspace(0, line.length, steps + 1)
+        pieces += [shapely.ops.substring(line, a, b) for a, b in zip(marks[:-1], marks[1:])]
+    pieces = [p for p in pieces if p.length > 1e-6]
+    tree = shapely.STRtree(pieces)
 
     def fn(x, y):
         x, y = np.asarray(x, float), np.asarray(y, float)
         h = local_h(x, y)
         pts = shapely.points(x, y)
-        d = shapely.distance(cart, pts)
-        near = d < half + 2.5
+        near = shapely.distance(cart, pts) < reach
         if not near.any():
             return h
-        along = shapely.line_locate_point(cart, pts[near])
-        centre = shapely.get_coordinates(shapely.line_interpolate_point(cart, along))
+        idx = np.flatnonzero(near)
+        pt_i, piece_i = tree.query(pts[idx], predicate='dwithin', distance=reach)
+        if len(pt_i) == 0:
+            return h
+        where = idx[pt_i]
+        segs = np.asarray(pieces, dtype=object)[piece_i]
+        d = shapely.distance(segs, pts[where])
+        centre = shapely.get_coordinates(shapely.line_interpolate_point(segs, shapely.line_locate_point(segs, pts[where])))
         level = local_h(centre[:, 0], centre[:, 1]) - 0.12
-        w = 1 - B.smooth((d[near] - half) / 2.5)
-        h = h.copy()
-        h[near] = h[near] * (1 - w) + level * w
-        return h
+        cut = np.abs(level - h[where])
+        shoulder = np.clip(cut * 2.4, SHOULDER_MIN, SHOULDER_MAX)
+        w = 1 - B.smooth((d - half) / shoulder)
+        # Pieces of the same leg agree; the closest piece of each point counts fully, the others by closeness.
+        weight = w * np.exp(-np.maximum(d - half, 0) / 1.5)
+        total = np.bincount(where, weight, len(h))
+        pull = np.bincount(where, weight * level, len(h))
+        strength = np.zeros(len(h))
+        np.maximum.at(strength, where, w)
+        out = h.copy()
+        ok = total > 1e-9
+        out[ok] = h[ok] * (1 - strength[ok]) + pull[ok] / total[ok] * strength[ok]
+        return out
     return fn
 
 

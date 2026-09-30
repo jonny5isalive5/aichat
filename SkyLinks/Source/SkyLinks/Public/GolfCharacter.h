@@ -142,11 +142,14 @@ public:
 	UPROPERTY(EditDefaultsOnly, Category = "Golf|Club") FString ClubHandBone = TEXT("RightHand");
 	/** How far the club sticks out past the middle of the hands (cm). */
 	UPROPERTY(EditDefaultsOnly, Category = "Golf|Club") float ClubGripOverhang = 12.f;
+	/** Where the club head rests after the stroke: this far outside (cm) and ahead of the right foot. */
+	UPROPERTY(EditDefaultsOnly, Category = "Golf|Club") float ClubRestSide = 18.f;
+	UPROPERTY(EditDefaultsOnly, Category = "Golf|Club") float ClubRestAhead = 12.f;
 
 	/** Club-on-ball times measured from the Mixamo clips (hands' fastest point, 30 fps). */
 	UPROPERTY(EditDefaultsOnly, Category = "Golf|Animations") float DriveImpactTime = 1.67f;
 	UPROPERTY(EditDefaultsOnly, Category = "Golf|Animations") float ChipImpactTime = 1.77f;
-	UPROPERTY(EditDefaultsOnly, Category = "Golf|Animations") float PuttImpactTime = 0.6f;
+	UPROPERTY(EditDefaultsOnly, Category = "Golf|Animations") float PuttImpactTime = 1.24f;  // hands back at the ball
 
 	/** Distance from the ball to the golfer's feet. */
 	UPROPERTY(EditDefaultsOnly, Category = "Golf")
@@ -172,6 +175,8 @@ protected:
 	UAnimSequence* ReactionAsset(EGolferReaction Reaction) const;
 	void HoldAddressPose();
 	void PlaceClub();
+	void RestClub();
+	void SetClubBetween(const FVector& Head, const FVector& Grip, const FVector& Forward, FName HandBone);
 	/** Bone whose name is Suffix, or ends in ":Suffix" / "_Suffix"; NAME_None if the mesh has none. */
 	FName FindBone(const TCHAR* Suffix) const;
 
@@ -199,6 +204,10 @@ protected:
 	bool bLastPosedPutting = false;
 	/** True while a swing or reaction is playing, so address updates don't cut it off. */
 	bool bPlayingAction = false;
+	/** The club rests on the ground by the right foot (after the stroke, through reactions). */
+	bool bClubResting = false;
+	/** Length of the swing being played (0 when none): once it has run, the club goes to rest. */
+	float SwingLength = 0.f;
 	FTimerHandle ClubTimer;
 
 	/** Climbing in or out of the buggy: Tick eases the body down into / up out of the low seat. */

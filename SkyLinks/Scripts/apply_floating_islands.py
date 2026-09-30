@@ -19,6 +19,8 @@
     isl.tune_look()             tame the bright exposure, richer colours (tune_look(-1.5) darker, (-0.5) brighter)
     isl.import_grass()          the 3D grass clumps + M_GrassBlades (grown around the camera in game)
     isl.raise_fog(20)           lift every cloud patch 20 m (or lower it with a negative number)
+    isl.fog_floaters()          a cloud patch under every floating island you've kept (run again after changing them)
+    isl.reimport_paths()        after the buggy paths' ground changed: surfaces, rock and vines re-imported in place
 
 Needs, from Scripts/import_trees.py, the stylised trees and their M_Tree_Bark / M_Tree_Leaves / M_Tree_Vines
 materials (the vines and the rope bridges use them too), and the SkyLinksForest C++ class (rebuild first).
@@ -1090,6 +1092,56 @@ def add_fog(links):
             except Exception as error:
                 print(f'FOG note: {key}: {error}')
     print(f"FOG {len(links['fog'])} cloud patches")
+
+
+def fog_floaters(density=0.35):
+    """A cloud patch under every floating island in the level (the ones you've kept), like the ones under the
+    holes. Run again after moving, adding or deleting floaters: it clears its old patches first."""
+    folder = 'Course/FloaterFog'
+    for actor in _all():
+        if str(actor.get_folder_path()) == folder:
+            actors.destroy_actor(actor)
+    if not hasattr(unreal, 'LocalFogVolume'):
+        print('FOG skipped: LocalFogVolume not available in this engine build')
+        return
+    count = 0
+    for actor in _all():
+        if not str(actor.get_folder_path()).endswith('/Floaters'):
+            continue
+        origin, extent = actor.get_actor_bounds(False)
+        radius = max(extent.x, extent.y) / M * 1.3  # m, a little wider than the island
+        if radius < 1:
+            continue
+        below = unreal.Vector(origin.x, origin.y, origin.z - extent.z - radius * 0.15 * M)
+        fog = actors.spawn_actor_from_class(unreal.LocalFogVolume, below, unreal.Rotator(0, 0, 0))
+        fog.set_actor_scale3d(unreal.Vector(radius / 5.0, radius / 5.0, radius / 10.0))  # flattened like a cloud bank
+        fog.set_actor_label(f'FloaterFog_{actor.get_actor_label()}')
+        fog.set_folder_path(folder)
+        component = fog.get_component_by_class(unreal.LocalFogVolumeComponent)
+        for key, value in (('radial_fog_extinction', density), ('height_fog_extinction', 0.0),
+                           ('fog_albedo', unreal.LinearColor(1, 1, 1, 1)), ('fog_phase_g', 0.3)):
+            try:
+                component.set_editor_property(key, value)
+            except Exception as error:
+                print(f'FOG note: {key}: {error}')
+        count += 1
+    unreal.get_editor_subsystem(unreal.LevelEditorSubsystem).save_current_level()
+    print(f'FLOATER FOG: {count} cloud patches under the floating islands')
+
+
+def reimport_paths(holes=HOLES):
+    """After the buggy paths' ground was reshaped: re-import each hole's surface, rock and vines in place (freeing
+    memory after each). Trees, floaters, bridges and everything you've placed stay exactly as they are."""
+    materials = build_materials()
+    for number in holes:
+        for part in ('IslandTop', 'IslandRock', 'Vines'):
+            name = f'SM_H{number:02d}_{part}'
+            if (SOURCE / f'{name}.fbx').is_file() and unreal.EditorAssetLibrary.does_asset_exist(f'{DEST}/{name}'):
+                import_mesh(name, materials, collide=part not in NO_COLLISION)
+                unreal.SystemLibrary.collect_garbage()
+        unreal.get_editor_subsystem(unreal.LevelEditorSubsystem).save_current_level()
+        print(f'PATHS hole {number} done')
+    print('PATHS ALL DONE')
 
 
 def ensure_sea():

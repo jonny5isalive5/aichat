@@ -255,8 +255,20 @@ void AGolfCharacter::PlaceClub()
 	const FVector Forward = FRotator(0.f, AimYaw, 0.f).Vector();
 	const FVector Head = BallLocation - FVector(0.f, 0.f, GolfPhysics::BallRadius) - Forward * 4.f;
 	const FVector Grip = (GetMesh()->GetBoneLocation(RightHand) + GetMesh()->GetBoneLocation(LeftHand)) * 0.5f;
+	if ((Grip - Head).IsNearlyZero())
+	{
+		return;
+	}
+	bClubResting = false;
+	SwingLength = 0.f;
+	SetClubBetween(Head, Grip, Forward, RightHand);
+}
+
+void AGolfCharacter::SetClubBetween(const FVector& Head, const FVector& Grip, const FVector& Forward, FName HandBone)
+{
+	const UStaticMesh* ClubMesh = Club->GetStaticMesh();
 	const FVector Shaft = (Grip - Head).GetSafeNormal();
-	if (Shaft.IsNearlyZero())
+	if (!ClubMesh || Shaft.IsNearlyZero())
 	{
 		return;
 	}
@@ -264,13 +276,35 @@ void AGolfCharacter::PlaceClub()
 	const FRotator Rotation = FRotationMatrix::MakeFromZX(Shaft, Forward).Rotator();
 
 	// Fix it to the right hand, keeping this world placement (and real-world size despite the body scale).
-	Club->AttachToComponent(GetMesh(), FAttachmentTransformRules(EAttachmentRule::KeepWorld, EAttachmentRule::KeepWorld, EAttachmentRule::KeepWorld, false), RightHand);
+	if (Club->GetAttachParent() != GetMesh() || Club->GetAttachSocketName() != HandBone)
+	{
+		Club->AttachToComponent(GetMesh(), FAttachmentTransformRules(EAttachmentRule::KeepWorld, EAttachmentRule::KeepWorld, EAttachmentRule::KeepWorld, false), HandBone);
+	}
 	Club->SetWorldLocationAndRotation(Head, Rotation);
 	// Stretch the shaft (not the head) so the grip reaches the hands of the scaled-up golfer.
 	const float MeshLength = ClubMesh->GetBounds().BoxExtent.Z * 2.f;
 	const float Reach = FVector::Dist(Head, Grip) + ClubGripOverhang;
 	const float Stretch = MeshLength > 1.f ? FMath::Clamp(Reach / MeshLength, 0.7f, 1.8f) : 1.f;
 	Club->SetWorldScale3D(FVector(1.f, 1.f, Stretch));
+}
+
+void AGolfCharacter::RestClub()
+{
+	// After the stroke and through the reactions: the club hangs from the right hand with its head on the
+	// ground just outside the right foot, the way a golfer stands holding one.
+	const FName RightHand = FindBone(*ClubHandBone);
+	const FName RightFoot = FindBone(TEXT("RightFoot"));
+	if (RightHand.IsNone() || RightFoot.IsNone())
+	{
+		return;
+	}
+	const FRotator Facing(0.f, GetActorRotation().Yaw, 0.f);
+	const FVector Forward = Facing.Vector();
+	const FVector Right = FRotationMatrix(Facing).GetUnitAxis(EAxis::Y);
+	const FVector Grip = GetMesh()->GetBoneLocation(RightHand);
+	FVector Head = GetMesh()->GetBoneLocation(RightFoot) + Right * ClubRestSide + Forward * ClubRestAhead;
+	Head.Z = GetMesh()->GetComponentLocation().Z;  // the mesh origin sits at his soles, on the ground
+	SetClubBetween(Head, Grip, Forward, RightHand);
 }
 
 float AGolfCharacter::GetBuggyTransitionDuration(bool bEnter) const
@@ -353,6 +387,12 @@ void AGolfCharacter::Tick(float DeltaSeconds)
 	{
 		UpdateLocomotion();
 	}
+	// Once the swing has finished (and through any reaction) the club rests on the ground by his foot.
+	if (bHasBody && !bRoaming && Club->IsVisible()
+		&& (bClubResting || (SwingLength > 0.f && GetMesh()->GetPosition() >= SwingLength - 0.05f)))
+	{
+		RestClub();
+	}
 	if (BuggyStep != EBuggyStep::Entering && BuggyStep != EBuggyStep::Exiting)
 	{
 		return;
@@ -410,6 +450,7 @@ void AGolfCharacter::MulticastPlayReaction_Implementation(EGolferReaction Reacti
 			SetActorLocation(FVector(Feet.X, Feet.Y, CupLocation.Z + GetCapsuleComponent()->GetScaledCapsuleHalfHeight()));
 		}
 		bPlayingAction = true;
+		bClubResting = true;
 		GetMesh()->SetPlayRate(1.f);
 		GetMesh()->PlayAnimation(Clip, false);
 	}
@@ -518,6 +559,8 @@ void AGolfCharacter::MulticastPlaySwing_Implementation(EGolferSwing Swing)
 	if (UAnimSequence* Clip = bHasBody ? SwingAsset(Swing) : nullptr)
 	{
 		bPlayingAction = true;
+		bClubResting = false;
+		SwingLength = Clip->GetPlayLength();
 		GetMesh()->PlayAnimation(Clip, false);
 		GetMesh()->SetPosition(0.f, false);
 		GetMesh()->SetPlayRate(1.f);
