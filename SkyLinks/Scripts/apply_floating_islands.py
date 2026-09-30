@@ -20,6 +20,7 @@
     isl.import_grass()          the 3D grass clumps + M_GrassBlades (grown around the camera in game)
     isl.raise_fog(20)           lift every cloud patch 20 m (or lower it with a negative number)
     isl.portals()               rope bridges out, portals in (drive through to the next hole); needs Build.bat first
+    isl.portal_views()          bake a picture of the next hole into each portal's swirl (re-run after changing holes)
     isl.fog_floaters()          soft mist clouds under every floating island you've kept (run again after changing them)
     isl.reimport_paths()        after the buggy paths' ground changed: surfaces, rock and vines re-imported in place
 
@@ -1081,19 +1082,38 @@ float s2 = sin(a * 5.0 - r * 7.0 + T * 1.3) * 0.5 + 0.5;
 float glow = pow(saturate(1.0 - r), 0.6);
 float3 deep = float3(0.04, 0.12, 0.55);
 float3 bright = float3(0.3, 0.95, 1.4);
-float3 c = lerp(deep, bright, s1 * 0.7 + s2 * 0.3) * (0.6 + 1.6 * glow);
-return c + float3(1.2, 1.4, 1.6) * pow(saturate(1.0 - r), 6.0);
+float3 swirl = lerp(deep, bright, s1 * 0.7 + s2 * 0.3) * (0.6 + 1.6 * glow);
+// With a picture of the next hole: clear in the middle, the whirlpool closing in towards the rim.
+float veil = saturate(pow(r, 1.8) * 1.1 + (s1 * 0.7 + s2 * 0.3) * 0.22 - 0.08);
+float3 through = View * 1.15 * (1.0 + 0.08 * sin(r * 30.0 - T * 4.0));
+float3 c = lerp(swirl, lerp(through, swirl, veil), ShowView);
+return c + float3(1.2, 1.4, 1.6) * pow(saturate(1.0 - r), 6.0) * (1.0 - 0.8 * ShowView);
+"""
+
+VIEW_UV_CODE = """
+return float2(UV.x, 1.0 - UV.y);
 """
 
 
 def swirl_material():
-    """M_PortalSwirl: the glowing, slowly turning whirlpool inside each portal ring (unlit, both sides)."""
+    """M_PortalSwirl: the glowing, slowly turning whirlpool inside each portal ring (unlit, both sides). With the
+    View texture (a picture of the next hole, from isl.portal_views()) and ShowView 1 you see the next tee through
+    the middle of it."""
     mat = _material('M_PortalSwirl')
     mat.set_editor_property('shading_model', unreal.MaterialShadingModel.MSM_UNLIT)
     mat.set_editor_property('two_sided', True)
+    uv = _expr(mat, unreal.MaterialExpressionTextureCoordinate, -1100, 0)
+    flipped = _custom(mat, VIEW_UV_CODE, {'UV': (uv, '')}, -900, 250, output=unreal.CustomMaterialOutputType.CMOT_FLOAT2)
+    view = _expr(mat, unreal.MaterialExpressionTextureSampleParameter2D, -700, 250, parameter_name='View',
+                 texture=unreal.load_asset(f'{TEXTURE_DEST}/T_Macro'),
+                 sampler_type=unreal.MaterialSamplerType.SAMPLERTYPE_COLOR)
+    lib.connect_material_expressions(flipped, '', view, 'UVs')
+    show = _expr(mat, unreal.MaterialExpressionScalarParameter, -700, 450, parameter_name='ShowView', default_value=0.0)
     colour = _custom(mat, SWIRL_CODE, {
-        'UV': (_expr(mat, unreal.MaterialExpressionTextureCoordinate, -800, 0), ''),
+        'UV': (uv, ''),
         'T': (_expr(mat, unreal.MaterialExpressionTime, -800, 150), ''),
+        'View': (view, 'RGB'),
+        'ShowView': (show, ''),
     }, -450, 0)
     lib.connect_material_property(colour, '', unreal.MaterialProperty.MP_EMISSIVE_COLOR)
     lib.recompile_material(mat)
@@ -1141,6 +1161,79 @@ def portals():
     apply_portals(build_materials(), json.loads((SOURCE / 'Course_links.json').read_text()))
     unreal.get_editor_subsystem(unreal.LevelEditorSubsystem).save_current_level()
     print('PORTALS DONE: rope bridges removed, portals in place')
+
+
+PORTAL_VIEW_DIR = '/Game/Course/Portals'
+
+
+def _swirl_slot(mesh):
+    for index, slot in enumerate(mesh.get_editor_property('static_materials')):
+        if str(slot.get_editor_property('material_slot_name')).startswith('PortalSwirl'):
+            return index
+    return 1
+
+
+def portal_views(size=512):
+    """Bake a picture of the next hole into every entry portal, so you see its tee through the swirl. A camera
+    stands just in front of each arrival portal looking the way you'll drive out, takes one shot, and the shot is
+    saved as T_PortalView_nn and shown in the portal leading there (no cost while playing). Run again after
+    changing a hole (trees, floaters) to re-shoot them all."""
+    swirl = swirl_material()
+    everything = _all()
+    portals = {a.get_actor_label(): a for a in everything if str(a.get_folder_path()) == 'Course/Portals'}
+    arrivals = {label: a for label, a in portals.items() if label.endswith('_In')}
+    if not arrivals:
+        print('PORTAL VIEWS: no portals in the level yet - run isl.portals() first')
+        return
+    target_path = f'{PORTAL_VIEW_DIR}/RT_PortalView'
+    target = unreal.load_asset(target_path) if unreal.EditorAssetLibrary.does_asset_exist(target_path) else \
+        tools.create_asset('RT_PortalView', PORTAL_VIEW_DIR, unreal.TextureRenderTarget2D, unreal.TextureRenderTargetFactoryNew())
+    target.set_editor_property('size_x', size)
+    target.set_editor_property('size_y', size)
+    target.set_editor_property('render_target_format', unreal.TextureRenderTargetFormat.RTF_RGBA8_SRGB)
+    world = unreal.get_editor_subsystem(unreal.UnrealEditorSubsystem).get_editor_world()
+    camera = actors.spawn_actor_from_class(unreal.SceneCapture2D, unreal.Vector(0, 0, 0), unreal.Rotator(0, 0, 0))
+    capture = camera.capture_component2d
+    capture.set_editor_property('texture_target', target)
+    capture.set_editor_property('capture_source', unreal.SceneCaptureSource.SCS_FINAL_COLOR_LDR)
+    capture.set_editor_property('fov_angle', 80.0)
+    capture.set_editor_property('capture_every_frame', False)
+    capture.set_editor_property('capture_on_movement', False)
+    done = 0
+    for label, arrival in sorted(arrivals.items()):
+        number = label.split('_')[2]  # Portal_01_02_In -> 02
+        entry = portals.get(label[:-3] + '_Out')
+        if not entry:
+            continue
+        yaw = arrival.get_actor_rotation().yaw
+        forward = arrival.get_actor_forward_vector()
+        base = arrival.get_actor_location()
+        eye = unreal.Vector(base.x + forward.x * 150, base.y + forward.y * 150, base.z + 230)
+        camera.set_actor_location_and_rotation(eye, unreal.Rotator(0, -4, yaw), False, True)
+        capture.set_editor_property('hidden_actors', [arrival])
+        capture.capture_scene()
+        name = f'T_PortalView_{number}'
+        instance_name = f'MI_PortalView_{number}'
+        instance_path = f'{PORTAL_VIEW_DIR}/{instance_name}'
+        instance = unreal.load_asset(instance_path) if unreal.EditorAssetLibrary.does_asset_exist(instance_path) else \
+            tools.create_asset(instance_name, PORTAL_VIEW_DIR, unreal.MaterialInstanceConstant, unreal.MaterialInstanceConstantFactoryNew())
+        instance.set_editor_property('parent', swirl)
+        # Re-shooting: let go of the old picture, then replace it (same name, so nothing else changes).
+        lib.set_material_instance_texture_parameter_value(instance, 'View', unreal.load_asset(f'{TEXTURE_DEST}/T_Macro'))
+        if unreal.EditorAssetLibrary.does_asset_exist(f'{PORTAL_VIEW_DIR}/{name}'):
+            unreal.EditorAssetLibrary.delete_asset(f'{PORTAL_VIEW_DIR}/{name}')
+        texture = unreal.RenderingLibrary.render_target_create_static_texture2d_editor_only(target, name)
+        unreal.EditorAssetLibrary.save_loaded_asset(texture)
+        lib.set_material_instance_texture_parameter_value(instance, 'View', texture)
+        lib.set_material_instance_scalar_parameter_value(instance, 'ShowView', 1.0)
+        unreal.EditorAssetLibrary.save_loaded_asset(instance)
+        ring = entry.get_editor_property('ring')
+        ring.set_material(_swirl_slot(ring.get_editor_property('static_mesh')), instance)
+        done += 1
+        print(f'PORTAL VIEW hole {int(number)}: {texture.get_name()}')
+    actors.destroy_actor(camera)
+    unreal.get_editor_subsystem(unreal.LevelEditorSubsystem).save_current_level()
+    print(f'PORTAL VIEWS DONE: {done} portals show the hole they lead to')
 
 
 def add_fog(links):
