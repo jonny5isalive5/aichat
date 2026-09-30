@@ -9,6 +9,7 @@ class UStaticMeshComponent;
 class UStaticMesh;
 class USpringArmComponent;
 class UCameraComponent;
+class ACameraActor;
 
 USTRUCT()
 struct FBuggyNetState
@@ -127,8 +128,21 @@ public:
 	UPROPERTY(EditAnywhere, Category = "Buggy|Dimensions")
 	float WheelRadius = 23.f;
 
+	/** After a portal: the view holds at the spot the portal's picture was taken from while you drive off, for
+	 *  up to this long (s) or until the buggy is PortalCameraReach (cm) away, then blends back behind it. */
+	UPROPERTY(EditAnywhere, Category = "Buggy|Portal")
+	float PortalCameraHold = 2.f;
+
+	UPROPERTY(EditAnywhere, Category = "Buggy|Portal")
+	float PortalCameraReach = 1500.f;
+
+	/** Seconds to blend from the arrival view back to the chase camera (0 = cut). */
+	UPROPERTY(EditAnywhere, Category = "Buggy|Portal")
+	float PortalCameraBlend = 0.4f;
+
 protected:
 	virtual void BeginPlay() override;
+	virtual void EndPlay(const EEndPlayReason::Type EndPlayReason) override;
 	virtual void OnConstruction(const FTransform& Transform) override;
 
 	UFUNCTION(Server, Unreliable)
@@ -160,6 +174,15 @@ private:
 	bool TryPortal(const FVector& Start);
 	/** Frames to hold the chase camera still after a portal hop, so it cuts instead of flying across. */
 	int32 CameraCutFrames = 0;
+	/** Driver only: look from the portal's arrival spot, then hand back to the chase camera. */
+	void StartArrivalView(const ASkyLinksPortal* Portal, int32 Direction);
+	void UpdateArrivalView(float DeltaSeconds);
+	void EndArrivalView(float Blend);
+
+	/** The fixed camera used on arrival through a portal (local, never replicated). */
+	UPROPERTY(Transient)
+	TObjectPtr<ACameraActor> ArrivalCamera;
+	float ArrivalTime = -1.f;
 
 	float Throttle = 0.f;
 	float SteerInput = 0.f;

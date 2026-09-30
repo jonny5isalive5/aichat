@@ -6,12 +6,23 @@
 #include "GameFramework/PlayerController.h"
 #include "Camera/PlayerCameraManager.h"
 #include "PhysicalMaterials/PhysicalMaterial.h"
+#include "Kismet/GameplayStatics.h"
 
 namespace
 {
 	constexpr float GrassProbeSpacing = 60.f;   // cm between the bunker-finding probes
 	constexpr float GrassTraceUp = 20000.f;     // traces run from well above the camera...
 	constexpr float GrassTraceDown = 60000.f;   // ...to well below it (islands float at different heights)
+	constexpr int32 PathUVChannel = 3;          // island tops: UV3.x = signed metres to the buggy path's edge (negative on it)
+	constexpr float PathClearance = 0.3f;       // m: keep the grass this far off the path's edge
+
+	/** True where the hit is on (or right beside) a buggy path, read from the island's path UV (needs
+	 *  bSupportUVFromHitResults in DefaultEngine.ini; without it nothing counts as path). */
+	bool OnPath(const FHitResult& Hit)
+	{
+		FVector2D UV;
+		return UGameplayStatics::FindCollisionUV(Hit, PathUVChannel, UV) && UV.X < PathClearance;
+	}
 }
 
 ASkyLinksGrass::ASkyLinksGrass()
@@ -171,7 +182,7 @@ void ASkyLinksGrass::FillCell(const FIntPoint& Key, float ViewZ, int32& Traces)
 	{
 		FHitResult Hit;
 		EPhysicalSurface Surface;
-		if (Ground(Origin.X + Random.FRand() * CellSize, Origin.Y + Random.FRand() * CellSize, Hit, Surface) && Surface == SURFACE_Rough)
+		if (Ground(Origin.X + Random.FRand() * CellSize, Origin.Y + Random.FRand() * CellSize, Hit, Surface) && Surface == SURFACE_Rough && !OnPath(Hit))
 		{
 			Clumps.Add(Place(Hit, 1.f, 1.f));
 		}
@@ -210,7 +221,7 @@ void ASkyLinksGrass::FillCell(const FIntPoint& Key, float ViewZ, int32& Traces)
 					EPhysicalSurface Surface;
 					const float PX = Origin.X + (X + Random.FRand()) * GrassProbeSpacing;
 					const float PY = Origin.Y + (Y + Random.FRand()) * GrassProbeSpacing;
-					if (Ground(PX, PY, Hit, Surface) && (Surface == SURFACE_Rough || Surface == SURFACE_Fairway || Surface == SURFACE_Green))
+					if (Ground(PX, PY, Hit, Surface) && (Surface == SURFACE_Rough || Surface == SURFACE_Fairway || Surface == SURFACE_Green) && !OnPath(Hit))
 					{
 						Tufts.Add(Place(Hit, 1.f, 1.f));
 					}
