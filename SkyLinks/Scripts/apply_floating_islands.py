@@ -19,7 +19,7 @@
     isl.tune_look()             tame the bright exposure, richer colours (tune_look(-1.5) darker, (-0.5) brighter)
     isl.import_grass()          the 3D grass clumps + M_GrassBlades (grown around the camera in game)
     isl.raise_fog(20)           lift every cloud patch 20 m (or lower it with a negative number)
-    isl.fog_floaters()          a cloud patch under every floating island you've kept (run again after changing them)
+    isl.fog_floaters()          soft mist clouds under every floating island you've kept (run again after changing them)
     isl.reimport_paths()        after the buggy paths' ground changed: surfaces, rock and vines re-imported in place
 
 Needs, from Scripts/import_trees.py, the stylised trees and their M_Tree_Bark / M_Tree_Leaves / M_Tree_Vines
@@ -32,6 +32,7 @@ Each hole's GolfHole actor is moved to its island: tee, heading, height, aim poi
 Re-running replaces everything it made; it is safe to run twice.
 """
 import json
+import math
 from pathlib import Path
 
 import unreal
@@ -1094,39 +1095,79 @@ def add_fog(links):
     print(f"FOG {len(links['fog'])} cloud patches")
 
 
-def fog_floaters(density=0.35):
-    """A cloud patch under every floating island in the level (the ones you've kept), like the ones under the
-    holes. Run again after moving, adding or deleting floaters: it clears its old patches first."""
+MIST_CODE = """
+float edge = pow(saturate(dot(normalize(N), normalize(V))), 1.6);
+return saturate(edge * Density * (0.45 + 1.1 * Noise));
+"""
+
+
+def mist_material():
+    """M_FloaterMist: soft see-through cloud for the mist blobs under the floating islands. Unlit, fades out
+    towards the blob's rim (so a squashed sphere reads as a puff, not a ball), patchy with slowly drifting noise,
+    and melts into the rock where it touches it."""
+    mat = _material('M_FloaterMist')
+    mat.set_editor_property('blend_mode', unreal.BlendMode.BLEND_TRANSLUCENT)
+    mat.set_editor_property('shading_model', unreal.MaterialShadingModel.MSM_UNLIT)
+    drift = _expr(mat, unreal.MaterialExpressionPanner, -1100, 300, speed_x=0.004, speed_y=0.002)
+    lib.connect_material_expressions(_world_uv(mat, 60, -1300, 300), '', drift, 'Coordinate')
+    noise = _tex(mat, 'T_Macro', drift, -900, 300)
+    density = _expr(mat, unreal.MaterialExpressionScalarParameter, -900, 500, parameter_name='Density', default_value=0.8)
+    opacity = _custom(mat, MIST_CODE, {
+        'N': (_expr(mat, unreal.MaterialExpressionVertexNormalWS, -900, 100), ''),
+        'V': (_expr(mat, unreal.MaterialExpressionCameraVectorWS, -900, 200), ''),
+        'Noise': (noise, 'R'),
+        'Density': (density, ''),
+    }, -600, 300, output=unreal.CustomMaterialOutputType.CMOT_FLOAT1)
+    soft = _expr(mat, unreal.MaterialExpressionDepthFade, -350, 300, fade_distance_default=800.0)
+    lib.connect_material_expressions(opacity, '', soft, 'Opacity')
+    colour = _expr(mat, unreal.MaterialExpressionVectorParameter, -600, 0, parameter_name='Colour',
+                   default_value=unreal.LinearColor(0.82, 0.85, 0.9, 1.0))
+    lib.connect_material_property(colour, '', unreal.MaterialProperty.MP_EMISSIVE_COLOR)
+    lib.connect_material_property(soft, '', unreal.MaterialProperty.MP_OPACITY)
+    lib.recompile_material(mat)
+    unreal.EditorAssetLibrary.save_loaded_asset(mat)
+    return mat
+
+
+def fog_floaters(density=0.8):
+    """Soft mist clouds under every floating island in the level (the ones you've kept): a wide flat puff under
+    each with two smaller ones beside it. They're see-through cloud shapes, not fog volumes, so they always
+    show (on phones too). Run again after moving, adding or deleting floaters: it clears its old ones first.
+    density: 0.5 wispier, 1.2 thicker."""
     folder = 'Course/FloaterFog'
     for actor in _all():
         if str(actor.get_folder_path()) == folder:
             actors.destroy_actor(actor)
-    if not hasattr(unreal, 'LocalFogVolume'):
-        print('FOG skipped: LocalFogVolume not available in this engine build')
-        return
+    mat = mist_material()
+    instance_path = f'{MAT_DIR}/MI_FloaterMist'
+    instance = unreal.load_asset(instance_path) if unreal.EditorAssetLibrary.does_asset_exist(instance_path) else \
+        tools.create_asset('MI_FloaterMist', MAT_DIR, unreal.MaterialInstanceConstant, unreal.MaterialInstanceConstantFactoryNew())
+    instance.set_editor_property('parent', mat)
+    unreal.MaterialEditingLibrary.set_material_instance_scalar_parameter_value(instance, 'Density', density)
+    unreal.EditorAssetLibrary.save_loaded_asset(instance)
+    sphere = unreal.load_asset('/Engine/BasicShapes/Sphere.Sphere')  # 1 m across
     count = 0
     for actor in _all():
         if not str(actor.get_folder_path()).endswith('/Floaters'):
             continue
         origin, extent = actor.get_actor_bounds(False)
-        radius = max(extent.x, extent.y) / M * 1.3  # m, a little wider than the island
-        if radius < 1:
+        r = max(extent.x, extent.y) / M * 1.2  # m: a little wider than the island
+        if r < 1:
             continue
-        below = unreal.Vector(origin.x, origin.y, origin.z - extent.z - radius * 0.15 * M)
-        fog = actors.spawn_actor_from_class(unreal.LocalFogVolume, below, unreal.Rotator(0, 0, 0))
-        fog.set_actor_scale3d(unreal.Vector(radius / 5.0, radius / 5.0, radius / 10.0))  # flattened like a cloud bank
-        fog.set_actor_label(f'FloaterFog_{actor.get_actor_label()}')
-        fog.set_folder_path(folder)
-        component = fog.get_component_by_class(unreal.LocalFogVolumeComponent)
-        for key, value in (('radial_fog_extinction', density), ('height_fog_extinction', 0.0),
-                           ('fog_albedo', unreal.LinearColor(1, 1, 1, 1)), ('fog_phase_g', 0.3)):
-            try:
-                component.set_editor_property(key, value)
-            except Exception as error:
-                print(f'FOG note: {key}: {error}')
+        label = actor.get_actor_label()
+        turn = (sum(map(ord, label)) % 360) * 3.14159 / 180
+        bottom = origin.z - extent.z
+        puffs = [((0.0, 0.0), r, 0.0),
+                 ((0.5 * r * math.cos(turn), 0.5 * r * math.sin(turn)), 0.65 * r, -0.12 * r),
+                 ((-0.45 * r * math.cos(turn + 0.7), -0.45 * r * math.sin(turn + 0.7)), 0.55 * r, -0.2 * r)]
+        for i, ((dx, dy), size, dz) in enumerate(puffs):
+            where = unreal.Vector(origin.x + dx * M, origin.y + dy * M, bottom + (dz - 0.05 * size) * M)
+            blob = place(sphere, f'FloaterMist_{label}_{i}', folder, collide=False, shadow=False, location=where)
+            blob.set_actor_scale3d(unreal.Vector(2 * size, 2 * size, 0.7 * size))
+            blob.static_mesh_component.set_material(0, instance)
         count += 1
     unreal.get_editor_subsystem(unreal.LevelEditorSubsystem).save_current_level()
-    print(f'FLOATER FOG: {count} cloud patches under the floating islands')
+    print(f'FLOATER MIST: clouds under {count} floating islands (density {density})')
 
 
 def reimport_paths(holes=HOLES):
