@@ -926,6 +926,7 @@ def rope_bridge(deck_parts, parts, a, b, rng, width=2.4, sag_ratio=0.055, leafy=
     return span, sag
 
 
+PORTALS = True  # islands are linked by portals (drive through), not rope bridges
 RUNOFF_LIFT = 0.03  # m the buggy's slab rides above the grass where it runs off a rope bridge
 FOOTBRIDGE_WIDTH = 3.0  # m: the Fab bridge (2 m wide) is stretched to this so the buggy fits
 
@@ -1351,6 +1352,78 @@ def build_bridges(layouts, rng):
     return bridges
 
 
+PORTAL_RADIUS = 2.9      # m to the middle of the stone ring (the opening is about 5.2 m across)
+PORTAL_CENTRE = 2.55     # m above the ground: the ring's foot sinks a little into the grass
+
+
+def portal_mesh(rng):
+    """SM_Portal: a ring of chunky mossy stones standing on two footings, with a disc inside for the swirling
+    portal surface. Origin on the ground at the foot of the ring, facing +X (the way you drive through).
+    Materials: IslandRock (stones, vertex colour), PortalSwirl (the disc, UVs 0..1 across it), Vines."""
+    parts = Parts()
+    centre = Vector((0.0, 0.0, PORTAL_CENTRE))
+    stones = 22
+    for k in range(stones):
+        a = 2 * math.pi * (k + rng.uniform(-0.12, 0.12)) / stones
+        radial = Vector((0.0, math.cos(a), math.sin(a)))
+        tangent = Vector((0.0, -math.sin(a), math.cos(a)))
+        size = rng.uniform(0.85, 1.15)
+        p = centre + radial * (PORTAL_RADIUS + rng.uniform(-0.05, 0.08))
+        grey = rng.uniform(0.34, 0.46)
+        moss = rng.random() < 0.35
+        colour = (grey * 0.75, grey * 0.95, grey * 0.6) if moss else (grey, grey * 0.96, grey * 0.9)
+        # Each stone is a wedge-ish block: long round the ring, deep front to back.
+        parts.box(tuple(p), tuple(tangent), (1.0, 0.0, 0.0), (0.5 * size, 0.42 * size, 0.3 * size), colour)
+    for side in (-1, 1):   # footings either side, set into the ground
+        foot = Vector((0.0, side * (PORTAL_RADIUS + 0.35), 0.2))
+        parts.box(tuple(foot), (0.0, 1.0, 0.0), (1.0, 0.0, 0.0), (0.55, 0.65, 0.55), (0.36, 0.35, 0.32))
+    # Ivy trailing off the top stones.
+    for k in range(9):
+        a = math.pi / 2 + rng.uniform(-1.1, 1.1)
+        top = centre + Vector((rng.choice((-0.35, 0.35)), math.cos(a) * (PORTAL_RADIUS + 0.2), math.sin(a) * (PORTAL_RADIUS + 0.2)))
+        drop = rng.uniform(0.8, 2.2)
+        strand = [tuple(top - Vector((0, 0, drop * i / 4))) for i in range(5)]
+        facing = (1.0 if top.x > 0 else -1.0, 0.0)
+        parts.ribbon(strand, rng.uniform(0.35, 0.55), facing, (0.9, 0.95, 0.85), 0.5, mat=2, tile=1.7)
+    # The portal surface: a disc (both sides) just inside the stones.
+    r = PORTAL_RADIUS - 0.25
+    segments = 48
+    ring = [Vector((0.0, r * math.cos(2 * math.pi * i / segments), r * math.sin(2 * math.pi * i / segments))) + centre
+            for i in range(segments)]
+    verts = [tuple(centre)] + [tuple(p) for p in ring]
+    uvs = [(0.5, 0.5)] + [(0.5 + 0.5 * math.cos(2 * math.pi * i / segments), 0.5 + 0.5 * math.sin(2 * math.pi * i / segments))
+                          for i in range(segments)]
+    front = [(0, 1 + i, 1 + (i + 1) % segments) for i in range(segments)]
+    parts._add(verts, front, (1.0, 1.0, 1.0), 1, 0.0, uvs)
+    parts._add(verts, [f[::-1] for f in front], (1.0, 1.0, 1.0), 1, 0.0, uvs)
+    obj = parts.mesh('SM_Portal', ('IslandRock', 'PortalSwirl', 'Vines'))
+    sl.export_fbx(str(OUT / 'SM_Portal.fbx'), [obj])
+    return obj
+
+
+def build_portals(layouts, rng):
+    """Portals instead of rope bridges: one at the end of each hole where the buggy path runs off the island, and
+    its partner on the next hole's tee island. Both face the way you travel (from the leaving island towards the
+    next), so you drive into one and out of the other heading on into the island. The islands no longer have to
+    sit at bridgeable heights. Returns [{from, to, out: [x, y, z, yaw], in: [x, y, z, yaw]}] (world m, deg)."""
+    portal_mesh(random.Random(4242))
+    portals = []
+    anchors = bridge_anchor_points(layouts)
+    for n in range(1, max(C.PLACE)):
+        if n not in anchors:
+            continue
+        la, ha = layouts[n]
+        lb, hb = layouts[n + 1]
+        ax, ay, bx, by = anchors[n]
+        za = float(ha(*[np.array([v]) for v in C.to_local(n, ax, ay)])[0]) + C.PLACE[n][2]
+        zb = float(hb(*[np.array([v]) for v in C.to_local(n + 1, bx, by)])[0]) + C.PLACE[n + 1][2]
+        yaw = math.degrees(math.atan2(by - ay, bx - ax))
+        portals.append({'from': n, 'to': n + 1, 'out': [round(ax, 3), round(ay, 3), round(za - 0.05, 3), round(yaw, 2)],
+                        'in': [round(bx, 3), round(by, 3), round(zb - 0.05, 3), round(yaw, 2)]})
+        print(f'PORTAL {n}->{n + 1}: {za:.1f} m -> {zb:.1f} m')
+    return portals
+
+
 def fog_plan(layouts, bridges, rng):
     """Cloud-like fog patches: under every bridge and drifting in the gaps round each island."""
     fog = []
@@ -1511,9 +1584,17 @@ def main():
         layouts[number] = (layout, local_h)
     check_course(layouts)
     rng = random.Random(77)
-    bridges = build_bridges(layouts, rng)
-    fog = fog_plan({n: layouts[n] for n in wanted}, bridges, rng)
-    (OUT / 'Course_links.json').write_text(json.dumps({'bridges': bridges, 'fog': fog}, indent=1) + '\n')
+    if PORTALS:
+        portals = build_portals(layouts, rng)
+        bridges = []
+        # Fog still drifts in the gaps between islands, where the bridges used to hang.
+        gaps = [{'a': p['out'][:3], 'b': p['in'][:3]} for p in portals]
+        fog = fog_plan({n: layouts[n] for n in wanted}, gaps, rng)
+    else:
+        portals = []
+        bridges = build_bridges(layouts, rng)
+        fog = fog_plan({n: layouts[n] for n in wanted}, bridges, rng)
+    (OUT / 'Course_links.json').write_text(json.dumps({'bridges': bridges, 'portals': portals, 'fog': fog}, indent=1) + '\n')
     if '--no-render' not in args:
         render_course(layouts)
 

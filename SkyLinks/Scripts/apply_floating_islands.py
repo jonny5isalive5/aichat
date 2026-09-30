@@ -19,6 +19,7 @@
     isl.tune_look()             tame the bright exposure, richer colours (tune_look(-1.5) darker, (-0.5) brighter)
     isl.import_grass()          the 3D grass clumps + M_GrassBlades (grown around the camera in game)
     isl.raise_fog(20)           lift every cloud patch 20 m (or lower it with a negative number)
+    isl.portals()               rope bridges out, portals in (drive through to the next hole); needs Build.bat first
     isl.fog_floaters()          soft mist clouds under every floating island you've kept (run again after changing them)
     isl.reimport_paths()        after the buggy paths' ground changed: surfaces, rock and vines re-imported in place
 
@@ -1068,6 +1069,78 @@ def apply_bridges(materials, links):
             guard.static_mesh_component.set_editor_property('cast_shadow', False)
             guard.static_mesh_component.set_editor_property('visible', False)
         print(f"BRIDGE {bridge['name']}: {bridge['span']} m")
+    apply_portals(materials, links)  # the islands are linked by portals now (no bridges in Course_links.json)
+
+
+SWIRL_CODE = """
+float2 p = UV - 0.5;
+float r = length(p) * 2.0;
+float a = atan2(p.y, p.x);
+float s1 = sin(a * 3.0 + r * 10.0 - T * 2.2) * 0.5 + 0.5;
+float s2 = sin(a * 5.0 - r * 7.0 + T * 1.3) * 0.5 + 0.5;
+float glow = pow(saturate(1.0 - r), 0.6);
+float3 deep = float3(0.04, 0.12, 0.55);
+float3 bright = float3(0.3, 0.95, 1.4);
+float3 c = lerp(deep, bright, s1 * 0.7 + s2 * 0.3) * (0.6 + 1.6 * glow);
+return c + float3(1.2, 1.4, 1.6) * pow(saturate(1.0 - r), 6.0);
+"""
+
+
+def swirl_material():
+    """M_PortalSwirl: the glowing, slowly turning whirlpool inside each portal ring (unlit, both sides)."""
+    mat = _material('M_PortalSwirl')
+    mat.set_editor_property('shading_model', unreal.MaterialShadingModel.MSM_UNLIT)
+    mat.set_editor_property('two_sided', True)
+    colour = _custom(mat, SWIRL_CODE, {
+        'UV': (_expr(mat, unreal.MaterialExpressionTextureCoordinate, -800, 0), ''),
+        'T': (_expr(mat, unreal.MaterialExpressionTime, -800, 150), ''),
+    }, -450, 0)
+    lib.connect_material_property(colour, '', unreal.MaterialProperty.MP_EMISSIVE_COLOR)
+    lib.recompile_material(mat)
+    unreal.EditorAssetLibrary.save_loaded_asset(mat)
+    return mat
+
+
+def apply_portals(materials, links):
+    """The portal pairs from Course_links.json: at the end of each hole where the buggy path leaves the island,
+    and on the next hole's tee island, with a hologram sign over the one you drive into."""
+    folder = 'Course/Portals'
+    for actor in _all():
+        if str(actor.get_folder_path()) == folder:
+            actors.destroy_actor(actor)
+    portals = links.get('portals', [])
+    if not portals:
+        print('PORTALS: none in Course_links.json')
+        return
+    if not hasattr(unreal, 'SkyLinksPortal'):
+        print('PORTALS skipped: rebuild the C++ first (Build.bat)')
+        return
+    mats = dict(materials, PortalSwirl=swirl_material())
+    ring = import_mesh('SM_Portal', mats, collide=False)
+    for link in portals:
+        placed = {}
+        for end in ('in', 'out'):
+            x, y, z, yaw = link[end]
+            portal = actors.spawn_actor_from_class(unreal.SkyLinksPortal, unreal.Vector(x * M, y * M, z * M),
+                                                   unreal.Rotator(0, 0, yaw))
+            portal.set_actor_label(f"Portal_{link['from']:02d}_{link['to']:02d}_{end.capitalize()}")
+            portal.set_folder_path(folder)
+            portal.get_editor_property('ring').set_static_mesh(ring)
+            placed[end] = portal
+        placed['out'].set_editor_property('target', placed['in'])
+        placed['out'].set_editor_property('sign', f"HOLE {link['to']}  THIS WAY")
+        print(f"PORTAL {link['from']} -> {link['to']}")
+
+
+def portals():
+    """Swap the rope bridges for portals: removes every rope bridge (and its hidden drive slab) and places a pair
+    of portals for each hole-to-hole link. Needs the C++ built (Build.bat) first."""
+    for actor in _all():
+        if str(actor.get_folder_path()) == 'Course/Bridges':
+            actors.destroy_actor(actor)
+    apply_portals(build_materials(), json.loads((SOURCE / 'Course_links.json').read_text()))
+    unreal.get_editor_subsystem(unreal.LevelEditorSubsystem).save_current_level()
+    print('PORTALS DONE: rope bridges removed, portals in place')
 
 
 def add_fog(links):

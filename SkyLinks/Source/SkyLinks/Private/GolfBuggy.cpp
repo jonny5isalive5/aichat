@@ -1,6 +1,7 @@
 #include "GolfBuggy.h"
 #include "SkyLinks.h"
 #include "GolfPhysics.h"
+#include "SkyLinksPortal.h"
 #include "Camera/CameraComponent.h"
 #include "Components/BoxComponent.h"
 #include "Components/StaticMeshComponent.h"
@@ -174,9 +175,72 @@ void AGolfBuggy::MulticastTeleport_Implementation(FVector Location, FRotator Rot
 	NetState.Steer = 0.f;
 }
 
+bool AGolfBuggy::TryPortal(const FVector& Start)
+{
+	ASkyLinksPortal* Portal = ASkyLinksPortal::FindCrossed(GetWorld(), Start, GetActorLocation());
+	if (!Portal)
+	{
+		return false;
+	}
+	FVector Exit;
+	FRotator Facing;
+	Portal->ExitFor(GetActorLocation(), GetActorRotation(), Exit, Facing);
+	FVector Ground = Exit + FVector(0.f, 0.f, RideHeight);
+	FRotator Rotation = Facing;
+	bool bWater = false;
+	SampleGround(Ground, Facing.Yaw, Ground, Rotation, bWater);
+	SetActorLocationAndRotation(Ground, Rotation, false, nullptr, ETeleportType::TeleportPhysics);
+	LastLocation = Ground;
+	CameraCutFrames = 2;
+	if (HasAuthority())
+	{
+		PublishState();
+		MulticastPortalHop(Ground, Rotation, Speed);
+	}
+	else
+	{
+		ServerPortalHop(Ground, Rotation, Speed);
+	}
+	return true;
+}
+
+void AGolfBuggy::ServerPortalHop_Implementation(FVector_NetQuantize10 Location, FRotator Rotation, float InSpeed)
+{
+	// Only accept a jump that lands where a portal lets out.
+	if (!ASkyLinksPortal::IsNearAnExit(GetWorld(), Location, 1200.f))
+	{
+		return;
+	}
+	SetActorLocationAndRotation(Location, Rotation, false, nullptr, ETeleportType::TeleportPhysics);
+	Speed = InSpeed;
+	PublishState();
+	MulticastPortalHop(Location, Rotation, InSpeed);
+}
+
+void AGolfBuggy::MulticastPortalHop_Implementation(FVector Location, FRotator Rotation, float InSpeed)
+{
+	if (IsLocallyControlled())
+	{
+		return; // The driver already jumped.
+	}
+	SetActorLocationAndRotation(Location, Rotation, false, nullptr, ETeleportType::TeleportPhysics);
+	LastLocation = Location;
+	NetState.Location = Location;
+	NetState.Rotation = Rotation;
+	NetState.Speed = InSpeed;
+	CameraCutFrames = 2;
+}
+
 void AGolfBuggy::Tick(float DeltaSeconds)
 {
 	Super::Tick(DeltaSeconds);
+	// Right after a portal hop the chase camera cuts to its new place instead of lagging across the gap.
+	CameraArm->bEnableCameraLag = CameraCutFrames <= 0;
+	CameraArm->bEnableCameraRotationLag = CameraArm->bEnableCameraLag;
+	if (CameraCutFrames > 0)
+	{
+		--CameraCutFrames;
+	}
 
 	if (IsLocallyControlled())
 	{
@@ -275,6 +339,10 @@ void AGolfBuggy::Drive(float DeltaSeconds)
 	const FVector Start = GetActorLocation();
 	FHitResult Hit;
 	SetActorLocationAndRotation(Ground, Rotation, true, &Hit);
+	if (TryPortal(Start))
+	{
+		return;
+	}
 	if (!Hit.bBlockingHit)
 	{
 		return;

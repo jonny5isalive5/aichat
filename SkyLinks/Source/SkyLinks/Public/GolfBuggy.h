@@ -137,6 +137,14 @@ protected:
 	UFUNCTION(NetMulticast, Reliable)
 	void MulticastTeleport(FVector Location, FRotator Rotation);
 
+	/** Driver went through a portal: the server checks it came out of one and tells everyone else. */
+	UFUNCTION(Server, Reliable)
+	void ServerPortalHop(FVector_NetQuantize10 Location, FRotator Rotation, float InSpeed);
+
+	/** Everyone but the driver: snap to the far side of the portal (no gliding across the sky). */
+	UFUNCTION(NetMulticast, Reliable)
+	void MulticastPortalHop(FVector Location, FRotator Rotation, float InSpeed);
+
 	UPROPERTY(Replicated)
 	FBuggyNetState NetState;
 
@@ -148,6 +156,10 @@ private:
 	/** Ground height and slope under the four wheels at this position and yaw. */
 	bool SampleGround(const FVector& Center, float Yaw, FVector& OutLocation, FRotator& OutRotation, bool& bOutWater) const;
 	void PublishState();
+	/** If the move from Start just went through a portal, come out of its partner. True if it did. */
+	bool TryPortal(const FVector& Start);
+	/** Frames to hold the chase camera still after a portal hop, so it cuts instead of flying across. */
+	int32 CameraCutFrames = 0;
 
 	float Throttle = 0.f;
 	float SteerInput = 0.f;
