@@ -1084,7 +1084,7 @@ float3 deep = float3(0.04, 0.12, 0.55);
 float3 bright = float3(0.3, 0.95, 1.4);
 float3 swirl = lerp(deep, bright, s1 * 0.7 + s2 * 0.3) * (0.6 + 1.6 * glow);
 // With a picture of the next hole: clear in the middle, the whirlpool closing in towards the rim.
-float veil = saturate(pow(r, 1.8) * 1.1 + (s1 * 0.7 + s2 * 0.3) * 0.22 - 0.08);
+float veil = saturate(pow(r, 1.8) * 1.1 + (s1 * 0.7 + s2 * 0.3) * 0.22 - 0.08) * Strength;
 float3 through = View * 1.15 * (1.0 + 0.08 * sin(r * 30.0 - T * 4.0));
 float3 c = lerp(swirl, lerp(through, swirl, veil), ShowView);
 return c + float3(1.2, 1.4, 1.6) * pow(saturate(1.0 - r), 6.0) * (1.0 - 0.8 * ShowView);
@@ -1098,7 +1098,7 @@ VIEW_UV_CODE = """
 // Seen from behind the portal (looking the way it faces) the picture reads left to right as shot; from in
 // front (the way you drive through it backwards) the disc is seen from its other side, so mirror it.
 float mirror = dot(normalize(CameraDir), normalize(AxisX)) > 0.0 ? 1.0 : 0.0;
-return float2(lerp(UV.x, 1.0 - UV.x, mirror), 1.0 - UV.y);
+return float2(lerp(UV.x, 1.0 - UV.x, mirror), UV.y);
 """
 
 
@@ -1125,11 +1125,14 @@ def swirl_material():
                  sampler_type=unreal.MaterialSamplerType.SAMPLERTYPE_COLOR)
     lib.connect_material_expressions(flipped, '', view, 'UVs')
     show = _expr(mat, unreal.MaterialExpressionScalarParameter, -700, 450, parameter_name='ShowView', default_value=0.0)
+    # How much the whirlpool covers the picture: 1 = full, lower = more see-through.
+    strength = _expr(mat, unreal.MaterialExpressionScalarParameter, -700, 550, parameter_name='SwirlStrength', default_value=0.95)
     colour = _custom(mat, SWIRL_CODE, {
         'UV': (uv, ''),
         'T': (_expr(mat, unreal.MaterialExpressionTime, -800, 150), ''),
         'View': (view, 'RGB'),
         'ShowView': (show, ''),
+        'Strength': (strength, ''),
     }, -450, 0)
     lib.connect_material_property(colour, '', unreal.MaterialProperty.MP_EMISSIVE_COLOR)
     lib.recompile_material(mat)
