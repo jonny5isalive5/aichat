@@ -132,10 +132,10 @@ public:
 	/** After a portal: the view holds at the spot the portal's picture was taken from while you drive off, for
 	 *  up to this long (s) or until the buggy is PortalCameraReach (cm) away, then blends back behind it. */
 	UPROPERTY(EditAnywhere, Category = "Buggy|Portal")
-	float PortalCameraHold = 2.f;
+	float PortalCameraHold = 0.9f;
 
 	UPROPERTY(EditAnywhere, Category = "Buggy|Portal")
-	float PortalCameraReach = 1500.f;
+	float PortalCameraReach = 800.f;
 
 	/** Seconds to blend from the arrival view back to the chase camera (0 = cut). */
 	UPROPERTY(EditAnywhere, Category = "Buggy|Portal")
