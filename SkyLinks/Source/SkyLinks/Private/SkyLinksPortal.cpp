@@ -161,6 +161,15 @@ void ASkyLinksPortal::FaceHologram(float DeltaSeconds)
 	const FVector Base = GetActorLocation() + FVector(0.f, 0.f, HologramHeight + 18.f * FMath::Sin(HologramTime * 1.6f));
 	const FRotator Facing(0.f, GetActorRotation().Yaw + (bSignFacesBack ? 180.f : 0.f), 0.f);
 	Hologram->SetWorldLocationAndRotation(Base, Facing);
+	// Only from the side it faces: from behind (across the gap on the other island) it would read backwards.
+	if (const APlayerController* Controller = GetWorld()->GetFirstPlayerController())
+	{
+		if (Controller->PlayerCameraManager)
+		{
+			const FVector ToCamera = Controller->PlayerCameraManager->GetCameraLocation() - Base;
+			Hologram->SetVisibility(FVector::DotProduct(ToCamera, Facing.Vector()) > 0.f);
+		}
+	}
 	const uint8 Glow = static_cast<uint8>(215 + 40 * FMath::Abs(FMath::Sin(HologramTime * 7.3f) * FMath::Sin(HologramTime * 2.1f)));
 	Hologram->SetTextRenderColor(FColor(Glow / 3, Glow, 255));
 }
