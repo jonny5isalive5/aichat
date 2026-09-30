@@ -2,7 +2,9 @@
 #include "SkyLinks.h"
 #include "GolfPhysics.h"
 #include "SkyLinksPortal.h"
+#include "Camera/CameraActor.h"
 #include "Camera/CameraComponent.h"
+#include "GameFramework/PlayerController.h"
 #include "Components/BoxComponent.h"
 #include "Components/StaticMeshComponent.h"
 #include "Engine/StaticMesh.h"
@@ -197,6 +199,7 @@ bool AGolfBuggy::TryPortal(const FVector& Start)
 	SetActorLocationAndRotation(Ground, Rotation, false, nullptr, ETeleportType::TeleportPhysics);
 	LastLocation = Ground;
 	CameraCutFrames = 2;
+	StartArrivalView(Portal, Direction);
 	if (HasAuthority())
 	{
 		PublishState();
@@ -207,6 +210,69 @@ bool AGolfBuggy::TryPortal(const FVector& Start)
 		ServerPortalHop(Ground, Rotation, Speed);
 	}
 	return true;
+}
+
+void AGolfBuggy::StartArrivalView(const ASkyLinksPortal* Portal, int32 Direction)
+{
+	APlayerController* Player = Cast<APlayerController>(GetController());
+	if (!Player || !Player->IsLocalController())
+	{
+		return;
+	}
+	FVector Location;
+	FRotator Rotation;
+	Portal->ArrivalView(Direction, Location, Rotation);
+	if (!ArrivalCamera)
+	{
+		FActorSpawnParameters Params;
+		Params.SpawnCollisionHandlingOverride = ESpawnActorCollisionHandlingMethod::AlwaysSpawn;
+		Params.ObjectFlags |= RF_Transient;
+		ArrivalCamera = GetWorld()->SpawnActor<ACameraActor>(Location, Rotation, Params);
+		if (!ArrivalCamera)
+		{
+			return;
+		}
+		ArrivalCamera->SetReplicates(false);
+		ArrivalCamera->GetCameraComponent()->bConstrainAspectRatio = false;
+	}
+	ArrivalCamera->SetActorLocationAndRotation(Location, Rotation);
+	ArrivalCamera->GetCameraComponent()->SetFieldOfView(ASkyLinksPortal::ViewFOV);
+	// Cut straight to the view you just saw through the ring; the buggy drives off into it.
+	Player->SetViewTargetWithBlend(ArrivalCamera, 0.f);
+	ArrivalTime = 0.f;
+}
+
+void AGolfBuggy::UpdateArrivalView(float DeltaSeconds)
+{
+	if (ArrivalTime < 0.f || !ArrivalCamera)
+	{
+		return;
+	}
+	ArrivalTime += DeltaSeconds;
+	if (ArrivalTime >= PortalCameraHold || FVector::Dist(ArrivalCamera->GetActorLocation(), GetActorLocation()) >= PortalCameraReach)
+	{
+		EndArrivalView(PortalCameraBlend);
+	}
+}
+
+void AGolfBuggy::EndArrivalView(float Blend)
+{
+	ArrivalTime = -1.f;
+	APlayerController* Player = Cast<APlayerController>(GetController());
+	if (Player && Player->IsLocalController() && ArrivalCamera && Player->GetViewTarget() == ArrivalCamera)
+	{
+		Player->SetViewTargetWithBlend(this, Blend, VTBlend_EaseInOut, 2.f);
+	}
+}
+
+void AGolfBuggy::EndPlay(const EEndPlayReason::Type EndPlayReason)
+{
+	if (ArrivalCamera)
+	{
+		ArrivalCamera->Destroy();
+		ArrivalCamera = nullptr;
+	}
+	Super::EndPlay(EndPlayReason);
 }
 
 void AGolfBuggy::ServerPortalHop_Implementation(FVector_NetQuantize10 Location, FRotator Rotation, float InSpeed)
@@ -246,6 +312,7 @@ void AGolfBuggy::Tick(float DeltaSeconds)
 	{
 		--CameraCutFrames;
 	}
+	UpdateArrivalView(DeltaSeconds);
 
 	if (IsLocallyControlled())
 	{

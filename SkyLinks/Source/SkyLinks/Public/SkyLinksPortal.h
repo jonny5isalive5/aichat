@@ -70,6 +70,15 @@ public:
 	 *  comes out (ground height of the target's base; callers settle it onto the ground themselves). */
 	void ExitFor(const FVector& Location, const FRotator& Rotation, int32 Direction, FVector& OutLocation, FRotator& OutRotation) const;
 
+	/** Where the arrival camera stands after going through this portal (Direction as from FindCrossed): just past
+	 *  the portal you come out of, looking the way you're driving. The same spot the portal's picture was taken
+	 *  from (Scripts/apply_floating_islands.py portal_views), so the view through the ring and the view on arrival
+	 *  match. */
+	void ArrivalView(int32 Direction, FVector& OutLocation, FRotator& OutRotation) const;
+
+	/** Field of view of the portal pictures and of the arrival camera (degrees). */
+	static constexpr float ViewFOV = 80.f;
+
 	/** The ground under Location (trees and the like ignored), searched from well above it so a spot on rising
 	 *  ground isn't missed. Returns false if there's none; OutGround is on the surface. */
 	static bool FindGround(const UWorld* World, const FVector& Location, FVector& OutGround, const AActor* Ignore = nullptr);

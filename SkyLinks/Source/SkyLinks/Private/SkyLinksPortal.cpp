@@ -149,6 +149,15 @@ void ASkyLinksPortal::ExitFor(const FVector& Location, const FRotator& Rotation,
 	OutLocation = Target->GetActorLocation() + TargetForward * (ExitDistance * Direction) + TargetSide * Lateral;
 }
 
+void ASkyLinksPortal::ArrivalView(int32 Direction, FVector& OutLocation, FRotator& OutRotation) const
+{
+	check(Target);
+	// Must match portal_views in the editor script: 1.5 m past the exit portal's foot, 2.3 m up, 4 degrees down.
+	const FVector Forward = Target->GetActorForwardVector().GetSafeNormal2D() * static_cast<float>(Direction);
+	OutLocation = Target->GetActorLocation() + Forward * 150.f + FVector(0.f, 0.f, 230.f);
+	OutRotation = FRotator(-4.f, Forward.Rotation().Yaw, 0.f);
+}
+
 void ASkyLinksPortal::FaceHologram(float DeltaSeconds)
 {
 	if (Sign.IsEmpty())
