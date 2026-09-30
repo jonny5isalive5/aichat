@@ -738,7 +738,7 @@ void AGolfCharacter::UpdateLocomotion()
 	float Rate = 1.f;
 	if (Clip == RunAnim.Get())
 	{
-		Rate = FMath::Clamp(Speed / RunAnimSpeed, 0.6f, 1.6f);
+		Rate = FMath::Clamp(Speed / RunAnimSpeed, 0.6f, 2.6f);
 	}
 	else if (Clip == WalkAnim.Get())
 	{
