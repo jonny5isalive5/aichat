@@ -1130,8 +1130,9 @@ def fog_floaters(density=0.35):
 
 
 def reimport_paths(holes=HOLES):
-    """After the buggy paths' ground was reshaped: re-import each hole's surface, rock and vines in place (freeing
-    memory after each). Trees, floaters, bridges and everything you've placed stay exactly as they are."""
+    """After the buggy paths' ground was reshaped: re-import each hole's surface, rock and vines, then the rope
+    bridges, in place (freeing memory after each). Trees, floaters and everything you've placed stay exactly as
+    they are. Saved after every hole: after a crash, run it again (or reimport_paths(range(n, 19)) to carry on)."""
     materials = build_materials()
     for number in holes:
         for part in ('IslandTop', 'IslandRock', 'Vines'):
@@ -1141,7 +1142,16 @@ def reimport_paths(holes=HOLES):
                 unreal.SystemLibrary.collect_garbage()
         unreal.get_editor_subsystem(unreal.LevelEditorSubsystem).save_current_level()
         print(f'PATHS hole {number} done')
-    print('PATHS ALL DONE')
+    # The rope bridges' drive slabs run off onto the grass: re-import them too (they stay where they are).
+    links = json.loads((SOURCE / 'Course_links.json').read_text())
+    for bridge in links.get('bridges', []):
+        for key, collide in (('name', False), ('rails', False), ('guard', True)):
+            name = bridge.get(key)
+            if name and (SOURCE / f'{name}.fbx').is_file() and unreal.EditorAssetLibrary.does_asset_exist(f'{DEST}/{name}'):
+                import_mesh(name, materials, collide=collide)
+                unreal.SystemLibrary.collect_garbage()
+    unreal.get_editor_subsystem(unreal.LevelEditorSubsystem).save_current_level()
+    print('PATHS ALL DONE (islands and rope bridges)')
 
 
 def ensure_sea():

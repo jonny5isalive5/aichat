@@ -888,9 +888,29 @@ def rope_bridge(deck_parts, parts, a, b, rng, width=2.4, sag_ratio=0.055, leafy=
         parts.tube([tuple(centre - across * (width / 2 + 0.4)), tuple(centre + across * (width / 2 + 0.4))], 0.1, rng.choice(WOOD), sides=6)
     if guard is not None:
         # The smooth surface the buggy actually drives on (the planks are looks only): a thin slab just at
-        # plank-top height, running 1.5 m past each anchor and dipping into the grass so there's no lip.
-        path = [a - flat * 1.5 - Vector((0, 0, 0.2))] + [deck(i / (4 * steps)) + Vector((0, 0, 0.04))
-                                                          for i in range(4 * steps + 1)] + [b + flat * 1.5 - Vector((0, 0, 0.2))]
+        # plank-top height. Past each anchor it carries on over the grass for a few metres, riding just above
+        # the ground wherever that goes, then tapers under it: a straight dip used to meet ground that rises
+        # onto the island at an angle, a lip the wheels caught on.
+        def run_off(end, outward):
+            if ground is None:
+                return [end + outward * 1.5 - Vector((0, 0, 0.2))]
+            pts = []
+            start = end.z + 0.04
+            for k in range(1, 15):
+                dist = k * 0.3  # 4.2 m in 0.3 m steps
+                p = end + outward * dist
+                g = ground(p.x, p.y)
+                if g is None:
+                    break
+                ride = g + RUNOFF_LIFT
+                blend = min(dist / 1.2, 1.0)  # from deck height at the anchor onto the ground over 1.2 m
+                z = start * (1 - blend) + ride * blend
+                if dist > 2.7:  # the last 1.5 m tapers under the grass
+                    z -= (dist - 2.7) / 1.5 * (RUNOFF_LIFT + 0.2)
+                pts.append(Vector((p.x, p.y, z)))
+            return pts or [end + outward * 1.5 - Vector((0, 0, 0.2))]
+        path = run_off(deck(0.0), -flat)[::-1] + [deck(i / (4 * steps)) + Vector((0, 0, 0.04))
+                                                   for i in range(4 * steps + 1)] + run_off(deck(1.0), flat)
         half = across * (width / 2)
         top_v = [q for p in path for q in (tuple(p - half), tuple(p + half))]
         bottom_v = [tuple(Vector(q) - Vector((0, 0, 0.08))) for q in top_v]
@@ -906,6 +926,7 @@ def rope_bridge(deck_parts, parts, a, b, rng, width=2.4, sag_ratio=0.055, leafy=
     return span, sag
 
 
+RUNOFF_LIFT = 0.03  # m the buggy's slab rides above the grass where it runs off a rope bridge
 FOOTBRIDGE_WIDTH = 3.0  # m: the Fab bridge (2 m wide) is stretched to this so the buggy fits
 
 
