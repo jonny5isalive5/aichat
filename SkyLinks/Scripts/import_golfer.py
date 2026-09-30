@@ -53,7 +53,8 @@ ANIMATIONS = {
     'Exiting Car': 'A_ExitBuggy',
     'Walking': 'A_Walk',   # Fixed/ copies retargeted onto the golfer by Art/Blender/retarget_walk_idle.py
     'Idle': 'A_Idle',
-    'Running': 'A_Run',    # Goofy Running (Meshy rig): the jog and run
+    'Jogging': 'A_Jog',    # the golfer's own Meshy jog
+    'Running': 'A_Run',    # ...and run
 }
 NEEDS_REDOWNLOAD = {}
 

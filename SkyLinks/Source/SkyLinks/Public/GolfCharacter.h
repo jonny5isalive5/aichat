@@ -124,20 +124,21 @@ public:
 	/** Ground speed (cm/s) the walk clip matches at play rate 1: about two 72 cm steps per 1.4 s cycle. */
 	UPROPERTY(EditDefaultsOnly, Category = "Golf|Animations") float WalkAnimSpeed = 105.f;
 
+	UPROPERTY(EditDefaultsOnly, Category = "Golf|Animations") TSoftObjectPtr<UAnimSequence> JogAnim;
 	UPROPERTY(EditDefaultsOnly, Category = "Golf|Animations") TSoftObjectPtr<UAnimSequence> RunAnim;
-	/** Ground speed (cm/s) the run clip matches at play rate 1 (slower = a jog, faster = a sprint). */
-	UPROPERTY(EditDefaultsOnly, Category = "Golf|Animations") float RunAnimSpeed = 420.f;
+	/** Ground speeds (cm/s) the jog and run clips match at play rate 1 (set per golfer). */
+	UPROPERTY(EditDefaultsOnly, Category = "Golf|Animations") float JogAnimSpeed = 136.f;
+	UPROPERTY(EditDefaultsOnly, Category = "Golf|Animations") float RunAnimSpeed = 272.f;
 
-	/** On-foot speed at pace 0 (a walk) and pace 1 (a run), cm/s. The player sets the pace by sliding up the GO bar. */
-	UPROPERTY(EditDefaultsOnly, Category = "Golf|Walking") float WalkSpeed = 170.f;
-	UPROPERTY(EditDefaultsOnly, Category = "Golf|Walking") float RunSpeed = 600.f;
-	/** Above this ground speed (cm/s) the legs switch from the walk clip to the run clip (a jog, then a run). */
-	UPROPERTY(EditDefaultsOnly, Category = "Golf|Walking") float JogFromSpeed = 310.f;
+	/** On-foot speed (cm/s) at each gait of the GO bar: walk, fast walk, jog, run (set per golfer). The pace
+	 *  0..1 blends through them; the legs use the walk clip, then the jog clip, then the run clip. */
+	UPROPERTY(EditDefaultsOnly, Category = "Golf|Walking") float WalkSpeed = 110.f;
+	UPROPERTY(EditDefaultsOnly, Category = "Golf|Walking") float FastWalkSpeed = 160.f;
+	UPROPERTY(EditDefaultsOnly, Category = "Golf|Walking") float JogSpeed = 185.f;
+	UPROPERTY(EditDefaultsOnly, Category = "Golf|Walking") float RunSpeed = 300.f;
 
-	/** Which golfer this player is (0 the man, 1 his wife): the main menu will set it; C swaps it for now. */
-	void ChooseBody(uint8 InBody);
-	uint8 GetBody() const { return Body; }
-	static int32 NumBodies();
+	/** Ground speed for a pace (0 walk .. 1 run). */
+	float SpeedForPace(float InPace) const;
 
 	/** How fast to go on foot, 0 (walk) .. 1 (run). Local player: set every frame; sent on to the server. */
 	void SetPace(float InPace);

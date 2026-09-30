@@ -76,15 +76,17 @@ namespace
 	{
 		const TCHAR* Folder;   // /Game/Characters/<Folder>: SK_Golfer, clubs, Animations/A_*
 		float Height;          // cm in game
-		float WalkAnimSpeed;   // cm/s the walk clip covers at play rate 1
-		float RunAnimSpeed;    // cm/s the run clip covers at play rate 1
-		float WalkSpeed;       // cm/s at pace 0
-		float RunSpeed;        // cm/s at pace 1
-		float JogFromSpeed;    // cm/s where the legs change to the run clip
+		float WalkAnimSpeed;   // cm/s each clip covers at play rate 1 (measured from its planted feet)
+		float JogAnimSpeed;
+		float RunAnimSpeed;
+		float WalkSpeed;       // cm/s at each gait of the GO bar
+		float FastWalkSpeed;
+		float JogSpeed;
+		float RunSpeed;
 	};
 	const FGolferBodyInfo GolferBodies[] = {
-		{ TEXT("Eccentric"), 180.f, 109.f, 137.f, 120.f, 330.f, 200.f },  // the man
-		{ TEXT("Diva"), 172.f, 125.f, 205.f, 130.f, 400.f, 240.f },      // his wife
+		{ TEXT("Eccentric"), 180.f, 109.f, 136.f, 272.f, 110.f, 160.f, 185.f, 300.f },  // the man
+		{ TEXT("Diva"), 172.f, 125.f, 131.f, 285.f, 125.f, 170.f, 200.f, 320.f },       // his wife
 	};
 }
 
@@ -113,15 +115,18 @@ void AGolfCharacter::PointAssetsAt(uint8 InBody)
 	ExitBuggyAnim = TSoftObjectPtr<UAnimSequence>(Anim(TEXT("A_ExitBuggy")));
 	IdleAnim = TSoftObjectPtr<UAnimSequence>(Anim(TEXT("A_Idle")));
 	WalkAnim = TSoftObjectPtr<UAnimSequence>(Anim(TEXT("A_Walk")));
+	JogAnim = TSoftObjectPtr<UAnimSequence>(Anim(TEXT("A_Jog")));
 	RunAnim = TSoftObjectPtr<UAnimSequence>(Anim(TEXT("A_Run")));
 	IronClubAsset = TSoftObjectPtr<UStaticMesh>(Path(TEXT("SM_Club_Iron")));
 	PutterClubAsset = TSoftObjectPtr<UStaticMesh>(Path(TEXT("SM_Club_Putter")));
 	GolferHeight = Info.Height;
 	WalkAnimSpeed = Info.WalkAnimSpeed;
+	JogAnimSpeed = Info.JogAnimSpeed;
 	RunAnimSpeed = Info.RunAnimSpeed;
 	WalkSpeed = Info.WalkSpeed;
+	FastWalkSpeed = Info.FastWalkSpeed;
+	JogSpeed = Info.JogSpeed;
 	RunSpeed = Info.RunSpeed;
-	JogFromSpeed = Info.JogFromSpeed;
 }
 
 void AGolfCharacter::ChooseBody(uint8 InBody)
@@ -233,6 +238,7 @@ void AGolfCharacter::LoadBody()
 	GetMesh()->VisibilityBasedAnimTickOption = EVisibilityBasedAnimTickOption::AlwaysTickPoseAndRefreshBones;
 	IdleAnim.LoadSynchronous();
 	WalkAnim.LoadSynchronous();
+	JogAnim.LoadSynchronous();
 	RunAnim.LoadSynchronous();
 	HoldAddressPose();
 }
@@ -718,10 +724,24 @@ void AGolfCharacter::UpdateLocomotion()
 	}
 	const float Speed = GetVelocity().Size2D();
 	const bool bMoving = Speed > 15.f;
-	// Walk and fast walk on the walk clip; jog and run on the run clip (when there is one), each sped up or slowed
-	// to the ground speed so the feet don't skate.
-	const bool bRunning = bMoving && Speed > JogFromSpeed && RunAnim.Get();
-	UAnimSequence* Clip = (bRunning ? RunAnim : bMoving ? WalkAnim : IdleAnim).Get();
+	// Walk and fast walk on the walk clip, then the jog clip, then the run clip (each sped up or slowed to the
+	// ground speed so the feet don't skate). Switch halfway between the gaits' speeds; fall back to whatever
+	// clips were imported.
+	const float JogFrom = (FastWalkSpeed + JogSpeed) * 0.5f;
+	const float RunFrom = (JogSpeed + RunSpeed) * 0.5f;
+	UAnimSequence* Clip = IdleAnim.Get();
+	if (bMoving)
+	{
+		Clip = WalkAnim.Get();
+		if (Speed > RunFrom && RunAnim.Get())
+		{
+			Clip = RunAnim.Get();
+		}
+		else if (Speed > JogFrom && (JogAnim.Get() || RunAnim.Get()))
+		{
+			Clip = JogAnim.Get() ? JogAnim.Get() : RunAnim.Get();
+		}
+	}
 	if (!Clip)
 	{
 		Clip = WalkAnim.Get() ? WalkAnim.Get() : IdleAnim.Get();
@@ -738,11 +758,15 @@ void AGolfCharacter::UpdateLocomotion()
 	float Rate = 1.f;
 	if (Clip == RunAnim.Get())
 	{
-		Rate = FMath::Clamp(Speed / RunAnimSpeed, 0.6f, 2.6f);
+		Rate = FMath::Clamp(Speed / RunAnimSpeed, 0.6f, 2.f);
+	}
+	else if (Clip == JogAnim.Get())
+	{
+		Rate = FMath::Clamp(Speed / JogAnimSpeed, 0.6f, 2.f);
 	}
 	else if (Clip == WalkAnim.Get())
 	{
-		Rate = FMath::Clamp(Speed / WalkAnimSpeed, 0.6f, 2.8f);
+		Rate = FMath::Clamp(Speed / WalkAnimSpeed, 0.6f, 2.f);
 	}
 	GetMesh()->SetPlayRate(Rate);
 }
@@ -770,7 +794,23 @@ void AGolfCharacter::ServerSetPace_Implementation(float InPace)
 
 void AGolfCharacter::ApplyPace()
 {
-	GetCharacterMovement()->MaxWalkSpeed = FMath::Lerp(WalkSpeed, RunSpeed, Pace);
+	GetCharacterMovement()->MaxWalkSpeed = SpeedForPace(Pace);
+}
+
+float AGolfCharacter::SpeedForPace(float InPace) const
+{
+	// Through the four gaits of the GO bar (walk, fast walk, jog, run each a quarter of it).
+	const float Knots[4] = { WalkSpeed, FastWalkSpeed, JogSpeed, RunSpeed };
+	const float At[4] = { 0.f, 0.375f, 0.625f, 1.f };
+	InPace = FMath::Clamp(InPace, 0.f, 1.f);
+	for (int32 Index = 1; Index < 4; ++Index)
+	{
+		if (InPace <= At[Index])
+		{
+			return FMath::Lerp(Knots[Index - 1], Knots[Index], (InPace - At[Index - 1]) / (At[Index] - At[Index - 1]));
+		}
+	}
+	return RunSpeed;
 }
 
 FString AGolfCharacter::GaitName(float InPace)

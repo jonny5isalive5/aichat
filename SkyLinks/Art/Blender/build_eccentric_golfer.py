@@ -4,8 +4,7 @@
 
 The man ("Eccentric Golfer", Art/Golfer/Meshy_Eccentric_Golfer -> Art/Golfer/Eccentric) and his wife ("Retro
 Fairway Diva", Art/Golfer/Meshy_Eccentric_Woman -> Art/Golfer/Diva) are the same Meshy rig, so they're built the
-same way. Both get the old golfer's golf clips, their own Meshy walk, and Goofy Running (made on the Meshy rig) as
-their jog / run.
+same way. Both get the old golfer's golf clips and their own Meshy walk, jog and run (in place, speeds measured).
 
 Reads Art/Golfer/Meshy_Eccentric_Golfer/ (Meshy export: Character_output.fbx is the body bound in its rest pose;
 the Walking "withSkin" FBX has the same skeleton with mixamorig bone names, used only to rename the bones, as its
@@ -43,15 +42,17 @@ TRIANGLES = 32000  # mobile budget for the body
 # game (cm; keep AGolfCharacter's body table in step) and whether the Meshy walk replaces the old golfer's.
 CHARACTERS = {
     'man': dict(folder='Meshy_Eccentric_Golfer', prefix='Meshy_AI_Eccentric_Golfer_biped', out='Eccentric',
-                material='M_EccentricGolfer', height=180.0, own_walk=True),
+                material='M_EccentricGolfer', height=180.0, own_walk=True,
+                jog='Jog Forward.fbx', run='Running (1).fbx'),
     'woman': dict(folder='Meshy_Eccentric_Woman', prefix='Meshy_AI_Retro_Fairway_Diva_biped', out='Diva',
-                  material='M_FairwayDiva', height=172.0, own_walk=True),
+                  material='M_FairwayDiva', height=172.0, own_walk=True,
+                  jog='Jogging.fbx', run='Running.fbx'),
 }
 
 CLIPS = ['Golf Drive', 'Golf Drive alt1', 'Golf Drive Setup', 'Golf Tee Up', 'Golf Chip',
          'Golf Chip (replay if long shit in)', 'Golf Putt', 'Golf Putt Victory', 'Golf Putt Victory on long putt',
          'Golf Putt Failure missed putt', 'Golf Bad Shot', 'Hokey Pokey hole in one', 'Silly Dancing celebrate',
-         'Silly Dancing celebrate alt1', 'Entering Car', 'Exiting Car', 'Walking', 'Idle', 'Running']
+         'Silly Dancing celebrate alt1', 'Entering Car', 'Exiting Car', 'Walking', 'Idle', 'Jogging', 'Running']
 
 # Set by build_body for the character being built.
 MESHY = BODY_FBX = NAMES_FBX = OUT = None
@@ -74,8 +75,10 @@ def use_character(key):
 
 def clip_source(name, character):
     """(fbx, native): the old golfer's clip, or one made on the Meshy rig (native: in place, hips scaled by size)."""
+    if name == 'Jogging':
+        return MESHY / character['jog'], True
     if name == 'Running':
-        return RUN_FBX, True
+        return MESHY / character['run'], True
     if name == 'Walking' and character['own_walk']:
         return NAMES_FBX, True
     fixed = GOLFER / 'Animations' / 'Fixed' / f'{name}.fbx'
@@ -217,8 +220,16 @@ def retarget(dst, name):
     if not path.is_file():
         print(f'MISSING {name}')
         return
+    known = set(bpy.data.actions)
     new = import_fbx(path)
     src = next(o for o in new if o.type == 'ARMATURE')
+    # Meshy "with skin" exports carry a one-frame bind action as well as the motion: use the longest one.
+    actions = [a for a in bpy.data.actions if a not in known]
+    motion = max((a for a in actions if any(fc.data_path.startswith('pose.bones') for fc in a.fcurves)),
+                 key=lambda a: a.frame_range[1] - a.frame_range[0])
+    if src.animation_data is None:
+        src.animation_data_create()
+    src.animation_data.action = motion
     scene = bpy.context.scene
     first, last = (int(v) for v in src.animation_data.action.frame_range)
     scene.frame_start, scene.frame_end = first, last
