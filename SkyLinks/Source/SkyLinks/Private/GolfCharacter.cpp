@@ -215,9 +215,9 @@ void AGolfCharacter::LoadBody()
 {
 	if (!GetMesh()->GetSkeletalMeshAsset())
 	{
-		if (USkeletalMesh* Body = GolferMeshAsset.LoadSynchronous())
+		if (USkeletalMesh* BodyMesh = GolferMeshAsset.LoadSynchronous())
 		{
-			GetMesh()->SetSkeletalMesh(Body);
+			GetMesh()->SetSkeletalMesh(BodyMesh);
 		}
 	}
 	bHasBody = GetMesh()->GetSkeletalMeshAsset() != nullptr;
