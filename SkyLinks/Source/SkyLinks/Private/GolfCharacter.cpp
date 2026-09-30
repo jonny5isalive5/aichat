@@ -83,7 +83,7 @@ namespace
 		float JogFromSpeed;    // cm/s where the legs change to the run clip
 	};
 	const FGolferBodyInfo GolferBodies[] = {
-		{ TEXT("Eccentric"), 180.f, 83.f, 137.f, 120.f, 330.f, 200.f },  // the man
+		{ TEXT("Eccentric"), 180.f, 109.f, 137.f, 120.f, 330.f, 200.f },  // the man
 		{ TEXT("Diva"), 172.f, 125.f, 205.f, 130.f, 400.f, 240.f },      // his wife
 	};
 }

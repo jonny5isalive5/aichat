@@ -4,8 +4,8 @@
 
 The man ("Eccentric Golfer", Art/Golfer/Meshy_Eccentric_Golfer -> Art/Golfer/Eccentric) and his wife ("Retro
 Fairway Diva", Art/Golfer/Meshy_Eccentric_Woman -> Art/Golfer/Diva) are the same Meshy rig, so they're built the
-same way. Both get the old golfer's golf clips, and Goofy Running (made on the Meshy rig) as their jog / run; the
-woman walks with her own Meshy walk, the man with the old golfer's.
+same way. Both get the old golfer's golf clips, their own Meshy walk, and Goofy Running (made on the Meshy rig) as
+their jog / run.
 
 Reads Art/Golfer/Meshy_Eccentric_Golfer/ (Meshy export: Character_output.fbx is the body bound in its rest pose;
 the Walking "withSkin" FBX has the same skeleton with mixamorig bone names, used only to rename the bones, as its
@@ -43,7 +43,7 @@ TRIANGLES = 32000  # mobile budget for the body
 # game (cm; keep AGolfCharacter's body table in step) and whether the Meshy walk replaces the old golfer's.
 CHARACTERS = {
     'man': dict(folder='Meshy_Eccentric_Golfer', prefix='Meshy_AI_Eccentric_Golfer_biped', out='Eccentric',
-                material='M_EccentricGolfer', height=180.0, own_walk=False),
+                material='M_EccentricGolfer', height=180.0, own_walk=True),
     'woman': dict(folder='Meshy_Eccentric_Woman', prefix='Meshy_AI_Retro_Fairway_Diva_biped', out='Diva',
                   material='M_FairwayDiva', height=172.0, own_walk=True),
 }
