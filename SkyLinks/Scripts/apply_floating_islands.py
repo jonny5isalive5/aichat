@@ -493,6 +493,22 @@ def import_mesh(name, materials, collide=True):
     return mesh
 
 
+# ---------------------------------------------------------------- hand work lock
+
+LOCK_FILE = Path(unreal.Paths.project_dir()) / 'Scripts' / 'HAND_WORK_LOCK.txt'
+
+
+def hand_work_locked():
+    """While Scripts/HAND_WORK_LOCK.txt exists, nothing here moves, replaces or replants the owner's hand-placed
+    trees, floaters or portals: those commands print a refusal and do nothing."""
+    return LOCK_FILE.is_file()
+
+
+def _refuse(what):
+    print(f'LOCKED: {what} would move or replace hand-placed trees / floaters / portals, so it did nothing. '
+          f'(The lock is Scripts/HAND_WORK_LOCK.txt - ask Claude before ever removing it.)')
+
+
 def _all():
     return actors.get_all_level_actors()
 
@@ -622,6 +638,9 @@ def _foliage_types():
 def trees_to_foliage():
     """Hand every SkyLinksForest's trees to the level's foliage: in Foliage mode (Select tool) each tree can
     be clicked and moved on its own, and the brush paints more. Instancing (and the fps) stays the same."""
+    if hand_work_locked():
+        _refuse('trees_to_foliage()')
+        return
     types = _foliage_types()
     moved = 0
     for forest in [a for a in _all() if isinstance(a, unreal.SkyLinksForest)]:
@@ -695,6 +714,9 @@ def footbridge_fab_material():
 def place_footbridges(number, spots, deck_offset_cm=0.0, wood=True):
     """The Fab bridge over each brook crossing (looks only), stretched to the span; the Props mesh underneath
     becomes the invisible flat deck the buggy and ball actually use."""
+    if hand_work_locked():
+        _refuse('place_footbridges()')
+        return
     folder = f'Course/Hole{number:02d}/Footbridges'
     for actor in _all():
         if str(actor.get_folder_path()) == folder:
@@ -813,6 +835,9 @@ def refresh_islands(holes=HOLES, bridges=True):
     ivy, water and footbridge deck in place, re-seat the holes, footbridges and rope bridges, and replant the
     trees island by island (clear of the new paths and bunkers). Holes in KEEP_TREES (hole 1, arranged by hand)
     keep their trees. Your moved floating islands, the fog and the sea stay as they are."""
+    if hand_work_locked():
+        _refuse('refresh_islands()')
+        return
     world = unreal.get_editor_subsystem(unreal.UnrealEditorSubsystem).get_editor_world()
     materials = build_materials()
     types = _foliage_types()
@@ -856,6 +881,9 @@ def refresh_remaining(per_run=3):
     """Crash-proof refresh: does the next few holes that aren't up to date yet (each is saved as soon as it is
     done and marked on its GolfHole), then stops. Run it again, and again, until it says ALL DONE; after a crash just
     reopen the editor and run it again - it carries on where it got to. The rope bridges go in on the last run."""
+    if hand_work_locked():
+        _refuse('refresh_remaining()')
+        return
     everything = _all()
     pending = []
     for number in HOLES:
@@ -931,6 +959,9 @@ def lift_floaters(clearance=45.0):
     """After the holes changed height, lift any floating island that now hangs too close over a course: each one's
     underside ends up at least `clearance` metres above the ground below it. Ones already high enough don't move
     (nor sideways, so your hand placement stays)."""
+    if hand_work_locked():
+        _refuse('lift_floaters()')
+        return
     world = unreal.get_editor_subsystem(unreal.UnrealEditorSubsystem).get_editor_world()
     lifted = 0
     for actor in _all():
@@ -959,6 +990,9 @@ def finish_course():
     """Everything after an island rebuild, in one go: new materials, every island refreshed (each saved as it is
     done, so after a crash just run this again and it carries on), floating islands lifted clear, bridges in,
     course checked and saved."""
+    if hand_work_locked():
+        _refuse('finish_course()')
+        return
     update_materials()
     for _ in range(len(HOLES) + 2):
         pending = [n for n in HOLES if (lambda g: g and _surface_tag(n) not in [str(t) for t in g.tags])(
@@ -1009,6 +1043,9 @@ def _tree_mesh(kind):
 
 def plant_forest(number, spots):
     """All the hole's trees as instances on one SkyLinksForest actor (the gameplay trees included)."""
+    if hand_work_locked():
+        _refuse('plant_forest()')
+        return
     assert hasattr(unreal, 'SkyLinksForest'), 'SkyLinksForest not found: rebuild the C++ first'
     folder = f'Course/Hole{number:02d}/Trees'
     forest = actors.spawn_actor_from_class(unreal.SkyLinksForest, unreal.Vector(0, 0, 0), unreal.Rotator(0, 0, 0))
@@ -1030,6 +1067,9 @@ def plant_forest(number, spots):
 
 
 def apply_islands(number, materials=None):
+    if hand_work_locked():
+        _refuse('apply_islands()')
+        return
     materials = materials or build_materials()
     spots = json.loads((SOURCE / f'Hole{number:02d}_spots.json').read_text())
     remove_flat_ground(number)
@@ -1151,7 +1191,9 @@ def apply_portals(materials, links):
         if str(actor.get_folder_path()) == folder:
             placed_at = next((str(t)[7:].split(',') for t in actor.tags if str(t).startswith('Placed:')), None)
             where, turn = actor.get_actor_location(), actor.get_actor_rotation()
-            if placed_at and (abs(where.x - float(placed_at[0])) > 50 or abs(where.y - float(placed_at[1])) > 50
+            # With the hand-work lock on, every portal already placed by this keeps exactly where it is.
+            if placed_at and (hand_work_locked() or abs(where.x - float(placed_at[0])) > 50
+                              or abs(where.y - float(placed_at[1])) > 50
                               or abs(((turn.yaw - float(placed_at[2])) + 180) % 360 - 180) > 2):
                 kept[actor.get_actor_label()] = (where, turn, list(actor.tags))
             actors.destroy_actor(actor)
@@ -1436,6 +1478,9 @@ def ensure_sea():
 def apply_course(holes=HOLES, wipe_hand_work=False):
     """First-time build of the whole course. It clears EVERY tree and replants, so hand-arranged holes (KEEP_TREES)
     would be lost: once the course exists, use refresh_islands() instead."""
+    if hand_work_locked():
+        _refuse('apply_course()')
+        return
     assert wipe_hand_work or not KEEP_TREES, ('apply_course() replants every island and would wipe your hand-placed '
                                               'trees on hole(s) %s. Use refresh_islands() instead.' % sorted(KEEP_TREES))
     world = unreal.get_editor_subsystem(unreal.UnrealEditorSubsystem).get_editor_world()

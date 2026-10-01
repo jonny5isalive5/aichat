@@ -1,0 +1,11 @@
+HAND WORK LOCK
+
+While this file exists, the editor scripts (Scripts/apply_floating_islands.py) will not move, replace or replant
+anything placed by hand: trees, floating islands, portals. Commands that would (refresh_islands, refresh_remaining,
+finish_course, lift_floaters, plant_forest, apply_islands, apply_course, trees_to_foliage, place_footbridges) refuse
+and print "LOCKED". isl.portals() keeps every portal it has already placed exactly where it is.
+
+Safe with the lock on: reimport_paths, reimport_tops, update_surfaces, update_materials, portal_views,
+swirl_material, fog_floaters, tune_look, import_golfer.
+
+Never delete this file unless the owner asks for it.
