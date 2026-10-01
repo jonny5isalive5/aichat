@@ -1144,8 +1144,20 @@ def apply_portals(materials, links):
     """The portal pairs from Course_links.json: at the end of each hole where the buggy path leaves the island,
     and on the next hole's tee island. They work both ways, each with a hologram sign saying where it goes."""
     folder = 'Course/Portals'
+    # Portals moved by hand keep where they were put (anything not at its planned spot counts as moved).
+    planned = {}
+    for link in links.get('portals', []):
+        for end in ('in', 'out'):
+            planned[f"Portal_{link['from']:02d}_{link['to']:02d}_{end.capitalize()}"] = link[end]
+    kept = {}
     for actor in _all():
         if str(actor.get_folder_path()) == folder:
+            label = actor.get_actor_label()
+            spot = planned.get(label)
+            where = actor.get_actor_location()
+            if spot and (abs(where.x - spot[0] * M) > 50 or abs(where.y - spot[1] * M) > 50
+                         or abs(((actor.get_actor_rotation().yaw - spot[3]) + 180) % 360 - 180) > 2):
+                kept[label] = (where, actor.get_actor_rotation())
             actors.destroy_actor(actor)
     portals = links.get('portals', [])
     if not portals:
@@ -1160,9 +1172,12 @@ def apply_portals(materials, links):
         placed = {}
         for end in ('in', 'out'):
             x, y, z, yaw = link[end]
-            portal = actors.spawn_actor_from_class(unreal.SkyLinksPortal, unreal.Vector(x * M, y * M, z * M),
-                                                   unreal.Rotator(0, 0, yaw))
-            portal.set_actor_label(f"Portal_{link['from']:02d}_{link['to']:02d}_{end.capitalize()}")
+            label = f"Portal_{link['from']:02d}_{link['to']:02d}_{end.capitalize()}"
+            where, turn = kept.get(label, (unreal.Vector(x * M, y * M, z * M), unreal.Rotator(0, 0, yaw)))
+            portal = actors.spawn_actor_from_class(unreal.SkyLinksPortal, where, turn)
+            portal.set_actor_label(label)
+            if label in kept:
+                print(f'PORTAL {label}: kept where you moved it')
             portal.set_folder_path(folder)
             portal.get_editor_property('ring').set_static_mesh(ring)
             placed[end] = portal
