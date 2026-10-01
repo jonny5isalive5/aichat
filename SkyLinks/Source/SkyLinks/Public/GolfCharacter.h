@@ -140,6 +140,11 @@ public:
 	/** Ground speed for a pace (0 walk .. 1 run). */
 	float SpeedForPace(float InPace) const;
 
+	/** Which golfer this player is (0 the man, 1 his wife): the main menu will set it; C swaps it for now. */
+	void ChooseBody(uint8 InBody);
+	uint8 GetBody() const { return Body; }
+	static int32 NumBodies();
+
 	/** How fast to go on foot, 0 (walk) .. 1 (run). Local player: set every frame; sent on to the server. */
 	void SetPace(float InPace);
 	float GetPace() const { return Pace; }
