@@ -1153,7 +1153,7 @@ def apply_portals(materials, links):
             where, turn = actor.get_actor_location(), actor.get_actor_rotation()
             if placed_at and (abs(where.x - float(placed_at[0])) > 50 or abs(where.y - float(placed_at[1])) > 50
                               or abs(((turn.yaw - float(placed_at[2])) + 180) % 360 - 180) > 2):
-                kept[actor.get_actor_label()] = (where, turn)
+                kept[actor.get_actor_label()] = (where, turn, list(actor.tags))
             actors.destroy_actor(actor)
     portals = links.get('portals', [])
     if not portals:
@@ -1169,10 +1169,11 @@ def apply_portals(materials, links):
         for end in ('in', 'out'):
             x, y, z, yaw = link[end]
             label = f"Portal_{link['from']:02d}_{link['to']:02d}_{end.capitalize()}"
-            where, turn = kept.get(label, (unreal.Vector(x * M, y * M, z * M), unreal.Rotator(0, 0, yaw)))
+            where, turn, tags = kept.get(label, (unreal.Vector(x * M, y * M, z * M), unreal.Rotator(0, 0, yaw), None))
             portal = actors.spawn_actor_from_class(unreal.SkyLinksPortal, where, turn)
             portal.set_actor_label(label)
-            if label in kept:
+            if tags:
+                portal.tags = tags  # still marked with where it was first put, so it stays "moved" next time too
                 print(f'PORTAL {label}: kept where you moved it')
             else:
                 portal.tags = [unreal.Name(f'Placed:{where.x:.0f},{where.y:.0f},{turn.yaw:.1f}')]
