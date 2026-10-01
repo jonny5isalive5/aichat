@@ -1144,20 +1144,16 @@ def apply_portals(materials, links):
     """The portal pairs from Course_links.json: at the end of each hole where the buggy path leaves the island,
     and on the next hole's tee island. They work both ways, each with a hologram sign saying where it goes."""
     folder = 'Course/Portals'
-    # Portals moved by hand keep where they were put (anything not at its planned spot counts as moved).
-    planned = {}
-    for link in links.get('portals', []):
-        for end in ('in', 'out'):
-            planned[f"Portal_{link['from']:02d}_{link['to']:02d}_{end.capitalize()}"] = link[end]
+    # Portals moved by hand keep where they were put: each placed portal is tagged with where this put it, so one
+    # that's no longer there was moved since. (Untagged ones, from before, are simply replaced.)
     kept = {}
     for actor in _all():
         if str(actor.get_folder_path()) == folder:
-            label = actor.get_actor_label()
-            spot = planned.get(label)
-            where = actor.get_actor_location()
-            if spot and (abs(where.x - spot[0] * M) > 50 or abs(where.y - spot[1] * M) > 50
-                         or abs(((actor.get_actor_rotation().yaw - spot[3]) + 180) % 360 - 180) > 2):
-                kept[label] = (where, actor.get_actor_rotation())
+            placed_at = next((str(t)[7:].split(',') for t in actor.tags if str(t).startswith('Placed:')), None)
+            where, turn = actor.get_actor_location(), actor.get_actor_rotation()
+            if placed_at and (abs(where.x - float(placed_at[0])) > 50 or abs(where.y - float(placed_at[1])) > 50
+                              or abs(((turn.yaw - float(placed_at[2])) + 180) % 360 - 180) > 2):
+                kept[actor.get_actor_label()] = (where, turn)
             actors.destroy_actor(actor)
     portals = links.get('portals', [])
     if not portals:
@@ -1178,6 +1174,8 @@ def apply_portals(materials, links):
             portal.set_actor_label(label)
             if label in kept:
                 print(f'PORTAL {label}: kept where you moved it')
+            else:
+                portal.tags = [unreal.Name(f'Placed:{where.x:.0f},{where.y:.0f},{turn.yaw:.1f}')]
             portal.set_folder_path(folder)
             portal.get_editor_property('ring').set_static_mesh(ring)
             placed[end] = portal
