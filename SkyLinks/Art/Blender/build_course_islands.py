@@ -192,9 +192,10 @@ def reshape_bunkers(number, layout):
     }
     # Where a bunker cuts into the fairway it keeps a thin grass collar (as real ones do), and any sliver of fairway
     # left beside it goes to the rough: hair-thin pieces made the mesher run away (hole 18 ran out of memory).
-    fairway = fair.intersection(land_).difference(unary_union([b.buffer(0.8) for b in bunkers] + [green, tee] + blocked_water))
+    # (Coarse, simplified curves: dense little arcs beside the bunker and path outlines made the mesher fail.)
+    fairway = fair.intersection(land_).difference(unary_union([b.buffer(0.8, 4) for b in bunkers] + [green, tee] + blocked_water))
     pieces = list(fairway.geoms) if hasattr(fairway, 'geoms') else [fairway]
-    regions[B.FAIRWAY] = unary_union([p.buffer(-0.3).buffer(0.3) for p in pieces if p.area > 25])
+    regions[B.FAIRWAY] = unary_union([p.buffer(-0.3, 4).buffer(0.3, 4).simplify(0.15) for p in pieces if p.area > 25]).buffer(0)
     regions[B.ROUGH] = land_.difference(unary_union([regions[B.BUNKER], regions[B.GREEN], regions[B.FAIRWAY], tee]))
     regions = {k: v for k, v in regions.items() if not v.is_empty}
     return dict(layout, bunkers=bunkers, bunker_depths=depths, regions=regions)
