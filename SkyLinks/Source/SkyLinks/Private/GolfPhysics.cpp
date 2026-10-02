@@ -49,7 +49,7 @@ int32 GolfPhysics::GetPutterIndex()
 
 const FGolfSurfaceParams& GolfPhysics::GetSurface(EGolfLie Lie)
 {
-	static const FGolfSurfaceParams Fairway{ 0.35f, 0.25f, 110.f, 1.f };
+	static const FGolfSurfaceParams Fairway{ 0.35f, 0.25f, 220.f, 1.f };
 	static const FGolfSurfaceParams Rough{ 0.2f, 0.5f, 350.f, 0.85f };
 	static const FGolfSurfaceParams Bunker{ 0.05f, 0.8f, 900.f, 0.6f };
 	static const FGolfSurfaceParams Green{ 0.3f, 0.2f, 60.f, 1.f };
