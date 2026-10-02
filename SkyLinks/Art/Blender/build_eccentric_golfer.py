@@ -52,6 +52,30 @@ CHARACTERS = {
     'woman': dict(folder='Meshy_Eccentric_Woman', prefix='Meshy_AI_Retro_Fairway_Diva_biped', out='Diva',
                   material='M_FairwayDiva', height=172.0, own_walk=True,
                   jog='Jogging.fbx', run='../Meshy_Eccentric_Golfer/Running (1).fbx'),
+    # The teenage girl came rigged but with no clips: she walks and jogs with the wife's, runs with the man's.
+    'teen': dict(folder='Meshy_Teen_Girl', prefix='Meshy_AI_Fairway_Flair', out='Teen',
+                 material='M_FairwayFlair', height=163.0, own_walk=False,
+                 walk='../Meshy_Eccentric_Woman/Meshy_AI_Retro_Fairway_Diva_biped_Animation_Walking_withSkin.fbx',
+                 jog='../Meshy_Eccentric_Woman/Jogging.fbx', run='../Meshy_Eccentric_Golfer/Running (1).fbx'),
+    # The lad came unrigged: Art/Blender/rig_from_donor.py gave him the man's skeleton and weights, and his clips.
+    'lad': dict(folder='Meshy_Lad', prefix='Meshy_AI_Flamingo_Fairway', out='Lad',
+                material='M_FlamingoFairway', height=178.0, own_walk=False,
+                walk='../Meshy_Eccentric_Golfer/Meshy_AI_Eccentric_Golfer_biped_Animation_Walking_withSkin.fbx',
+                jog='../Meshy_Eccentric_Golfer/Jog Forward.fbx', run='../Meshy_Eccentric_Golfer/Running (1).fbx'),
+}
+
+# Every Meshy biped rig has the same bones: their Mixamo names, for a body that came without a Walking export.
+MESHY_TO_MIXAMO = {
+    'Hips': 'mixamorig:Hips', 'Spine02': 'mixamorig:Spine', 'Spine01': 'mixamorig:Spine1', 'Spine': 'mixamorig:Spine2',
+    'neck': 'mixamorig:Neck', 'Head': 'mixamorig:Head', 'head_end': 'mixamorig:HeadTop_End',
+    'LeftShoulder': 'mixamorig:LeftShoulder', 'LeftArm': 'mixamorig:LeftArm', 'LeftForeArm': 'mixamorig:LeftForeArm',
+    'LeftHand': 'mixamorig:LeftHand', 'LeftHand_End': 'mixamorig:LeftHandMiddle4',
+    'RightShoulder': 'mixamorig:RightShoulder', 'RightArm': 'mixamorig:RightArm',
+    'RightForeArm': 'mixamorig:RightForeArm', 'RightHand': 'mixamorig:RightHand',
+    'RightHand_End': 'mixamorig:RightHandMiddle4', 'LeftUpLeg': 'mixamorig:LeftUpLeg', 'LeftLeg': 'mixamorig:LeftLeg',
+    'LeftFoot': 'mixamorig:LeftFoot', 'LeftToeBase': 'mixamorig:LeftToeBase', 'LeftToe_end': 'mixamorig:LeftToe_End',
+    'RightUpLeg': 'mixamorig:RightUpLeg', 'RightLeg': 'mixamorig:RightLeg', 'RightFoot': 'mixamorig:RightFoot',
+    'RightToeBase': 'mixamorig:RightToeBase', 'RightToe_end': 'mixamorig:RightToe_End',
 }
 
 # Clips where both hands hold the club: the bigger Meshy bodies push the hands 15-35 cm apart, so the left hand
@@ -95,6 +119,8 @@ def clip_source(name, character):
         return (MESHY / character['run']).resolve(), True
     if name == 'Walking' and character['own_walk']:
         return NAMES_FBX, True
+    if name == 'Walking' and character.get('walk'):
+        return (MESHY / character['walk']).resolve(), True
     fixed = GOLFER / 'Animations' / 'Fixed' / f'{name}.fbx'
     return (fixed if fixed.is_file() else GOLFER / 'Animations' / f'{name}.fbx'), False
 
@@ -120,17 +146,20 @@ def build_body():
 
     # Mixamo bone names (the game and the clips go by them): the Walking export has the same skeleton with
     # those names, so each bone takes the name of the bone resting at the same place there.
-    named = import_fbx(NAMES_FBX)
-    ref = next(o for o in named if o.type == 'ARMATURE')
-    ref_heads = [(b.name, ref.matrix_world @ b.head_local) for b in ref.data.bones]
     renames = {}
-    for b in arm.data.bones:
-        head = arm.matrix_world @ b.head_local
-        name, where = min(ref_heads, key=lambda item: (item[1] - head).length)
-        if (where - head).length < 0.005:
-            renames[b.name] = name
-    for o in named:
-        bpy.data.objects.remove(o)
+    if NAMES_FBX.is_file():
+        named = import_fbx(NAMES_FBX)
+        ref = next(o for o in named if o.type == 'ARMATURE')
+        ref_heads = [(b.name, ref.matrix_world @ b.head_local) for b in ref.data.bones]
+        for b in arm.data.bones:
+            head = arm.matrix_world @ b.head_local
+            name, where = min(ref_heads, key=lambda item: (item[1] - head).length)
+            if (where - head).length < 0.005:
+                renames[b.name] = name
+        for o in named:
+            bpy.data.objects.remove(o)
+    else:
+        renames = {b.name: MESHY_TO_MIXAMO[b.name] for b in arm.data.bones if b.name in MESHY_TO_MIXAMO}
     assert len(set(renames.values())) == len(renames), f'bone names clash: {renames}'
     MESHY_NAMES.clear()
     MESHY_NAMES.update(renames)

@@ -1,5 +1,5 @@
 """Import the golfers and their animations: the man into /Game/Characters/Eccentric, his wife into
-/Game/Characters/Diva (AGolfCharacter picks the folder by the player's choice of golfer).
+/Game/Characters/Diva, the teenage girl into Teen and the lad into Lad (AGolfCharacter picks the folder by the player's choice of golfer).
 
 Art/Blender/build_eccentric_golfer.py writes each body and every clip below (retargeted onto them) to
 Art/Golfer/Eccentric/ and Art/Golfer/Diva/, which this imports. The old Tripo golfer's assets in
@@ -23,7 +23,7 @@ Art/Blender/retarget_walk_idle.py retargets them onto the golfer (Fixed/). Re-ru
 from pathlib import Path
 import unreal
 
-GOLFERS = ('Eccentric', 'Diva')  # Art/Golfer/<name> -> /Game/Characters/<name>
+GOLFERS = ('Eccentric', 'Diva', 'Teen', 'Lad')  # Art/Golfer/<name> -> /Game/Characters/<name>
 SOURCE = DEST = ANIM_DEST = None
 
 
@@ -126,7 +126,7 @@ def import_clubs():
 
 
 def import_golfer(golfers=GOLFERS, include_idle_walk=False):
-    """Both golfers by default; import_golfer(['Diva']) for just one."""
+    """All golfers by default; import_golfer(['Diva']) for just one."""
     imported = []
     for name in golfers:
         use_golfer(name)

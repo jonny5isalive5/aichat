@@ -89,6 +89,8 @@ namespace
 	const FGolferBodyInfo GolferBodies[] = {
 		{ TEXT("Eccentric"), 180.f, 110.f, 295.f, 295.f, 110.f, 160.f, 185.f, 300.f },  // the man
 		{ TEXT("Diva"), 172.f, 121.f, 286.f, 286.f, 125.f, 170.f, 200.f, 320.f },       // his wife
+		{ TEXT("Teen"), 163.f, 113.f, 373.f, 373.f, 120.f, 170.f, 200.f, 320.f },       // the teenage girl
+		{ TEXT("Lad"), 178.f, 100.f, 273.f, 273.f, 110.f, 160.f, 185.f, 300.f },        // the lad (Flamingo Fairway)
 	};
 }
 
