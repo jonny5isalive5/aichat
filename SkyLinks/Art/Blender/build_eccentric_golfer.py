@@ -1,6 +1,8 @@
 """The Meshy golfers as players: body for Unreal plus every golf clip retargeted onto them.
 
     python Art/Blender/build_eccentric_golfer.py -- man      (bpy module, Blender 4.2; "woman", or both by default)
+    blender -b --factory-startup --python Art/Blender/build_eccentric_golfer.py -- clips   (Blender 5.0 too;
+                                                             "clips" leaves Golfer.fbx alone)
 
 The man ("Eccentric Golfer", Art/Golfer/Meshy_Eccentric_Golfer -> Art/Golfer/Eccentric) and his wife ("Retro
 Fairway Diva", Art/Golfer/Meshy_Eccentric_Woman -> Art/Golfer/Diva) are the same Meshy rig, so they're built the
@@ -24,6 +26,7 @@ bone's world-space rotation away from its rest. Hip travel is scaled so it cover
 before (the old golfer was scaled 1.9x, this one GAME_SCALE), and hip height by the ratio of hip heights, except
 when seated in the buggy clips, where the hips keep the seat's real height.
 """
+import math
 from pathlib import Path
 
 import bpy
@@ -41,13 +44,24 @@ TRIANGLES = 32000  # mobile budget for the body
 # Per character: Meshy folder and file prefix, output folder (Art/Golfer/<out>, /Game/Characters/<out>), height in
 # game (cm; keep AGolfCharacter's body table in step) and whether the Meshy walk replaces the old golfer's.
 CHARACTERS = {
+    # Both are the same Meshy rig, so she runs with his run (hers never puts the left foot down). Both Meshy jogs
+    # are jogs on the spot (feet travel 30-40 cm/s), so the game jogs with the run clip and A_Jog goes unused.
     'man': dict(folder='Meshy_Eccentric_Golfer', prefix='Meshy_AI_Eccentric_Golfer_biped', out='Eccentric',
                 material='M_EccentricGolfer', height=180.0, own_walk=True,
                 jog='Jog Forward.fbx', run='Running (1).fbx'),
     'woman': dict(folder='Meshy_Eccentric_Woman', prefix='Meshy_AI_Retro_Fairway_Diva_biped', out='Diva',
                   material='M_FairwayDiva', height=172.0, own_walk=True,
-                  jog='Jogging.fbx', run='Running.fbx'),
+                  jog='Jogging.fbx', run='../Meshy_Eccentric_Golfer/Running (1).fbx'),
 }
+
+# Clips where both hands hold the club: the bigger Meshy bodies push the hands 15-35 cm apart, so the left hand
+# is pulled back onto the grip (two-bone IK) wherever the source hands were together.
+CLUB_CLIPS = {'Golf Drive', 'Golf Drive alt1', 'Golf Chip', 'Golf Chip (replay if long shit in)', 'Golf Putt'}
+# Source frames to use, in order. The Mixamo idle twists the hips 90 and the shoulders 150 degrees looking round,
+# which read as the golfer turning at random: loop its calm stretch instead (end, then start: still, breathing).
+SOURCE_FRAMES = {'Idle': [*range(102, 123), *range(3, 19)]}
+# Gaits whose planted feet are locked and whose ground speed AGolfCharacter's body table needs (printed as SPEED).
+GAITS = {'Walking', 'Running'}
 
 CLIPS = ['Golf Drive', 'Golf Drive alt1', 'Golf Drive Setup', 'Golf Tee Up', 'Golf Chip',
          'Golf Chip (replay if long shit in)', 'Golf Putt', 'Golf Putt Victory', 'Golf Putt Victory on long putt',
@@ -76,9 +90,9 @@ def use_character(key):
 def clip_source(name, character):
     """(fbx, native): the old golfer's clip, or one made on the Meshy rig (native: in place, hips scaled by size)."""
     if name == 'Jogging':
-        return MESHY / character['jog'], True
+        return (MESHY / character['jog']).resolve(), True
     if name == 'Running':
-        return MESHY / character['run'], True
+        return (MESHY / character['run']).resolve(), True
     if name == 'Walking' and character['own_walk']:
         return NAMES_FBX, True
     fixed = GOLFER / 'Animations' / 'Fixed' / f'{name}.fbx'
@@ -179,12 +193,13 @@ def build_body():
     body.name = 'SK_Golfer'
     arm.name = 'Armature'  # Unreal drops a root node called Armature instead of adding it as a bone.
     OUT.mkdir(parents=True, exist_ok=True)
-    bpy.ops.object.select_all(action='DESELECT')
-    arm.select_set(True)
-    body.select_set(True)
-    bpy.ops.export_scene.fbx(filepath=str(OUT / 'Golfer.fbx'), use_selection=True, object_types={'ARMATURE', 'MESH'},
-                             add_leaf_bones=False, bake_anim=False, path_mode='COPY', embed_textures=True,
-                             mesh_smooth_type='FACE')
+    if EXPORT_BODY:
+        bpy.ops.object.select_all(action='DESELECT')
+        arm.select_set(True)
+        body.select_set(True)
+        bpy.ops.export_scene.fbx(filepath=str(OUT / 'Golfer.fbx'), use_selection=True,
+                                 object_types={'ARMATURE', 'MESH'}, add_leaf_bones=False, bake_anim=False,
+                                 path_mode='COPY', embed_textures=True, mesh_smooth_type='FACE')
     height = max((arm.matrix_world @ b.head_local).z for b in arm.data.bones)
     print(f'BODY Golfer.fbx: {sum(len(p.vertices) - 2 for p in body.data.polygons)} triangles, '
           f'{len(arm.data.bones)} bones, head top {height:.2f} m')
@@ -207,6 +222,185 @@ def build_body():
     return rig
 
 
+def channel_fcurves(action, slot=None):
+    """An action's F-curves: Blender 4.4+ keeps them per slot (5.0 dropped Action.fcurves), 4.2 on the action."""
+    if not hasattr(action, 'layers'):
+        return list(action.fcurves)
+    curves = []
+    for layer in action.layers:
+        for strip in layer.strips:
+            for bag in strip.channelbags:
+                if slot is None or bag.slot == slot:
+                    curves += list(bag.fcurves)
+    return curves
+
+
+def use_action(obj, action):
+    if obj.animation_data is None:
+        obj.animation_data_create()
+    obj.animation_data.action = action
+    if hasattr(action, 'slots') and len(action.slots) and obj.animation_data.action_slot is None:
+        obj.animation_data.action_slot = action.slots[0]
+
+
+def two_bone_ik(arm, upper, lower, hand, target):
+    """Swing upper and lower so the hand's head reaches target (armature space), keeping the elbow's bend plane
+    and the hand's own rotation."""
+    keep = hand.matrix.to_quaternion()
+    s, e, w = upper.head.copy(), lower.head.copy(), hand.head.copy()
+    a, b = (e - s).length, (w - e).length
+    to = target - s
+    d = min(to.length, (a + b) * 0.999)
+    if d < 1e-6:
+        return
+    u = to.normalized()
+    side = (e - s) - u * (e - s).dot(u)
+    if side.length < 1e-6:
+        side = (w - s).orthogonal()
+    side.normalize()
+    x = (a * a - b * b + d * d) / (2 * d)
+    elbow = s + u * x + side * max(a * a - x * x, 0.0) ** 0.5
+
+    def swing(bone, pivot, before, after):
+        rot = before.rotation_difference(after).to_matrix().to_4x4()
+        bone.matrix = Matrix.Translation(pivot) @ rot @ Matrix.Translation(-pivot) @ bone.matrix
+        bpy.context.view_layer.update()
+
+    swing(upper, s, e - s, elbow - s)
+    swing(lower, lower.head.copy(), hand.head - lower.head, (s + u * d) - lower.head)
+    hand.matrix = Matrix.Translation(hand.head.copy()) @ keep.to_matrix().to_4x4()
+    bpy.context.view_layer.update()
+
+
+FOOT_POINTS = ('LeftFoot', 'RightFoot', 'LeftToeBase', 'RightToeBase', 'LeftToe_End', 'RightToe_End')
+
+
+def foot_points(arm):
+    """Per foot, (pose bone, rest height in world) for the ankle, ball and toe tip that exist."""
+    bones = {short(b.name): b for b in arm.pose.bones}
+    return {side: [(bones[n], (arm.matrix_world @ bones[n].bone.head_local).z)
+                   for n in FOOT_POINTS if n.startswith(side) and n in bones]
+            for side in ('Left', 'Right')}
+
+
+def foot_low(arm, points):
+    """How far below its resting height the lowest part of this foot is (0: sole on the floor, as at rest)."""
+    return min((arm.matrix_world @ b.head).z - rest for b, rest in points)
+
+
+def put_on_floor(arm, hips, first, last, name):
+    """Shift the whole clip up or down so the planted feet are on the floor: the retarget carries the source's
+    hip height over by a leg-length ratio, which left the jogs 7-20 cm into the ground and other clips floating."""
+    feet = foot_points(arm)
+    lows = []
+    for f in range(first, last + 1):
+        bpy.context.scene.frame_set(f)
+        lows.append(min(foot_low(arm, p) for p in feet.values()))
+    # Loops (walk, jog, run, idle): the lower fifth, the frames with a foot planted (runs spend the rest in the
+    # air). Every other clip starts standing on both feet: its first frame (the missed putt kneels for most of it).
+    rise = -sorted(lows)[len(lows) // 5] if name in ('Walking', 'Jogging', 'Running', 'Idle') else -lows[0]
+    lows.sort()
+    world_up = arm.matrix_world.inverted().to_3x3() @ Vector((0.0, 0.0, rise))
+    local = hips.bone.matrix_local.to_3x3().inverted() @ world_up
+    path = f'pose.bones["{hips.name}"].location'
+    for fc in channel_fcurves(arm.animation_data.action, getattr(arm.animation_data, 'action_slot', None)):
+        if fc.data_path == path:
+            for key in fc.keyframe_points:
+                key.co.y += local[fc.array_index]
+                key.handle_left.y += local[fc.array_index]
+                key.handle_right.y += local[fc.array_index]
+            fc.update()
+    print(f'FLOOR {name}: raised {rise * 100:+.1f} cm (lowest foot was {lows[0] * 100:+.1f} cm, '
+          f'now {(lows[0] + rise) * 100:+.1f} cm)')
+
+
+def lock_feet(arm, first, last, name, contact=0.03):
+    """In-place gait: make each planted foot slide straight back at one steady speed, bending the leg (two-bone IK)
+    to follow, and return that speed in cm/s in game. The Meshy walk / jog / run wobble their planted feet back and
+    forth (his jog even slides one forward), so no play rate could stop them skating; now the game's
+    speed / clip speed play rate keeps them still on the ground. The clips face -Y, so planted feet move +Y."""
+    scene = bpy.context.scene
+    fps = scene.render.fps / scene.render.fps_base
+    bones = {short(b.name): b for b in arm.pose.bones}
+    feet = foot_points(arm)
+    frames = list(range(first, last + 1))
+    n = len(frames)
+    track = {side: [] for side in feet}
+    for f in frames:
+        scene.frame_set(f)
+        for side, points in feet.items():
+            # The ball of the foot is what stays on the ground (the heel lifts late in the step).
+            track[side].append((foot_low(arm, points), (arm.matrix_world @ bones[side + 'ToeBase'].head).copy(),
+                                (arm.matrix_world @ bones[side + 'Foot'].head).copy()))
+
+    # Planted spans per foot, wrapping round the loop (lists of frame indices).
+    spans = {}
+    for side in feet:
+        down = [step[0] < contact for step in track[side]]
+        for i in range(n):  # a one-frame lift inside a step is still the same step
+            if not down[i] and down[i - 1] and down[(i + 1) % n]:
+                down[i] = True
+        if all(down) or not any(down):
+            spans[side] = []
+            continue
+        start = down.index(False)
+        runs, cur = [], []
+        for k in range(n):
+            i = (start + k) % n
+            if down[i]:
+                cur.append(i)
+            elif cur:
+                runs.append(cur)
+                cur = []
+        if cur:
+            runs.append(cur)
+        # A toe dragging forward at the start of the swing isn't planted: trim the ends while the foot goes forward.
+        for r in runs:
+            while len(r) > 1 and track[side][r[1]][1].y < track[side][r[0]][1].y:
+                r.pop(0)
+            while len(r) > 1 and track[side][r[-1]][1].y < track[side][r[-2]][1].y:
+                r.pop()
+        spans[side] = [r for r in runs if len(r) >= 3]
+
+    # One speed for the clip: the planted feet's average backward travel per second.
+    travel = time = 0.0
+    for side, runs in spans.items():
+        for r in runs:
+            travel += track[side][r[-1]][1].y - track[side][r[0]][1].y
+            time += (len(r) - 1) / fps
+    speed = travel / time if time > 0 else 0.0
+    if speed <= 0.0:
+        print(f'FEET {name}: no clean planted steps, left as they are')
+        return 0.0
+
+    targets = {}  # frame index -> {side: world target}
+    for side, runs in spans.items():
+        for r in runs:
+            mid = sum((track[side][i][1] for i in r), Vector()) / len(r)
+            for k, i in enumerate(r):
+                was = track[side][i][1]
+                want = Vector((mid.x, mid.y + speed * (k - (len(r) - 1) / 2) / fps, was.z))
+                weight = min(1.0, (k + 1) / 2, (len(r) - k) / 2)  # ease in and out of the step
+                # The leg reaches with the ankle: move it as far as the ball of the foot has to go.
+                targets.setdefault(i, {})[side] = track[side][i][2] + (was.lerp(want, weight) - was)
+    to_arm = arm.matrix_world.inverted()
+    moved = 0.0
+    for i, sides in targets.items():
+        scene.frame_set(frames[i])
+        for side, target in sides.items():
+            moved = max(moved, (target - track[side][i][2]).length)
+            chain = [bones[side + 'UpLeg'], bones[side + 'Leg'], bones[side + 'Foot']]
+            two_bone_ik(arm, *chain, to_arm @ target)
+            for b in chain:
+                b.keyframe_insert('rotation_quaternion' if b.rotation_mode == 'QUATERNION' else 'rotation_euler',
+                                  frame=frames[i])
+                b.keyframe_insert('location', frame=frames[i])
+    steps = sum(len(r) for r in spans.values())
+    print(f'FEET {name}: {steps} planted steps locked, feet moved up to {moved * 100:.1f} cm '
+          f'(fps {scene.render.fps}/{scene.render.fps_base:.3f}, {travel * 100:.1f} cm over {time:.2f} s)')
+    return speed * 100 * GAME_SCALE
+
+
 def rest_rotation(arm, bone):
     return (arm.matrix_world @ bone.bone.matrix_local).to_quaternion()
 
@@ -225,11 +419,9 @@ def retarget(dst, name):
     src = next(o for o in new if o.type == 'ARMATURE')
     # Meshy "with skin" exports carry a one-frame bind action as well as the motion: use the longest one.
     actions = [a for a in bpy.data.actions if a not in known]
-    motion = max((a for a in actions if any(fc.data_path.startswith('pose.bones') for fc in a.fcurves)),
+    motion = max((a for a in actions if any(fc.data_path.startswith('pose.bones') for fc in channel_fcurves(a))),
                  key=lambda a: a.frame_range[1] - a.frame_range[0])
-    if src.animation_data is None:
-        src.animation_data_create()
-    src.animation_data.action = motion
+    use_action(src, motion)
     scene = bpy.context.scene
     first, last = (int(v) for v in src.animation_data.action.frame_range)
     scene.frame_start, scene.frame_end = first, last
@@ -256,9 +448,6 @@ def retarget(dst, name):
         scene.frame_set(last)
         drift = (src.matrix_world @ src_hips.head) - start
         drift.z = 0.0
-        seconds = (last - first) / scene.render.fps
-        speed = drift.length * lift * GAME_SCALE * 100 / max(seconds, 1e-3)
-        print(f'SPEED {name}: the clip moves {speed:.0f} cm/s in game at play rate 1 (now in place)')
     src_rest = {s.name: rest_rotation(src, s) for _, s in pairs}
     # Target rest, swung to point the way the source bone points at rest (Meshy A-pose -> Mixamo T-pose).
     # Buggy clips: seated, the hips must be at the seat's real height, not a leg-length ratio of it.
@@ -272,8 +461,14 @@ def retarget(dst, name):
     aligned = {d.name: rest_direction(dst, d).rotation_difference(rest_direction(src, s)) @ rest_rotation(dst, d)
                for d, s in pairs}
 
-    for f in range(first, last + 1):
-        scene.frame_set(f)
+    dst_bone = {short(b.name): b for b in dst.pose.bones}
+    grip = name in CLUB_CLIPS and all(k in src_bones and k in dst_bone for k in
+                                      ('LeftArm', 'LeftForeArm', 'LeftHand', 'RightHand'))
+    regrips = []
+
+    source_frames = SOURCE_FRAMES.get(name, range(first, last + 1))
+    for f, at in enumerate(source_frames, first):
+        scene.frame_set(at)
         for b in dst.pose.bones:
             b.matrix_basis = Matrix.Identity(4)
         bpy.context.view_layer.update()
@@ -281,7 +476,7 @@ def retarget(dst, name):
             pose = (src.matrix_world @ s.matrix).to_quaternion()
             world_rot = pose @ src_rest[s.name].inverted() @ aligned[d.name]
             if d is dst_hips:
-                offset = src.matrix_world @ s.head - src_rest_hips - drift * ((f - first) / max(last - first, 1))
+                offset = src.matrix_world @ s.head - src_rest_hips - drift * ((at - first) / max(last - first, 1))
                 offset.x *= travel
                 offset.y *= travel
                 offset.z *= lift
@@ -296,10 +491,33 @@ def retarget(dst, name):
             arm_head = dst.matrix_world.inverted() @ head
             d.matrix = Matrix.Translation(arm_head) @ arm_rot.to_matrix().to_4x4()
             bpy.context.view_layer.update()
+        if grip:
+            # Both hands on the club: put the left hand where it was against the right in the source clip (scaled
+            # like the rest of the clip), fully while the source hands were together, fading out as they part.
+            src_gap = ((src.matrix_world @ src_bones['LeftHand'].head) - (src.matrix_world @ src_bones['RightHand'].head)) * travel
+            weight = min(max((0.30 - src_gap.length) / 0.10, 0.0), 1.0)
+            if weight > 0.0:
+                to_arm = dst.matrix_world.inverted()
+                right = dst.matrix_world @ dst_bone['RightHand'].head
+                left = dst.matrix_world @ dst_bone['LeftHand'].head
+                regrips.append((left - right).length - src_gap.length)
+                target = left.lerp(right + src_gap, weight)
+                two_bone_ik(dst, dst_bone['LeftArm'], dst_bone['LeftForeArm'], dst_bone['LeftHand'], to_arm @ target)
         for d in dst.pose.bones:
             d.keyframe_insert('scale', frame=f)
             d.keyframe_insert('rotation_quaternion' if d.rotation_mode == 'QUATERNION' else 'rotation_euler', frame=f)
             d.keyframe_insert('location', frame=f)
+    last = first + len(source_frames) - 1
+    scene.frame_end = last
+    if regrips:
+        print(f'GRIP {name}: left hand moved back onto the club on {len(regrips)} frames '
+              f'(was up to {max(regrips) * 100:.0f} cm off)')
+
+    if seat is None:
+        put_on_floor(dst, dst_hips, first, last, name)
+    if name in GAITS:
+        print(f'SPEED {name}: feet move {lock_feet(dst, first, last, name):.0f} cm/s in game at play rate 1 '
+              f'(AGolfCharacter body table)')
 
     for o in new:
         bpy.data.objects.remove(o)
@@ -315,17 +533,19 @@ def retarget(dst, name):
 
 
 CHARACTER = None
+EXPORT_BODY = True
 
 
 def main():
-    global CHARACTER
+    global CHARACTER, EXPORT_BODY
     args = sys.argv[sys.argv.index('--') + 1:] if '--' in sys.argv else []
+    EXPORT_BODY = 'clips' not in args  # "clips": rebuild the animations only, leave Golfer.fbx as it is
     for key in [a for a in args if a in CHARACTERS] or list(CHARACTERS):
         bpy.ops.wm.read_factory_settings(use_empty=True)
         CHARACTER = use_character(key)
         print(f'===== {key}: {CHARACTER["out"]}')
         rig = build_body()
-        for clip in CLIPS:
+        for clip in [a for a in args if a in CLIPS] or CLIPS:  # name clips to rebuild only those
             retarget(rig, clip)
 
 

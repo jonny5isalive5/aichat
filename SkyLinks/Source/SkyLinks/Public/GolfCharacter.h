@@ -172,8 +172,8 @@ public:
 
 	/** Club-on-ball times measured from the Mixamo clips (hands' fastest point, 30 fps). */
 	UPROPERTY(EditDefaultsOnly, Category = "Golf|Animations") float DriveImpactTime = 1.67f;
-	UPROPERTY(EditDefaultsOnly, Category = "Golf|Animations") float ChipImpactTime = 1.77f;
-	UPROPERTY(EditDefaultsOnly, Category = "Golf|Animations") float PuttImpactTime = 1.24f;  // hands back at the ball
+	UPROPERTY(EditDefaultsOnly, Category = "Golf|Animations") float ChipImpactTime = 1.72f;  // club head nearest the ball
+	UPROPERTY(EditDefaultsOnly, Category = "Golf|Animations") float PuttImpactTime = 1.33f;
 
 	/** Distance from the ball to the golfer's feet. */
 	UPROPERTY(EditDefaultsOnly, Category = "Golf")
@@ -219,6 +219,17 @@ protected:
 	void PlaceClub();
 	void RestClub();
 	void SetClubBetween(const FVector& Head, const FVector& Grip, const FVector& Forward, FName HandBone);
+	/** At the start of a swing: the turn of the club in the hands (and shaft length) that puts its head on the
+	 *  ball at ImpactTime; UpdateClubFit eases it in and out around impact. */
+	void FitClubToImpact(float ImpactTime);
+	void UpdateClubFit();
+	bool bClubFitted = false;
+	FTransform ClubAddressRelative;
+	FQuat ClubFitRotation = FQuat::Identity;
+	FVector ClubFitPivot = FVector::ZeroVector;  // the grip, in the right hand's frame
+	float ClubFitLength = 1.f;
+	float ClubFitGripZ = 0.f;                     // the grip along the club mesh's shaft (its +Z)
+	float ClubImpactTime = 0.f;
 	/** Bone whose name is Suffix, or ends in ":Suffix" / "_Suffix"; NAME_None if the mesh has none. */
 	FName FindBone(const TCHAR* Suffix) const;
 

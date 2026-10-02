@@ -84,9 +84,11 @@ namespace
 		float JogSpeed;
 		float RunSpeed;
 	};
+	// Clip speeds are the SPEED lines printed by build_eccentric_golfer.py (planted feet locked to them). The Meshy
+	// jogs are jogs on the spot, so the jog gait plays the run clip, slowed (JogAnimSpeed = RunAnimSpeed).
 	const FGolferBodyInfo GolferBodies[] = {
-		{ TEXT("Eccentric"), 180.f, 109.f, 136.f, 272.f, 110.f, 160.f, 185.f, 300.f },  // the man
-		{ TEXT("Diva"), 172.f, 125.f, 131.f, 285.f, 125.f, 170.f, 200.f, 320.f },       // his wife
+		{ TEXT("Eccentric"), 180.f, 110.f, 295.f, 295.f, 110.f, 160.f, 185.f, 300.f },  // the man
+		{ TEXT("Diva"), 172.f, 121.f, 286.f, 286.f, 125.f, 170.f, 200.f, 320.f },       // his wife
 	};
 }
 
@@ -115,7 +117,7 @@ void AGolfCharacter::PointAssetsAt(uint8 InBody)
 	ExitBuggyAnim = TSoftObjectPtr<UAnimSequence>(Anim(TEXT("A_ExitBuggy")));
 	IdleAnim = TSoftObjectPtr<UAnimSequence>(Anim(TEXT("A_Idle")));
 	WalkAnim = TSoftObjectPtr<UAnimSequence>(Anim(TEXT("A_Walk")));
-	JogAnim = TSoftObjectPtr<UAnimSequence>(Anim(TEXT("A_Jog")));
+	JogAnim = TSoftObjectPtr<UAnimSequence>(Anim(TEXT("A_Run")));  // A_Jog jogs on the spot: its feet would skate
 	RunAnim = TSoftObjectPtr<UAnimSequence>(Anim(TEXT("A_Run")));
 	IronClubAsset = TSoftObjectPtr<UStaticMesh>(Path(TEXT("SM_Club_Iron")));
 	PutterClubAsset = TSoftObjectPtr<UStaticMesh>(Path(TEXT("SM_Club_Putter")));
@@ -312,6 +314,7 @@ FName AGolfCharacter::FindBone(const TCHAR* Suffix) const
 void AGolfCharacter::PlaceClub()
 {
 	UStaticMesh* ClubMesh = (bPuttingStance ? PutterClubAsset : IronClubAsset).LoadSynchronous();
+	bClubFitted = false;
 	if (!bHasBody || !ClubMesh || bRoaming)
 	{
 		Club->SetVisibility(false);
@@ -377,6 +380,7 @@ void AGolfCharacter::RestClub()
 {
 	// After the stroke and through the reactions: the club hangs from the right hand with its head on the
 	// ground just outside the right foot, the way a golfer stands holding one.
+	bClubFitted = false;
 	const FName RightHand = FindBone(*ClubHandBone);
 	const FName RightFoot = FindBone(TEXT("RightFoot"));
 	if (RightHand.IsNone() || RightFoot.IsNone())
@@ -471,6 +475,10 @@ void AGolfCharacter::Tick(float DeltaSeconds)
 	if (bRoaming)
 	{
 		UpdateLocomotion();
+	}
+	if (bClubFitted && bPlayingAction && !bClubResting && Club->IsVisible() && GetMesh()->GetPosition() < SwingLength - 0.05f)
+	{
+		UpdateClubFit();
 	}
 	// Once the swing has finished (and through any reaction) the club rests on the ground by his foot.
 	if (bHasBody && !bRoaming && Club->IsVisible()
@@ -643,13 +651,73 @@ void AGolfCharacter::MulticastPlaySwing_Implementation(EGolferSwing Swing)
 {
 	if (UAnimSequence* Clip = bHasBody ? SwingAsset(Swing) : nullptr)
 	{
+		// Address with this swing's own first frame (a chip used to start from the drive's, hands 17 cm away),
+		// put the club behind the ball for it, then fit the club so its head meets the ball at impact.
+		GetWorldTimerManager().ClearTimer(ClubTimer);
+		bPlayingAction = false;
+		GetMesh()->PlayAnimation(Clip, false);
+		GetMesh()->SetPosition(0.f, false);
+		GetMesh()->SetPlayRate(0.f);
+		PlaceClub();
+		FitClubToImpact(GetImpactDelay(Swing));
 		bPlayingAction = true;
 		bClubResting = false;
 		SwingLength = Clip->GetPlayLength();
-		GetMesh()->PlayAnimation(Clip, false);
-		GetMesh()->SetPosition(0.f, false);
 		GetMesh()->SetPlayRate(1.f);
 	}
+}
+
+void AGolfCharacter::FitClubToImpact(float ImpactTime)
+{
+	// The club is fixed to the right hand, but the retargeted swing doesn't bring the hand back exactly to its
+	// address spot at impact (the bodies differ from the one the clips were made on), so the head would pass the
+	// ball by 5-20 cm. Look ahead to the hand at impact and work out the small turn of the club in the hands
+	// (and the shaft length) that puts the head on the ball then; Tick eases it in over the downswing.
+	bClubFitted = false;
+	const FName RightHand = FindBone(*ClubHandBone);
+	const FName LeftHand = FindBone(TEXT("LeftHand"));
+	if (ImpactTime <= 0.f || !Club->IsVisible() || Club->GetAttachParent() != GetMesh() || RightHand.IsNone() || LeftHand.IsNone())
+	{
+		return;
+	}
+	const FTransform HandAtAddress = GetMesh()->GetSocketTransform(RightHand);
+	const FVector Head = Club->GetComponentLocation();  // the club's origin is its sole, set behind the ball
+	const FVector Grip = (GetMesh()->GetBoneLocation(RightHand) + GetMesh()->GetBoneLocation(LeftHand)) * 0.5f;
+	GetMesh()->SetPosition(ImpactTime, false);
+	GetMesh()->TickAnimation(0.f, false);
+	GetMesh()->RefreshBoneTransforms();
+	const FTransform HandAtImpact = GetMesh()->GetSocketTransform(RightHand);
+	GetMesh()->SetPosition(0.f, false);
+	GetMesh()->TickAnimation(0.f, false);
+	GetMesh()->RefreshBoneTransforms();
+
+	// In the hand's frame: where the grip and head are now, and where the head must be at impact.
+	ClubFitPivot = HandAtAddress.InverseTransformPosition(Grip);
+	const FVector From = HandAtAddress.InverseTransformPosition(Head) - ClubFitPivot;
+	const FVector To = HandAtImpact.InverseTransformPosition(Head) - ClubFitPivot;
+	if (From.IsNearlyZero() || To.IsNearlyZero())
+	{
+		return;
+	}
+	ClubFitRotation = FQuat::FindBetweenVectors(From, To);
+	ClubFitLength = FMath::Clamp(To.Size() / From.Size(), 0.8f, 1.25f);
+	ClubFitGripZ = Club->GetComponentTransform().InverseTransformPosition(Grip).Z;
+	ClubAddressRelative = Club->GetRelativeTransform();
+	ClubImpactTime = ImpactTime;
+	bClubFitted = true;
+}
+
+void AGolfCharacter::UpdateClubFit()
+{
+	// Full fit at impact, none at address or once the follow-through is under way.
+	const float Time = GetMesh()->GetPosition();
+	const float Alpha = FMath::SmoothStep(ClubImpactTime - 0.45f, ClubImpactTime, Time)
+		* (1.f - FMath::SmoothStep(ClubImpactTime + 0.05f, ClubImpactTime + 0.5f, Time));
+	// Lengthen or shorten the shaft about the grip (the head end moves), then turn the club about the grip.
+	const float Length = FMath::Lerp(1.f, ClubFitLength, Alpha);
+	const FTransform Shaft(FQuat::Identity, FVector(0.f, 0.f, ClubFitGripZ * (1.f - Length)), FVector(1.f, 1.f, Length));
+	const FTransform Turn = FTransform(-ClubFitPivot) * FTransform(FQuat::Slerp(FQuat::Identity, ClubFitRotation, Alpha)) * FTransform(ClubFitPivot);
+	Club->SetRelativeTransform(Shaft * ClubAddressRelative * Turn);
 }
 
 // ---------------------------------------------------------------- walking
