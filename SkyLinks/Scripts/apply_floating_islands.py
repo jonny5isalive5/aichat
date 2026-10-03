@@ -25,6 +25,7 @@
     isl.reimport_paths()        after the buggy paths' ground changed: surfaces, rock and vines re-imported in place
     isl.dress_floaters()        Pandora plants on the floating islands (attached to them; nothing moves)
     isl.pandora_plants()        glowing Pandora plants on the rough round the trees (Foliage mode edits them)
+    isl.pandora_trees()         every tree and bush restyled Pandora (same shapes, none moved); isl.normal_trees() undoes it
 
 Needs, from Scripts/import_trees.py, the stylised trees and their M_Tree_Bark / M_Tree_Leaves / M_Tree_Vines
 materials (the vines and the rope bridges use them too), and the SkyLinksForest C++ class (rebuild first).
@@ -35,6 +36,7 @@ Sources (Art/Blender/build_course_islands.py), all in world coordinates, placed 
 Each hole's GolfHole actor is moved to its island: tee, heading, height, aim point, cup, par and name.
 Re-running replaces everything it made; it is safe to run twice.
 """
+import importlib
 import json
 import math
 import random
@@ -1724,6 +1726,91 @@ def pandora_plants(near_trees=0.4, per_hole=40, spacing=3.0, seed=7, replace=Fal
     for reason, count in sorted(why.items(), key=lambda item: -item[1]):
         examples = sorted(seen.get(reason, ()))[:6]
         print(f'PLANTS skipped {count}: {reason}' + (f' (e.g. {", ".join(examples)})' if examples else ''))
+
+
+PANDORA_TREE_SOURCE = ROOT / 'Art' / 'Exports' / 'Trees' / 'Pandora'
+PANDORA_TREE_DEST = TREES + '/Pandora'
+PANDORA_TREES = {  # the course's tree / bush mesh -> its Pandora version (same shape and size)
+    'SM_Tree_Oak_A': 'SM_PandoraTree_Oak_A', 'SM_Tree_Oak_B': 'SM_PandoraTree_Oak_B',
+    'SM_Tree_Birch': 'SM_PandoraTree_Birch', 'SM_Tree_Poplar': 'SM_PandoraTree_Poplar',
+    'SM_Tree_Pine': 'SM_PandoraTree_Pine', 'SM_Bush_Round': 'SM_PandoraTree_Bush_Round',
+    'SM_Bush_Flowering': 'SM_PandoraTree_Bush_Flowering',
+}
+
+
+def _pandora_tree_meshes():
+    """Import the Pandora trees (Art/Blender/build_pandora_trees.py) with their collision, LODs and materials."""
+    import import_trees as trees
+    importlib.reload(trees)
+    leaves = trees.tree_material('M_PandoraTree_Leaves', 'T_GrassDetail', 0.75, 0.0)  # no warm per-tree tint
+    bark = unreal.load_asset(f'{TREES}/M_Tree_Bark')
+    glow = unreal.load_asset(f'{MAT_DIR}/M_FloaterGlow')
+    if not glow:
+        _floater_atlas()
+        glow = _floater_plant_material('M_FloaterGlow', True)
+    leaf = unreal.load_asset(f'{MAT_DIR}/M_FloaterLeaf') or _floater_plant_material('M_FloaterLeaf', False)
+    by_slot = {'TreeBark': bark, 'TreeLeaves': leaves, 'FloaterGlow': glow, 'FloaterLeaf': leaf}
+    saved_dest, trees.DEST = trees.DEST, PANDORA_TREE_DEST
+    try:
+        meshes = {}
+        for old, new in PANDORA_TREES.items():
+            fbx = PANDORA_TREE_SOURCE / f'{new}.fbx'
+            assert fbx.is_file(), f'{fbx.name} missing: run Art/Blender/build_pandora_trees.py'
+            mesh = trees._import_mesh(fbx)
+            for index, slot in enumerate(mesh.get_editor_property('static_materials')):
+                name = str(slot.get_editor_property('material_slot_name'))
+                key = next((k for k in by_slot if name.startswith(k)), 'TreeLeaves')
+                mesh.set_material(index, by_slot[key])
+            trees._add_lods(mesh)
+            unreal.EditorAssetLibrary.save_loaded_asset(mesh)
+            meshes[old] = mesh
+        return meshes
+    finally:
+        trees.DEST = saved_dest
+
+
+def _swap_tree_meshes(swap):
+    """swap: {old mesh: new mesh}. Every tree keeps its place, turn and size; only what it looks like changes."""
+    swap = {old.get_path_name(): new for old, new in swap.items()}
+    count = 0
+    types = [unreal.load_asset(p.split('.')[0]) for p in unreal.EditorAssetLibrary.list_assets('/Game/Course/Foliage', recursive=False)]
+    for foliage in [t for t in types if isinstance(t, unreal.FoliageType_InstancedStaticMesh)]:
+        mesh = foliage.get_editor_property('mesh')
+        if mesh and mesh.get_path_name() in swap:
+            foliage.set_editor_property('mesh', swap[mesh.get_path_name()])
+            unreal.EditorAssetLibrary.save_loaded_asset(foliage)
+    for actor in _all():
+        if not isinstance(actor, (unreal.InstancedFoliageActor, unreal.SkyLinksForest)):
+            continue
+        for component in actor.get_components_by_class(unreal.InstancedStaticMeshComponent):
+            mesh = component.get_editor_property('static_mesh')
+            if mesh and mesh.get_path_name() in swap:
+                component.set_static_mesh(swap[mesh.get_path_name()])
+                count += component.get_instance_count()
+    unreal.get_editor_subsystem(unreal.LevelEditorSubsystem).save_current_level()
+    return count
+
+
+def pandora_trees():
+    """Every tree and bush on the course becomes its Pandora version (same shape and size, Pandora colours, glowing
+    bulbs, tendrils and veins). Nothing moves: each one keeps exactly the place, turn and size you gave it, and
+    the ball still hits trunks and canopies. normal_trees() turns them back."""
+    meshes = _pandora_tree_meshes()
+    originals = {unreal.load_asset(f'{TREES}/{old}'): new for old, new in meshes.items()}
+    count = _swap_tree_meshes({old: new for old, new in originals.items() if old})
+    print(f'PANDORA TREES: {count} trees and bushes restyled (none moved); isl.normal_trees() swaps them back')
+
+
+def normal_trees():
+    """Back from the Pandora trees to the course's normal ones (nothing moves)."""
+    swap = {}
+    for old, new in PANDORA_TREES.items():
+        original = unreal.load_asset(f'{TREES}/{old}')
+        pandora = unreal.load_asset(f'{PANDORA_TREE_DEST}/{new}')
+        if original and pandora:
+            swap[pandora] = original
+    count = _swap_tree_meshes(swap)
+    print(f'NORMAL TREES: {count} trees and bushes back to normal (none moved)')
 
 
 def check_path_uv(holes=(1, 2, 3)):

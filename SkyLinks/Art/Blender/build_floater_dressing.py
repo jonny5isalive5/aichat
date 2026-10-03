@@ -162,7 +162,7 @@ class Kit:
             self.f += [(start + i, start + j, start + sides), (start + j, start + i, start + sides + 1)]
             self.mat += [mat, mat]
 
-    def mesh(self, name):
+    def mesh(self, name, domain='POINT'):
         me = bpy.data.meshes.new(name)
         me.from_pydata(self.v, [], self.f)
         for slot in ('FloaterLeaf', 'FloaterGlow'):
@@ -172,8 +172,11 @@ class Kit:
         loops = np.zeros(len(me.loops), np.int32)
         me.loops.foreach_get('vertex_index', loops)
         uv.data.foreach_set('uv', np.asarray(self.uv, np.float32)[loops].ravel())
-        col = me.color_attributes.new('Col', 'BYTE_COLOR', 'POINT')
+        # domain CORNER matches meshes whose colours are per corner (the trees), so the two can be joined.
+        col = me.color_attributes.new('Col', 'BYTE_COLOR', domain)
         rgba = np.concatenate([np.asarray(self.col, np.float32), np.ones((len(self.v), 1), np.float32)], 1)
+        if domain == 'CORNER':
+            rgba = rgba[loops]
         col.data.foreach_set('color_srgb', np.clip(rgba, 0, 1).ravel())
         me.validate()
         obj = bpy.data.objects.new(name, me)
