@@ -542,6 +542,7 @@ def place(mesh, label, folder, collide=True, shadow=None, location=None):
     actor.set_actor_label(label)
     actor.set_folder_path(folder)
     if not collide:
+        actor.static_mesh_component.set_collision_profile_name('NoCollision')  # (enabled=NO_COLLISION alone left traces hitting it)
         actor.static_mesh_component.set_collision_enabled(unreal.CollisionEnabled.NO_COLLISION)
     if shadow is False or (shadow is None and not collide):
         actor.static_mesh_component.set_editor_property('cast_shadow', False)
@@ -1490,6 +1491,7 @@ def fog_layer(height=45.0, density=0.5):
             blob = place(sphere, f'CloudLayer_{label}_{i}', folder, collide=False, shadow=False, location=where)
             blob.set_actor_scale3d(unreal.Vector(2 * size, 2 * size, 0.3 * size))
             blob.static_mesh_component.set_material(0, instance)
+            blob.static_mesh_component.set_collision_profile_name('NoCollision')  # the grass traces must pass through
             blob.static_mesh_component.set_editor_property('hidden_in_scene_capture', True)  # not in the minimap / landing view
             count += 1
     unreal.get_editor_subsystem(unreal.LevelEditorSubsystem).save_current_level()
@@ -1577,6 +1579,7 @@ def dress_floaters(glow=8.0):
 
 PLANT_SOURCE = ROOT / 'Art' / 'Exports' / 'Plants'
 PLANT_DEST = '/Game/Course/Plants'
+PLANT_GLOW = 16.0  # 'Glow' of the course plants' own material (the floaters' is 8)
 PLANT_FOLIAGE = '/Game/Course/Foliage/Pandora'  # its own folder: the tree scripts never touch these
 PLANT_MIX = {'GlowFern': 0.25, 'BigLeaf': 0.25, 'GlowFlowers': 0.2, 'Mushrooms': 0.15, 'RedFlowers': 0.15}
 
@@ -1590,6 +1593,11 @@ def _pandora_types():
         _floater_atlas()
         materials = {'FloaterLeaf': _floater_plant_material('M_FloaterLeaf', False),
                      'FloaterGlow': _floater_plant_material('M_FloaterGlow', True)}
+    # The course plants glow on their own copy of the floater glow material, so the floaters keep theirs.
+    # Change 'Glow' in M_PlantGlow to brighten or soften the course plants (16 = twice the floaters' 8).
+    if not unreal.EditorAssetLibrary.does_asset_exist(f'{MAT_DIR}/M_PlantGlow'):
+        _floater_plant_material('M_PlantGlow', True, PLANT_GLOW)
+    materials['FloaterGlow'] = unreal.load_asset(f'{MAT_DIR}/M_PlantGlow')
     types = {}
     for fbx in sorted(PLANT_SOURCE.glob('SM_Pandora_*.fbx')):
         options = unreal.FbxImportUI()
