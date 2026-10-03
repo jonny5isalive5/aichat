@@ -317,9 +317,18 @@ return c * Tint.rgb;
 """
 
 
-def grass_blades_material():
+PANDORA_BLADES_GLOW = """
+float glow = PIR > 0.95 ? 1.0 : 0.0;                       // about one clump in twenty
+float3 colour = frac(PIR * 37.0) < 0.5 ? float3(0.05, 1.0, 0.85) : float3(0.6, 0.25, 1.0);
+return colour * glow * smoothstep(0.55, 1.0, VC.r) * 4.0;  // just the tips
+"""
+
+
+def grass_blades_material(pandora=False):
     """M_GrassBlades: two-sided, dark at the root, lighter toward the tip, every clump its own shade, and the same
-    patchy large-scale colour as the rough under it."""
+    patchy large-scale colour as the rough under it.
+    pandora=True: a cooler teal-green to sit with the Pandora trees, and about one clump in twenty with glowing
+    cyan or violet tips. grass_blades_material() puts the normal grass back."""
     mat = _material('M_GrassBlades')
     mat.set_editor_property('two_sided', True)
     # The grass is instanced at runtime: without this flag the game can't compile it and shows grey blades.
@@ -330,10 +339,13 @@ def grass_blades_material():
         'VC': (_expr(mat, unreal.MaterialExpressionVertexColor, -1350, -200), ''),
         'PIR': (_expr(mat, unreal.MaterialExpressionPerInstanceRandom, -1350, 0), ''),
         'Tint': (_expr(mat, unreal.MaterialExpressionVectorParameter, -1350, 200, parameter_name='Tint',
-                       default_value=unreal.LinearColor(1, 1, 1, 1)), ''),
+                       default_value=unreal.LinearColor(*((0.75, 1.0, 1.25) if pandora else (1, 1, 1)), 1)), ''),
     }
     colour = _custom(mat, GRASS_BLADES_CODE, feeds, -700, 0)
     lib.connect_material_property(colour, '', unreal.MaterialProperty.MP_BASE_COLOR)
+    if pandora:
+        glow = _custom(mat, PANDORA_BLADES_GLOW, {'PIR': feeds['PIR'], 'VC': feeds['VC']}, -700, 300)
+        lib.connect_material_property(glow, '', unreal.MaterialProperty.MP_EMISSIVE_COLOR)
     lib.connect_material_property(_const(mat, 0.85, -400, 300), '', unreal.MaterialProperty.MP_ROUGHNESS)
     lib.recompile_material(mat)
     unreal.EditorAssetLibrary.save_loaded_asset(mat)
