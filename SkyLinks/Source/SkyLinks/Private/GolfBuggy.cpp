@@ -48,9 +48,13 @@ AGolfBuggy::AGolfBuggy()
 	WheelFR = MakeMesh(TEXT("WheelFR"));
 	WheelRL = MakeMesh(TEXT("WheelRL"));
 	WheelRR = MakeMesh(TEXT("WheelRR"));
+	DoorDriver = CreateDefaultSubobject<UStaticMeshComponent>(TEXT("DoorDriver"));
+	DoorDriver->SetupAttachment(Body);
+	DoorDriver->SetCollisionEnabled(ECollisionEnabled::NoCollision);
 
 	BodyMeshAsset = TSoftObjectPtr<UStaticMesh>(FSoftObjectPath(TEXT("/Game/Vehicles/Buggy/SM_Buggy_Body.SM_Buggy_Body")));
 	WheelMeshAsset = TSoftObjectPtr<UStaticMesh>(FSoftObjectPath(TEXT("/Game/Vehicles/Buggy/SM_Buggy_Wheel.SM_Buggy_Wheel")));
+	DoorMeshAsset = TSoftObjectPtr<UStaticMesh>(FSoftObjectPath(TEXT("/Game/Vehicles/Buggy/SM_Buggy_Door.SM_Buggy_Door")));
 
 	// Chase camera behind and above, following the buggy's heading with a little lag.
 	CameraArm = CreateDefaultSubobject<USpringArmComponent>(TEXT("CameraArm"));
@@ -120,6 +124,13 @@ void AGolfBuggy::LoadMeshes()
 		}
 	}
 
+	// The driver's door (only with the Meshy body: the stand-in tub has no opening for it).
+	UStaticMesh* DoorMesh = BodyMesh ? DoorMeshAsset.LoadSynchronous() : nullptr;
+	DoorDriver->SetStaticMesh(DoorMesh);
+	DoorDriver->SetVisibility(DoorMesh != nullptr);
+	DoorDriver->SetRelativeLocation(DoorHinge);
+	SetDoorOpen(0.f);
+
 	bUsingFallbackWheels = WheelMesh == nullptr;
 	UStaticMesh* Wheel = WheelMesh ? WheelMesh : LoadObject<UStaticMesh>(nullptr, TEXT("/Engine/BasicShapes/Cylinder.Cylinder"));
 	const float Z = WheelRadius - RideHeight;
@@ -143,6 +154,12 @@ void AGolfBuggy::LoadMeshes()
 		}
 	}
 	AnimateWheels(0.f);
+}
+
+void AGolfBuggy::SetDoorOpen(float Alpha)
+{
+	// Hinged at its front edge with the panel running back: turning it by +yaw swings the back end out to the left.
+	DoorDriver->SetRelativeRotation(FRotator(0.f, DoorOpenAngle * FMath::SmoothStep(0.f, 1.f, FMath::Clamp(Alpha, 0.f, 1.f)), 0.f));
 }
 
 void AGolfBuggy::SetDriveInput(float InThrottle, float InSteer)

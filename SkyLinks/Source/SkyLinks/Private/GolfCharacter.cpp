@@ -90,13 +90,13 @@ namespace
 		float PuttImpact;
 	};
 	// Clip speeds are the SPEED lines printed by build_eccentric_golfer.py (planted feet locked to them). The Meshy
-	// jogs are jogs on the spot, so the jog gait plays the run clip, slowed (JogAnimSpeed = RunAnimSpeed). Impact times:
+	// jog and run are the Y-Bot ones, retargeted with their planted feet locked. Impact times:
 	// when the club head, fixed in the right hand at address, comes back closest to the ball (measured in the editor).
 	const FGolferBodyInfo GolferBodies[] = {
-		{ TEXT("Eccentric"), 180.f, 101.f, 295.f, 295.f, 110.f, 160.f, 185.f, 300.f, 1.19f, 1.43f, 1.33f },  // the man
-		{ TEXT("Diva"), 172.f, 118.f, 286.f, 286.f, 125.f, 170.f, 200.f, 320.f, 1.14f, 1.02f, 1.22f },       // his wife
-		{ TEXT("Teen"), 163.f, 112.f, 373.f, 373.f, 120.f, 170.f, 200.f, 320.f, 1.14f, 1.01f, 1.22f },       // the teenage girl
-		{ TEXT("Lad"), 178.f, 60.f, 304.f, 304.f, 110.f, 160.f, 185.f, 300.f, 1.19f, 1.43f, 1.33f },        // the lad (Flamingo Fairway)
+		{ TEXT("Eccentric"), 180.f, 101.f, 154.f, 346.f, 110.f, 160.f, 185.f, 300.f, 1.19f, 1.43f, 1.33f },  // the man
+		{ TEXT("Diva"), 172.f, 118.f, 180.f, 401.f, 125.f, 170.f, 200.f, 320.f, 1.14f, 1.02f, 1.22f },       // his wife
+		{ TEXT("Teen"), 163.f, 112.f, 172.f, 387.f, 120.f, 170.f, 200.f, 320.f, 1.14f, 1.01f, 1.22f },       // the teenage girl
+		{ TEXT("Lad"), 178.f, 60.f, 167.f, 348.f, 110.f, 160.f, 185.f, 300.f, 1.19f, 1.43f, 1.33f },        // the lad (Flamingo Fairway)
 	};
 }
 
@@ -125,7 +125,7 @@ void AGolfCharacter::PointAssetsAt(uint8 InBody)
 	ExitBuggyAnim = TSoftObjectPtr<UAnimSequence>(Anim(TEXT("A_ExitBuggy")));
 	IdleAnim = TSoftObjectPtr<UAnimSequence>(Anim(TEXT("A_Idle")));
 	WalkAnim = TSoftObjectPtr<UAnimSequence>(Anim(TEXT("A_Walk")));
-	JogAnim = TSoftObjectPtr<UAnimSequence>(Anim(TEXT("A_Run")));  // A_Jog jogs on the spot: its feet would skate
+	JogAnim = TSoftObjectPtr<UAnimSequence>(Anim(TEXT("A_Jog")));  // the Y-Bot jog, feet locked to its speed
 	RunAnim = TSoftObjectPtr<UAnimSequence>(Anim(TEXT("A_Run")));
 	IronClubAsset = TSoftObjectPtr<UStaticMesh>(Path(TEXT("SM_Club_Iron")));
 	PutterClubAsset = TSoftObjectPtr<UStaticMesh>(Path(TEXT("SM_Club_Putter")));
@@ -448,6 +448,7 @@ void AGolfCharacter::MulticastSeatInBuggy_Implementation(AGolfBuggy* Buggy)
 	// The climb-in clip has ended on its seated frame; ride along in it rather than vanishing.
 	BuggyStep = EBuggyStep::Seated;
 	RiddenBuggy = Buggy;
+	Buggy->SetDoorOpen(0.f);
 	SetSeatDrop(SeatDrop);
 	SetActorHiddenInGame(false);
 	GetCapsuleComponent()->SetCollisionEnabled(ECollisionEnabled::NoCollision);
@@ -514,8 +515,19 @@ void AGolfCharacter::Tick(float DeltaSeconds)
 	SetSeatDrop(BuggyStep == EBuggyStep::Entering
 		? SeatDrop * FMath::SmoothStep(0.5f, 0.62f, T)
 		: SeatDrop * (1.f - FMath::SmoothStep(0.3f, 0.46f, T)));
+	// The driver's door: swings open as he reaches it, stays open while he climbs in (or out), shuts behind him.
+	if (AGolfBuggy* Buggy = RiddenBuggy.Get())
+	{
+		Buggy->SetDoorOpen(BuggyStep == EBuggyStep::Entering
+			? FMath::SmoothStep(0.f, 0.2f, T) * (1.f - FMath::SmoothStep(0.72f, 0.92f, T))
+			: FMath::SmoothStep(0.f, 0.2f, T) * (1.f - FMath::SmoothStep(0.8f, 1.f, T)));
+	}
 	if (BuggyStep == EBuggyStep::Exiting && T >= 1.f)
 	{
+		if (AGolfBuggy* Buggy = RiddenBuggy.Get())
+		{
+			Buggy->SetDoorOpen(0.f);
+		}
 		BuggyStep = EBuggyStep::None;
 	}
 }
@@ -785,9 +797,11 @@ void AGolfCharacter::ApplyRoaming()
 	// Follow camera: over the shoulder, trailing the golfer's heading with a little lag.
 	CameraArm->SetUsingAbsoluteLocation(false);
 	CameraArm->SetUsingAbsoluteRotation(false);
-	CameraArm->SetRelativeLocationAndRotation(FVector(0.f, 0.f, 50.f), FRotator(-14.f, 0.f, 0.f));
+	// Level with the golfer's eyes (looking straight ahead, not down at them): the arm pivots at eye height.
+	const float EyeZ = GolferHeight * 0.93f - GetCapsuleComponent()->GetScaledCapsuleHalfHeight();
+	CameraArm->SetRelativeLocationAndRotation(FVector(0.f, 0.f, EyeZ), FRotator(0.f, 0.f, 0.f));
 	CameraArm->TargetArmLength = 460.f;
-	CameraArm->SocketOffset = FVector(0.f, 0.f, 40.f);
+	CameraArm->SocketOffset = FVector::ZeroVector;
 	CameraArm->bEnableCameraLag = true;
 	CameraArm->CameraLagSpeed = 10.f;
 	CameraArm->bEnableCameraRotationLag = true;
@@ -949,6 +963,7 @@ void AGolfCharacter::MulticastStandBesideBuggy_Implementation(AGolfBuggy* Buggy)
 	{
 		Feet.Z = Ground.ImpactPoint.Z;
 	}
+	Buggy->SetDoorOpen(0.f);
 	LeaveBuggy();
 	BuggyStep = EBuggyStep::None;
 	SetSeatDrop(0.f);

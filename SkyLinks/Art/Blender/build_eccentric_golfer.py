@@ -88,9 +88,9 @@ MESHY_TO_MIXAMO = {
 CLUB_CLIPS = {'Golf Drive', 'Golf Drive alt1', 'Golf Chip', 'Golf Chip (replay if long shit in)', 'Golf Putt'}
 # Source frames to use, in order. The Mixamo idle twists the hips 90 and the shoulders 150 degrees looking round,
 # which read as the golfer turning at random: loop its calm stretch instead (end, then start: still, breathing).
-SOURCE_FRAMES = {'Idle': [*range(102, 123), *range(3, 19)]}
+SOURCE_FRAMES = {}  # (the looped calm stretch of the idle snapped where it wrapped: the whole original clip is back)
 # Gaits whose planted feet are locked and whose ground speed AGolfCharacter's body table needs (printed as SPEED).
-GAITS = {'Walking', 'Running'}
+GAITS = {'Walking', 'Jogging', 'Running'}
 
 CLIPS = ['Golf Drive', 'Golf Drive alt1', 'Golf Drive Setup', 'Golf Tee Up', 'Golf Chip',
          'Golf Chip (replay if long shit in)', 'Golf Putt', 'Golf Putt Victory', 'Golf Putt Victory on long putt',
@@ -120,19 +120,23 @@ def clip_source(name, character):
     """(fbx, native, full_size): the old golfer's clip, a Y-Bot one, or one made on the Meshy rig (native: in place).
     full_size: the source character is life-size (Meshy, Y-Bot), so hip travel scales by hip height; the old
     golfer's clips were made on a 95 cm body the game scaled 1.9x."""
-    if name == 'Jogging':
-        return (MESHY / character['jog']).resolve(), True, True
-    if name == 'Running':
-        return (MESHY / character['run']).resolve(), True, True
+    # Y-Bot jog and run (Art/Golfer/YBot/Jog Forward.fbx, Running.fbx) for every golfer; the Meshy ones are the fallback.
+    for gait, ybot_file, meshy_key in (('Jogging', 'Jog Forward', 'jog'), ('Running', 'Running', 'run')):
+        if name == gait:
+            if (YBOT / f'{ybot_file}.fbx').is_file():
+                return YBOT / f'{ybot_file}.fbx', True, True
+            return (MESHY / character[meshy_key]).resolve(), True, True
     if name == 'Walking' and (YBOT / f"{character['ybot_walk']}.fbx").is_file():
         return YBOT / f"{character['ybot_walk']}.fbx", True, True
     if name == 'Walking' and character['own_walk']:
         return NAMES_FBX, True, True
     if name == 'Walking' and character.get('walk'):
         return (MESHY / character['walk']).resolve(), True, True
-    ybot = YBOT / f"{name}{YBOT_SUFFIX[character['ybot']]}.fbx"
-    if ybot.is_file():
-        return ybot, False, True
+    # The female clip where there is one (the golf shots), else the male Y-Bot one (the buggy clips).
+    for suffix in (YBOT_SUFFIX[character['ybot']], ''):
+        ybot = YBOT / f"{name}{suffix}.fbx"
+        if ybot.is_file():
+            return ybot, False, True
     fixed = GOLFER / 'Animations' / 'Fixed' / f'{name}.fbx'
     return (fixed if fixed.is_file() else GOLFER / 'Animations' / f'{name}.fbx'), False, False
 
@@ -339,7 +343,7 @@ def put_on_floor(arm, hips, first, last, name):
         lows.append(min(foot_low(arm, p) for p in feet.values()))
     # Loops (walk, jog, run, idle): the lower fifth, the frames with a foot planted (runs spend the rest in the
     # air). Every other clip starts standing on both feet: its first frame (the missed putt kneels for most of it).
-    rise = -sorted(lows)[len(lows) // 5] if name in ('Walking', 'Jogging', 'Running', 'Idle') else -lows[0]
+    rise = -sorted(lows)[len(lows) // 5] if name in ('Walking', 'Jogging', 'Running') else -lows[0]
     lows.sort()
     world_up = arm.matrix_world.inverted().to_3x3() @ Vector((0.0, 0.0, rise))
     local = hips.bone.matrix_local.to_3x3().inverted() @ world_up

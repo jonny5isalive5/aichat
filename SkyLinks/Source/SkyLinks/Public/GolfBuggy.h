@@ -85,6 +85,13 @@ public:
 	UPROPERTY(VisibleAnywhere, Category = "Buggy")
 	TObjectPtr<UStaticMeshComponent> WheelRR;
 
+	/** The driver's door (left side, hinged at the front): opens for the golfer climbing in or out. */
+	UPROPERTY(VisibleAnywhere, Category = "Buggy")
+	TObjectPtr<UStaticMeshComponent> DoorDriver;
+
+	/** 0 shut .. 1 wide open (eased); AGolfCharacter drives it from the climb in / out clips. */
+	void SetDoorOpen(float Alpha);
+
 	UPROPERTY(VisibleAnywhere, Category = "Buggy")
 	TObjectPtr<USpringArmComponent> CameraArm;
 
@@ -96,6 +103,17 @@ public:
 
 	UPROPERTY(EditAnywhere, Category = "Buggy|Meshes")
 	TSoftObjectPtr<UStaticMesh> WheelMeshAsset;
+
+	/** SM_Buggy_Door (Art/Blender/build_buggy_door.py): its origin is the hinge, the panel runs back from it. */
+	UPROPERTY(EditAnywhere, Category = "Buggy|Meshes")
+	TSoftObjectPtr<UStaticMesh> DoorMeshAsset;
+
+	/** Where the hinge sits on the body (cm, body space: front edge of the driver's opening) and how far it opens. */
+	UPROPERTY(EditAnywhere, Category = "Buggy|Door")
+	FVector DoorHinge = FVector(50.f, -50.f, 40.f);
+
+	UPROPERTY(EditAnywhere, Category = "Buggy|Door")
+	float DoorOpenAngle = 75.f;
 
 	/** Turn the imported body if it faces the wrong way after import. */
 	UPROPERTY(EditAnywhere, Category = "Buggy|Meshes")
