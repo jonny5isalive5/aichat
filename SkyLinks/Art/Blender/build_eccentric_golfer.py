@@ -39,6 +39,11 @@ GOLFER = ROOT / 'Art' / 'Golfer'
 RUN_FBX = GOLFER / 'Meshy_Eccentric_Woman' / 'Goofy Running.fbx'
 
 OLD_SCALE = 1.9    # AGolfCharacter scaled the old golfer (whose clips these mostly are) by this
+# Mixamo clips downloaded on Y-Bot (life-size, standard Mixamo rig): Art/Golfer/YBot/<clip>[ female].fbx. Where one
+# exists it replaces the old golfer's clip (Golf Drive, Golf Chip, Golf Putt so far); each golfer's ybot_walk (in place)
+# replaces the Meshy walk.
+YBOT = GOLFER / 'YBot'
+YBOT_SUFFIX = {'male': '', 'female': ' female'}
 TRIANGLES = 32000  # mobile budget for the body
 
 # Per character: Meshy folder and file prefix, output folder (Art/Golfer/<out>, /Game/Characters/<out>), height in
@@ -47,19 +52,19 @@ CHARACTERS = {
     # Both are the same Meshy rig, so she runs with his run (hers never puts the left foot down). Both Meshy jogs
     # are jogs on the spot (feet travel 30-40 cm/s), so the game jogs with the run clip and A_Jog goes unused.
     'man': dict(folder='Meshy_Eccentric_Golfer', prefix='Meshy_AI_Eccentric_Golfer_biped', out='Eccentric',
-                material='M_EccentricGolfer', height=180.0, own_walk=True,
+                material='M_EccentricGolfer', height=180.0, own_walk=True, ybot='male', ybot_walk='Walking man',
                 jog='Jog Forward.fbx', run='Running (1).fbx'),
     'woman': dict(folder='Meshy_Eccentric_Woman', prefix='Meshy_AI_Retro_Fairway_Diva_biped', out='Diva',
-                  material='M_FairwayDiva', height=172.0, own_walk=True,
+                  material='M_FairwayDiva', height=172.0, own_walk=True, ybot='female', ybot_walk='Walking female',
                   jog='Jogging.fbx', run='../Meshy_Eccentric_Golfer/Running (1).fbx'),
     # The teenage girl came rigged but with no clips: she walks and jogs with the wife's, runs with the man's.
     'teen': dict(folder='Meshy_Teen_Girl', prefix='Meshy_AI_Fairway_Flair', out='Teen',
-                 material='M_FairwayFlair', height=163.0, own_walk=False,
+                 material='M_FairwayFlair', height=163.0, own_walk=False, ybot='female', ybot_walk='Walking female',
                  walk='../Meshy_Eccentric_Woman/Meshy_AI_Retro_Fairway_Diva_biped_Animation_Walking_withSkin.fbx',
                  jog='../Meshy_Eccentric_Woman/Jogging.fbx', run='../Meshy_Eccentric_Golfer/Running (1).fbx'),
     # The lad came unrigged: Art/Blender/rig_from_donor.py gave him the man's skeleton and weights, and his clips.
     'lad': dict(folder='Meshy_Lad', prefix='Meshy_AI_Flamingo_Fairway', out='Lad',
-                material='M_FlamingoFairway', height=178.0, own_walk=False,
+                material='M_FlamingoFairway', height=178.0, own_walk=False, ybot='male', ybot_walk='lad walking',
                 walk='../Meshy_Eccentric_Golfer/Meshy_AI_Eccentric_Golfer_biped_Animation_Walking_withSkin.fbx',
                 jog='../Meshy_Eccentric_Golfer/Jog Forward.fbx', run='../Meshy_Eccentric_Golfer/Running (1).fbx'),
 }
@@ -112,17 +117,24 @@ def use_character(key):
 
 
 def clip_source(name, character):
-    """(fbx, native): the old golfer's clip, or one made on the Meshy rig (native: in place, hips scaled by size)."""
+    """(fbx, native, full_size): the old golfer's clip, a Y-Bot one, or one made on the Meshy rig (native: in place).
+    full_size: the source character is life-size (Meshy, Y-Bot), so hip travel scales by hip height; the old
+    golfer's clips were made on a 95 cm body the game scaled 1.9x."""
     if name == 'Jogging':
-        return (MESHY / character['jog']).resolve(), True
+        return (MESHY / character['jog']).resolve(), True, True
     if name == 'Running':
-        return (MESHY / character['run']).resolve(), True
+        return (MESHY / character['run']).resolve(), True, True
+    if name == 'Walking' and (YBOT / f"{character['ybot_walk']}.fbx").is_file():
+        return YBOT / f"{character['ybot_walk']}.fbx", True, True
     if name == 'Walking' and character['own_walk']:
-        return NAMES_FBX, True
+        return NAMES_FBX, True, True
     if name == 'Walking' and character.get('walk'):
-        return (MESHY / character['walk']).resolve(), True
+        return (MESHY / character['walk']).resolve(), True, True
+    ybot = YBOT / f"{name}{YBOT_SUFFIX[character['ybot']]}.fbx"
+    if ybot.is_file():
+        return ybot, False, True
     fixed = GOLFER / 'Animations' / 'Fixed' / f'{name}.fbx'
-    return (fixed if fixed.is_file() else GOLFER / 'Animations' / f'{name}.fbx'), False
+    return (fixed if fixed.is_file() else GOLFER / 'Animations' / f'{name}.fbx'), False, False
 
 
 def short(name):
@@ -365,7 +377,10 @@ def lock_feet(arm, first, last, name, contact=0.03):
     # Planted spans per foot, wrapping round the loop (lists of frame indices).
     spans = {}
     for side in feet:
-        down = [step[0] < contact for step in track[side]]
+        # Planted: low, and not moving forward (-Y). A swinging foot can stay low too (a shuffling walk barely lifts
+        # its feet, a toe can drag through the floor), but it always moves forward.
+        down = [step[0] < contact and track[side][(i + 1) % n][1].y - step[1].y > -0.002
+                for i, step in enumerate(track[side])]
         for i in range(n):  # a one-frame lift inside a step is still the same step
             if not down[i] and down[i - 1] and down[(i + 1) % n]:
                 down[i] = True
@@ -439,7 +454,7 @@ def rest_direction(arm, bone):
 
 
 def retarget(dst, name):
-    path, native = clip_source(name, CHARACTER)
+    path, native, full_size = clip_source(name, CHARACTER)
     if not path.is_file():
         print(f'MISSING {name}')
         return
@@ -468,7 +483,7 @@ def retarget(dst, name):
     src_rest_hips = src.matrix_world @ src_hips.bone.head_local
     dst_rest_hips = dst.matrix_world @ dst_hips.bone.head_local
     lift = dst_rest_hips.z / src_rest_hips.z
-    travel = lift if native else OLD_SCALE / GAME_SCALE
+    travel = lift if full_size else OLD_SCALE / GAME_SCALE
     # Meshy clips walk or run forward: take that out (the character moves them), noting the speed it matched.
     drift = Vector((0.0, 0.0, 0.0))
     if native:

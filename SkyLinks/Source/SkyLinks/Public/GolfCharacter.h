@@ -106,6 +106,10 @@ public:
 	UPROPERTY(EditDefaultsOnly, Category = "Golf|Body")
 	float MeshYawOffset = -90.f;
 
+	/** How fast (degrees/s) an idle golfer on foot turns to face the camera (three times that back when walking). */
+	UPROPERTY(EditDefaultsOnly, Category = "Golf|Body")
+	float IdleTurnRate = 270.f;
+
 	UPROPERTY(EditDefaultsOnly, Category = "Golf|Animations") TSoftObjectPtr<UAnimSequence> DriveAnim;
 	UPROPERTY(EditDefaultsOnly, Category = "Golf|Animations") TSoftObjectPtr<UAnimSequence> ChipAnim;
 	UPROPERTY(EditDefaultsOnly, Category = "Golf|Animations") TSoftObjectPtr<UAnimSequence> PuttAnim;
@@ -249,6 +253,10 @@ protected:
 	void OnRep_Roaming();
 	void ApplyRoaming();
 	void UpdateLocomotion();
+	/** Turns the body (not the actor) to face the local camera while standing idle on foot. */
+	void UpdateIdleFacing(float DeltaSeconds);
+	/** The body's current turn away from the actor's facing (degrees). */
+	float IdleFaceYaw = 0.f;
 	/** Idle or walk clip currently looping while roaming (null when an action or pose owns the mesh). */
 	TWeakObjectPtr<UAnimSequence> LocomotionClip;
 

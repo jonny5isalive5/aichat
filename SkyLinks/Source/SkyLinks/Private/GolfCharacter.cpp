@@ -7,6 +7,8 @@
 #include "Components/StaticMeshComponent.h"
 #include "Engine/StaticMesh.h"
 #include "GameFramework/CharacterMovementComponent.h"
+#include "GameFramework/PlayerController.h"
+#include "Camera/PlayerCameraManager.h"
 #include "GameFramework/SpringArmComponent.h"
 #include "Animation/AnimSequence.h"
 #include "Engine/SkeletalMesh.h"
@@ -83,14 +85,18 @@ namespace
 		float FastWalkSpeed;
 		float JogSpeed;
 		float RunSpeed;
+		float DriveImpact;     // s from the start of each swing to club on ball (the Y-Bot male / female swings)
+		float ChipImpact;
+		float PuttImpact;
 	};
 	// Clip speeds are the SPEED lines printed by build_eccentric_golfer.py (planted feet locked to them). The Meshy
-	// jogs are jogs on the spot, so the jog gait plays the run clip, slowed (JogAnimSpeed = RunAnimSpeed).
+	// jogs are jogs on the spot, so the jog gait plays the run clip, slowed (JogAnimSpeed = RunAnimSpeed). Impact times:
+	// when the club head, fixed in the right hand at address, comes back closest to the ball (measured in the editor).
 	const FGolferBodyInfo GolferBodies[] = {
-		{ TEXT("Eccentric"), 180.f, 110.f, 295.f, 295.f, 110.f, 160.f, 185.f, 300.f },  // the man
-		{ TEXT("Diva"), 172.f, 121.f, 286.f, 286.f, 125.f, 170.f, 200.f, 320.f },       // his wife
-		{ TEXT("Teen"), 163.f, 113.f, 373.f, 373.f, 120.f, 170.f, 200.f, 320.f },       // the teenage girl
-		{ TEXT("Lad"), 178.f, 100.f, 273.f, 273.f, 110.f, 160.f, 185.f, 300.f },        // the lad (Flamingo Fairway)
+		{ TEXT("Eccentric"), 180.f, 101.f, 295.f, 295.f, 110.f, 160.f, 185.f, 300.f, 1.19f, 1.43f, 1.33f },  // the man
+		{ TEXT("Diva"), 172.f, 118.f, 286.f, 286.f, 125.f, 170.f, 200.f, 320.f, 1.14f, 1.02f, 1.22f },       // his wife
+		{ TEXT("Teen"), 163.f, 112.f, 373.f, 373.f, 120.f, 170.f, 200.f, 320.f, 1.14f, 1.01f, 1.22f },       // the teenage girl
+		{ TEXT("Lad"), 178.f, 60.f, 304.f, 304.f, 110.f, 160.f, 185.f, 300.f, 1.19f, 1.43f, 1.33f },        // the lad (Flamingo Fairway)
 	};
 }
 
@@ -131,6 +137,9 @@ void AGolfCharacter::PointAssetsAt(uint8 InBody)
 	FastWalkSpeed = Info.FastWalkSpeed;
 	JogSpeed = Info.JogSpeed;
 	RunSpeed = Info.RunSpeed;
+	DriveImpactTime = Info.DriveImpact;
+	ChipImpactTime = Info.ChipImpact;
+	PuttImpactTime = Info.PuttImpact;
 }
 
 void AGolfCharacter::ChooseBody(uint8 InBody)
@@ -478,6 +487,7 @@ void AGolfCharacter::Tick(float DeltaSeconds)
 	{
 		UpdateLocomotion();
 	}
+	UpdateIdleFacing(DeltaSeconds);
 	if (bClubFitted && bPlayingAction && !bClubResting && Club->IsVisible() && GetMesh()->GetPosition() < SwingLength - 0.05f)
 	{
 		UpdateClubFit();
@@ -839,6 +849,40 @@ void AGolfCharacter::UpdateLocomotion()
 		Rate = FMath::Clamp(Speed / WalkAnimSpeed, 0.6f, 2.f);
 	}
 	GetMesh()->SetPlayRate(Rate);
+}
+
+void AGolfCharacter::UpdateIdleFacing(float DeltaSeconds)
+{
+	// Standing about on foot, the golfer turns to face this screen's camera; walking, back to where they're going.
+	// Only the body turns (not the actor), so the follow camera, which trails the actor, doesn't swing round with
+	// them, and it's per screen, so everyone sees every idle golfer face them without touching replication.
+	if (!bHasBody)
+	{
+		return;
+	}
+	if (!bRoaming)
+	{
+		// At the ball or in the buggy the body faces the way the code placed it, at once.
+		if (IdleFaceYaw != 0.f)
+		{
+			IdleFaceYaw = 0.f;
+			GetMesh()->SetRelativeRotation(FRotator(0.f, MeshYawOffset, 0.f));
+		}
+		return;
+	}
+	const bool bIdle = !bPlayingAction && BuggyStep == EBuggyStep::None && GetVelocity().Size2D() <= 15.f;
+	float Target = 0.f;
+	const APlayerController* Viewer = bIdle ? GetWorld()->GetFirstPlayerController() : nullptr;
+	if (Viewer && Viewer->PlayerCameraManager)
+	{
+		const FVector ToCamera = Viewer->PlayerCameraManager->GetCameraLocation() - GetActorLocation();
+		if (ToCamera.Size2D() > 1.f)
+		{
+			Target = FRotator::NormalizeAxis(ToCamera.Rotation().Yaw - GetActorRotation().Yaw);
+		}
+	}
+	IdleFaceYaw = FMath::FixedTurn(IdleFaceYaw, Target, (bIdle ? IdleTurnRate : 3.f * IdleTurnRate) * DeltaSeconds);
+	GetMesh()->SetRelativeRotation(FRotator(0.f, MeshYawOffset + IdleFaceYaw, 0.f));
 }
 
 void AGolfCharacter::SetPace(float InPace)
