@@ -16,12 +16,13 @@ import sys
 from pathlib import Path
 
 import bpy
+import bmesh
 import numpy as np
-from mathutils import Vector
+from mathutils import Vector, noise
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 import sl_common as sl  # noqa: E402
-from build_floater_dressing import GLOW_COLOURS, PETAL, Kit, make_atlas  # noqa: E402
+from build_floater_dressing import GLOW_COLOURS, PETAL, PLAIN, Kit, make_atlas  # noqa: E402
 
 ROOT = Path(__file__).resolve().parents[2]
 SOURCE = ROOT / 'Art' / 'Exports' / 'Trees'
@@ -166,10 +167,131 @@ def add_glow(kit, mesh, rng, glow, tendrils, bulbs_per_10m2, flowering):
             kit.blob(centre + n * 0.03, radius * 0.25, (0.9, 0.95, 1.0), 1, sides=4)
 
 
+def tube(kit, points, radii, colour, sides=7):
+    """A trunk through points, radius per point (vertex coloured, a little lighter on one side)."""
+    u, v = PLAIN[0] + 0.25, PLAIN[1] + 0.25
+    rings = []
+    for i, (p, r) in enumerate(zip(points, radii)):
+        ahead = (points[min(i + 1, len(points) - 1)] - points[max(i - 1, 0)]).normalized()
+        side = ahead.cross(Vector((0.31, 0.77, 0.55))).normalized()
+        other = ahead.cross(side)
+        ring = []
+        for k in range(sides):
+            a = 2 * math.pi * k / sides
+            ring.append(len(kit.v))
+            q = p + (side * math.cos(a) + other * math.sin(a)) * r
+            kit.v.append(tuple(q))
+            kit.uv.append((u + 0.0 * q.x, v))
+            kit.col.append(tuple(c * (0.8 + 0.2 * math.cos(a)) for c in colour))
+        rings.append(ring)
+    for a_ring, b_ring in zip(rings, rings[1:]):
+        for k in range(sides):
+            j = (k + 1) % sides
+            kit.f += [(a_ring[k], a_ring[j], b_ring[k]), (a_ring[j], b_ring[j], b_ring[k])]
+            kit.mat += [0, 0]
+
+
+def lumpy_pad(kit, centre, radius, thickness, top, under, rng, mat=0):
+    """A flat, lumpy leaf pad (a squashed icosphere), lit like the other canopies: light on top, dark beneath.
+    UVs are world-projected so the leaves material's detail texture lies across it."""
+    bm = bmesh.new()
+    bmesh.ops.create_icosphere(bm, subdivisions=3, radius=1.0)
+    seed = Vector((rng.uniform(0, 50), rng.uniform(0, 50), rng.uniform(0, 50)))
+    base = len(kit.v)
+    for v in bm.verts:
+        n = v.co.normalized()
+        bump = 1 + 0.16 * noise.noise(n * 2.2 + seed) + 0.06 * noise.noise(n * 6 + seed)
+        p = centre + Vector((n.x * radius * bump, n.y * radius * bump, n.z * thickness * bump))
+        kit.v.append(tuple(p))
+        kit.uv.append((p.x * 0.4, p.y * 0.4 + p.z * 0.4))
+        t = min(1.0, max(0.0, n.z * 0.5 + 0.5 + 0.1 * noise.noise(p * 0.8 + seed)))
+        kit.col.append(tuple(u * (1 - t) + o * t for u, o in zip(under, top)))
+    for f in bm.faces:
+        kit.f.append(tuple(base + v.index for v in f.verts))
+        kit.mat.append(mat)
+    bm.free()
+
+
+def spire_tree(name, rng):
+    """The pine's Pandora version, redesigned (a dark cone with lights read as a Christmas tree): a tall twisting
+    violet trunk carrying stacked teal leaf pads, smaller towards the top, each with a glowing rim of bulbs and
+    glowing tendrils hanging beneath. Same height and spread as the pine, so it stands where the pines were."""
+    kit = Kit()
+    height, glow = 12.6, BLUE
+    trunk = [Vector((math.sin(t * 2.4) * 0.35, math.cos(t * 1.7) * 0.25 - 0.25, t * height * 0.93))
+             for t in (i / 10 for i in range(11))]
+    radii = [0.36 * (1 - 0.68 * i / 10) for i in range(11)]
+    start = len(kit.f)
+    tube(kit, trunk, radii, (0.24, 0.18, 0.28))
+    for i in range(start, len(kit.f)):
+        kit.mat[i] = 2  # bark
+    vein_line = [(p, r) for p, r in zip(trunk[:6], radii[:6])]
+    prev = None
+    for i, (p, r) in enumerate(vein_line):
+        a = i * 1.1
+        q = p + Vector((math.cos(a), math.sin(a), 0)) * (r * 1.04)
+        if prev is not None:
+            side = (q - prev).cross(Vector((math.cos(a), math.sin(a), 0))).normalized() * 0.035
+            kit.quad([prev - side, prev + side, q + side, q - side], [(0.6, 0.6)] * 4, glow, 1)
+        prev = q
+    cloud = []
+    tiers = [(0.36, 3.3), (0.52, 2.8), (0.67, 2.2), (0.8, 1.6), (0.92, 1.0)]
+    for i, (frac, radius) in enumerate(tiers):
+        z = height * frac
+        along = trunk[min(10, int(round(frac * 10 / 0.93)))]
+        centre = Vector((along.x, along.y, z)) + Vector((rng.uniform(-0.3, 0.3), rng.uniform(-0.3, 0.3), 0))
+        thickness = radius * 0.3
+        top = (0.2 + 0.05 * i, 0.62 + 0.03 * i, 0.68)
+        lumpy_pad(kit, centre, radius, thickness, top, (0.03, 0.09, 0.15), rng)
+        for k in range(16):
+            a = 2 * math.pi * k / 16
+            rim = centre + Vector((math.cos(a) * radius * 0.94, math.sin(a) * radius * 0.94, -thickness * 0.35))
+            cloud.append(rim + Vector((0, 0, thickness * 1.4)))
+            cloud.append(rim)
+            kit.blob(rim, rng.uniform(0.08, 0.13), rng.choice((glow, glow, CYAN)), 1, sides=4)
+        for _ in range(5 if i < 4 else 2):  # tendrils from beneath the pad
+            a, r = rng.uniform(0, 6.28), radius * rng.uniform(0.4, 0.85)
+            p = centre + Vector((math.cos(a) * r, math.sin(a) * r, -thickness * 0.6))
+            length = rng.uniform(0.6, 1.6)
+            steps = 4
+            for j in range(steps):
+                q = p + Vector((0.03 * math.sin(a + j), 0.03 * math.cos(a + j), -length / steps))
+                side = Vector((math.cos(a), math.sin(a), 0)) * 0.025
+                kit.quad([p - side, p + side, q + side, q - side], [(0.6, 0.6)] * 4, glow, 1)
+                p = q
+            kit.blob(p, 0.08, (0.6, 0.85, 1.0), 1, sides=4)
+    obj = kit.mesh(name, domain='CORNER')
+    obj.data.materials[0] = bpy.data.materials.get('TreeLeaves') or bpy.data.materials.new('TreeLeaves')
+    obj.data.materials.append(bpy.data.materials.get('TreeBark') or bpy.data.materials.new('TreeBark'))
+    trunk_box = sl.box(f'UCX_{name}_00', -0.3, 0.3, -0.55, 0.05, 0.0, 4.0)
+    return obj, [trunk_box, hull(cloud, f'UCX_{name}_01')], len(kit.f)
+
+
+def hull(points, name, shrink=0.9):
+    centre = sum(points, Vector()) / len(points)
+    bm = bmesh.new()
+    for p in points:
+        bm.verts.new(centre + (p - centre) * shrink)
+    result = bmesh.ops.convex_hull(bm, input=bm.verts)
+    loose = {g for g in result['geom_interior'] + result['geom_unused'] if isinstance(g, bmesh.types.BMVert)}
+    bmesh.ops.delete(bm, geom=list(loose), context='VERTS')
+    mesh = bpy.data.meshes.new(name)
+    bm.to_mesh(mesh)
+    bm.free()
+    obj = bpy.data.objects.new(name, mesh)
+    bpy.context.scene.collection.objects.link(obj)
+    return obj
+
+
 def build(path):
     kind, shadow, light, bark, glow, tendrils, bulbs = STYLES[path.stem]
     name = f'SM_PandoraTree_{kind}'
     bpy.ops.wm.read_factory_settings(use_empty=True)
+    if kind == 'Pine':
+        tree, collision, faces = spire_tree(name, random.Random(kind))
+        sl.export_fbx(str(OUT / f'{name}.fbx'), [tree] + collision)
+        print(f'TREE {name}: {faces} faces (redesigned spire tree), {len(collision)} collision hulls')
+        return
     bpy.ops.import_scene.fbx(filepath=str(path))
     tree = bpy.data.objects[path.stem]
     collision = [o for o in bpy.data.objects if o.name.startswith('UCX_')]
