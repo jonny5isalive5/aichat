@@ -152,6 +152,7 @@ void ASkyLinksGrass::FillCell(const FIntPoint& Key, float ViewZ, int32& Traces)
 
 	FCollisionQueryParams Params(SCENE_QUERY_STAT(SkyLinksGrass), true);
 	Params.bReturnPhysicalMaterial = true;
+	Params.bReturnFaceIndex = true; // FindCollisionUV (OnPath) needs the hit's face; without it every hit reads "not on a path"
 	const FCollisionObjectQueryParams Objects(ECC_WorldStatic);
 	auto Ground = [&](float X, float Y, FHitResult& Hit, EPhysicalSurface& Surface)
 	{
