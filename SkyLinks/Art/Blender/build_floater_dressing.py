@@ -3,6 +3,7 @@ glowing ferns and mushrooms and big-leaved plants round the top.
 
     python Art/Blender/build_floater_dressing.py            (every floater)
     python Art/Blender/build_floater_dressing.py -- 3 7     (just holes 3 and 7)
+    python Art/Blender/build_floater_dressing.py -- SM_H01_Floater08 novines   (one floater, old vines taken off)
 
 For each Art/Exports/Islands/SM_Hnn_FloaterNN.fbx this writes SM_Hnn_FloaterNN_Dress.fbx in the same space (same
 pivot), plus the shared leaf / petal texture Art/Textures/T_FloaterAtlas.png. In Unreal,
@@ -183,16 +184,25 @@ class Kit:
 # ---------------------------------------------------------------- one floater
 
 def leaf_green(rng):
-    return (rng.uniform(0.12, 0.3), rng.uniform(0.42, 0.62), rng.uniform(0.08, 0.2))
+    return (rng.uniform(0.3, 0.5), rng.uniform(0.68, 0.88), rng.uniform(0.14, 0.3))
 
 
-def dress(path, rng):
+def dress(path, rng, strip_vines=False):
     bpy.ops.wm.read_factory_settings(use_empty=True)
     bpy.ops.import_scene.fbx(filepath=str(path))
     rock = next(o for o in bpy.data.objects if o.type == 'MESH' and not o.name.endswith('_Ivy'))
     others = [o for o in bpy.data.objects if o is not rock]
+    had_vines = any(o.name.endswith('_Ivy') for o in others)
     for o in others:
         bpy.data.objects.remove(o)
+    if strip_vines and had_vines:
+        # The old thin hanging vines hide the new ivy and flowers: the floater again, rock only (same name, so
+        # Unreal re-imports it in place; the original with vines is kept beside it as .with_vines.fbx).
+        keep = path.with_name(path.stem + '.with_vines.fbx')
+        if not keep.exists():
+            path.replace(keep)
+        sl.export_fbx(str(path), [rock])
+        print(f'VINES removed from {path.name}')
     world = rock.matrix_world.copy()
     me = rock.data
     tops = {i for i, m in enumerate(me.materials) if m and m.name.split('.')[0] == 'Rough'}
@@ -238,7 +248,7 @@ def dress(path, rng):
 
     # Leafy ivy: strands from the rim down the cliffs, hugging the rock, then trailing free below it.
     for base in rim:
-        if rng.random() > 0.45:
+        if rng.random() > 0.6:
             continue
         for _ in range(rng.choice((1, 1, 2))):
             p = base.copy() + Vector((rng.uniform(-0.6, 0.6) * U, rng.uniform(-0.6, 0.6) * U, 0.05))
@@ -276,11 +286,9 @@ def dress(path, rng):
     # Glowing flowers in clusters on the cliffs (a fan of petals round a bright bulb).
     weights = np.array([f.calc_area() for f in rock_faces])
     weights = weights / weights.sum()
-    clusters = int(rng.uniform(8, 13) * scale)
+    clusters = int(rng.uniform(14, 20) * scale)
     for _ in range(clusters):
         f = rock_faces[int(np.searchsorted(np.cumsum(weights), rng.random()))]
-        if f.normal.z < -0.6:  # not on the very bottom
-            continue
         colour = rng.choice(GLOW_COLOURS)
         anchor = f.calc_center_median()
         for _ in range(rng.randint(3, 8)):
@@ -339,6 +347,25 @@ def dress(path, rng):
                 return p
         return p
 
+    # The whole top overgrown: a clump of big leaves every few metres, jittered.
+    step = 2.4 * U
+    xs = np.arange(lo.x, hi.x, step)
+    ys = np.arange(lo.y, hi.y, step)
+    for gx in xs:
+        for gy in ys:
+            start = Vector((gx + rng.uniform(0, step), gy + rng.uniform(0, step), hi.z + 5))
+            hit, normal, index, _ = tree.ray_cast(start, Vector((0, 0, -1)), hi.z - lo.z + 10)
+            if hit is None or bm.faces[index].material_index not in tops:
+                continue
+            green = leaf_green(rng)
+            n_leaves = rng.randint(4, 7)
+            for k in range(n_leaves):
+                a = 2 * math.pi * k / n_leaves + rng.uniform(-0.4, 0.4)
+                out = Vector((math.cos(a), math.sin(a), 0))
+                side = Vector((-out.y, out.x, 0))
+                length = rng.uniform(0.6, 1.2) * U
+                kit.bent_card(hit, (Vector((0, 0, 1)) * 0.7 + out * 0.7).normalized(), side, out, length,
+                              length * 0.8, 0.8, LEAF, green, 0, rows=2)
     for _ in range(int(rng.uniform(16, 24) * scale)):  # big-leaved plants
         p = top_spot(True)
         green = leaf_green(rng)
@@ -350,8 +377,8 @@ def dress(path, rng):
             length = rng.uniform(0.7, 1.4) * U
             kit.bent_card(p, (Vector((0, 0, 1)) * 0.8 + out * 0.6).normalized(), side, out, length, length * 0.8,
                           0.9, LEAF, green, 0)
-    for _ in range(int(rng.uniform(7, 11) * scale)):  # glowing ferns
-        p = top_spot(True)
+    for _ in range(int(rng.uniform(12, 18) * scale)):  # glowing ferns
+        p = top_spot(False)
         colour = rng.choice(GLOW_COLOURS)
         fronds = rng.randint(5, 8)
         for k in range(fronds):
@@ -400,7 +427,7 @@ def main():
         paths = [p for p in paths if p.stem in names]
     total = 0
     for path in paths:
-        tris = dress(path, random.Random(path.stem))
+        tris = dress(path, random.Random(path.stem), strip_vines='novines' in args)
         total += tris
         print(f'DRESS {path.stem}: {tris} triangles')
     print(f'DRESS DONE: {len(paths)} floaters, {total} triangles in all')
