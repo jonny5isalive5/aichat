@@ -132,10 +132,12 @@ def clip_source(name, character):
         return NAMES_FBX, True, True
     if name == 'Walking' and character.get('walk'):
         return (MESHY / character['walk']).resolve(), True, True
-    # The female clip where there is one (the golf shots), else the male Y-Bot one (the buggy clips).
+    # The female clip where there is one (the golf shots), else the male Y-Bot one. Not the buggy clips: the game
+    # seats the golfer by the old clips' path (AGolfCharacter EnterStartFromSeat, 1.9 m from the door), and the
+    # Y-Bot climb in covers only about 1.3 m of it, so the golfer ended up standing beside the buggy.
     for suffix in (YBOT_SUFFIX[character['ybot']], ''):
         ybot = YBOT / f"{name}{suffix}.fbx"
-        if ybot.is_file():
+        if ybot.is_file() and 'Car' not in name:
             return ybot, False, True
     fixed = GOLFER / 'Animations' / 'Fixed' / f'{name}.fbx'
     return (fixed if fixed.is_file() else GOLFER / 'Animations' / f'{name}.fbx'), False, False
