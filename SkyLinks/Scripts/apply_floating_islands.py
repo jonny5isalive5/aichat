@@ -1438,6 +1438,80 @@ def fog_floaters(density=0.8):
     print(f'FLOATER MIST: clouds under {count} floating islands (density {density})')
 
 
+def _floater_atlas():
+    texture = _import(TEXTURE_SOURCE / 'T_FloaterAtlas.png', TEXTURE_DEST)
+    assert texture, 'T_FloaterAtlas.png did not import (run Art/Blender/build_floater_dressing.py)'
+    texture.set_editor_property('srgb', True)
+    unreal.EditorAssetLibrary.save_loaded_asset(texture)
+    return texture
+
+
+def _floater_plant_material(name, glow, strength=8.0):
+    """M_FloaterLeaf (lit) / M_FloaterGlow (unlit, emissive: glows with no lights, on phones too): both cut out
+    of the atlas, two-sided, tinted by the vertex colour (sRGB bytes, squared as a cheap sRGB-to-linear)."""
+    mat = _material(name)
+    mat.set_editor_property('two_sided', True)
+    mat.set_editor_property('blend_mode', unreal.BlendMode.BLEND_MASKED)
+    if glow:
+        mat.set_editor_property('shading_model', unreal.MaterialShadingModel.MSM_UNLIT)
+    texture = _expr(mat, unreal.MaterialExpressionTextureSample, -900, 0,
+                    texture=unreal.load_asset(f'{TEXTURE_DEST}/T_FloaterAtlas'),
+                    sampler_type=unreal.MaterialSamplerType.SAMPLERTYPE_COLOR)
+    vc = _expr(mat, unreal.MaterialExpressionVertexColor, -900, 300)
+    linear = _mul(mat, vc, '', vc, '', -700, 300)
+    tinted = _mul(mat, texture, 'RGB', linear, '', -500, 100)
+    if glow:
+        strength = _expr(mat, unreal.MaterialExpressionScalarParameter, -500, 300, parameter_name='Glow', default_value=strength)
+        lib.connect_material_property(_mul(mat, tinted, '', strength, '', -300, 100), '', unreal.MaterialProperty.MP_EMISSIVE_COLOR)
+    else:
+        lib.connect_material_property(tinted, '', unreal.MaterialProperty.MP_BASE_COLOR)
+        lib.connect_material_property(_const(mat, 0.7, -300, 300), '', unreal.MaterialProperty.MP_ROUGHNESS)
+    lib.connect_material_property(texture, 'A', unreal.MaterialProperty.MP_OPACITY_MASK)
+    lib.recompile_material(mat)
+    unreal.EditorAssetLibrary.save_loaded_asset(mat)
+    return mat
+
+
+def dress_floaters(glow=8.0):
+    """Pandora-style plants on every floating island in the level: leafy ivy down the cliffs, glowing flowers,
+    glowing ferns and mushrooms and big leaves on top (Art/Blender/build_floater_dressing.py makes them). Each
+    dressing is attached to its floater, so nothing you placed moves and the plants follow if you move a floater.
+    Run again after adding floaters. glow: brightness of the glowing plants (8 default; 4 softer, 15 brighter)."""
+    folder = 'Course/FloaterDress'
+    for actor in _all():
+        if str(actor.get_folder_path()) == folder:
+            actors.destroy_actor(actor)
+    _floater_atlas()
+    materials = {'FloaterLeaf': _floater_plant_material('M_FloaterLeaf', False),
+                 'FloaterGlow': _floater_plant_material('M_FloaterGlow', True, glow)}
+    meshes, dressed, missing = {}, 0, set()
+    for actor in _all():
+        if not isinstance(actor, unreal.StaticMeshActor):
+            continue
+        mesh = actor.static_mesh_component.get_editor_property('static_mesh')
+        name = mesh.get_name() if mesh else ''
+        if '_Floater' not in name or name.endswith('_Dress'):
+            continue
+        dress_name = f'{name}_Dress'
+        if dress_name not in meshes:
+            if not (SOURCE / f'{dress_name}.fbx').is_file():
+                missing.add(dress_name)
+                continue
+            meshes[dress_name] = import_mesh(dress_name, materials, collide=False)
+        plants = actors.spawn_actor_from_object(meshes[dress_name], actor.get_actor_location(), actor.get_actor_rotation())
+        plants.set_actor_scale3d(actor.get_actor_scale3d())
+        plants.set_actor_label(f'{actor.get_actor_label()}_Dress')
+        plants.set_folder_path(folder)
+        plants.static_mesh_component.set_collision_enabled(unreal.CollisionEnabled.NO_COLLISION)
+        plants.static_mesh_component.set_editor_property('cast_shadow', False)
+        plants.attach_to_actor(actor, '', unreal.AttachmentRule.KEEP_WORLD, unreal.AttachmentRule.KEEP_WORLD,
+                               unreal.AttachmentRule.KEEP_WORLD, False)
+        dressed += 1
+    unreal.get_editor_subsystem(unreal.LevelEditorSubsystem).save_current_level()
+    print(f'FLOATER DRESS: {dressed} floaters dressed' + (f'; no dressing built yet for {sorted(missing)} '
+          '(run Art/Blender/build_floater_dressing.py -- <those names>)' if missing else ''))
+
+
 def reimport_paths(holes=HOLES):
     """After the buggy paths' ground was reshaped: re-import each hole's surface, rock and vines, then the rope
     bridges, in place (freeing memory after each). Trees, floaters and everything you've placed stay exactly as
