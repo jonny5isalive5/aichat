@@ -428,7 +428,7 @@ def import_grass():
     make_golf_ball()
     blades = grass_blades_material()
     debris = debris_material()
-    for name in ('SM_GrassClump', 'SM_GrassTuft', 'SM_WindLeaf', 'SM_WindStraw'):
+    for name in ('SM_GrassClump', 'SM_GrassTuft', 'SM_GrassPatch', 'SM_WindLeaf', 'SM_WindStraw'):
         mat = debris if name.startswith('SM_Wind') else blades
         options = unreal.FbxImportUI()
         options.set_editor_property('import_mesh', True)

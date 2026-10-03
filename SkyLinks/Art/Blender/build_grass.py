@@ -1,6 +1,6 @@
 """Grass blade clumps for the 3D grass that grows on the rough and along bunker lips (ASkyLinksGrass).
 
-    python Art/Blender/build_grass.py        (bpy module)
+    python Art/Blender/build_grass.py        (bpy module; -- SM_GrassPatch to build just that one)
 
 Writes Art/Exports/Grass/SM_GrassClump.fbx (short rough), SM_GrassTuft.fbx (taller, wispy lip tufts) and
 SM_WindLeaf / SM_WindStraw.fbx (the leaves and dry grass the wind blows about, ASkyLinksWindDebris).
@@ -95,13 +95,18 @@ def main():
     specs = {
         'SM_GrassClump': dict(blades=34, spread=0.16, height=(0.07, 0.19), width=(0.009, 0.016), lean=(0.2, 0.7), seed=1),
         'SM_GrassTuft': dict(blades=24, spread=0.06, height=(0.16, 0.38), width=(0.006, 0.011), lean=(0.3, 0.9), seed=2),
+        # Thick rough near the camera: a wide patch, overlapping its neighbours into a full carpet.
+        'SM_GrassPatch': dict(blades=70, spread=0.34, height=(0.08, 0.23), width=(0.009, 0.016), lean=(0.2, 0.75), seed=3),
     }
+    only = [a for a in sys.argv[sys.argv.index('--') + 1:]] if '--' in sys.argv else []
+    if only:
+        specs = {k: v for k, v in specs.items() if k in only}
     for name, spec in specs.items():
         sl.reset_scene()
         obj = clump(name, **spec)
         sl.export_fbx(str(OUT / f'{name}.fbx'), [obj])
         print(f'GRASS {name}: {len(obj.data.polygons)} triangles')
-    for name, kind in (('SM_WindLeaf', 'leaf'), ('SM_WindStraw', 'straw')):
+    for name, kind in (() if only else (('SM_WindLeaf', 'leaf'), ('SM_WindStraw', 'straw'))):
         sl.reset_scene()
         obj = flake(name, kind)
         sl.export_fbx(str(OUT / f'{name}.fbx'), [obj])

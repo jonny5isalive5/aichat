@@ -23,9 +23,21 @@ public:
 	ASkyLinksGrass();
 	virtual void Tick(float DeltaSeconds) override;
 
-	/** Clumps per square metre of rough. */
+	/** Clumps per square metre of rough (beyond NearRadius). */
 	UPROPERTY(EditAnywhere, Category = "Grass")
 	float RoughDensity = 4.5f;
+
+	/** Within this distance of the camera (cm) the rough is a thick carpet of grass patches. */
+	UPROPERTY(EditAnywhere, Category = "Grass")
+	float NearRadius = 1500.f;
+
+	/** Grass patches per square metre of rough within NearRadius (each patch is 70 blades, 70 cm across). */
+	UPROPERTY(EditAnywhere, Category = "Grass")
+	float NearDensity = 2.6f;
+
+	/** Everything above times this (phones and tablets use half of it). */
+	UPROPERTY(EditAnywhere, Category = "Grass")
+	float DensityScale = 1.f;
 
 	/** Tufts per metre of bunker edge (they sit on the grass just outside the sand). */
 	UPROPERTY(EditAnywhere, Category = "Grass")
@@ -48,6 +60,9 @@ public:
 	UPROPERTY(EditAnywhere, Category = "Grass")
 	TSoftObjectPtr<UStaticMesh> TuftMesh;
 
+	UPROPERTY(EditAnywhere, Category = "Grass")
+	TSoftObjectPtr<UStaticMesh> PatchMesh;
+
 protected:
 	virtual void BeginPlay() override;
 
@@ -56,10 +71,13 @@ private:
 	{
 		UInstancedStaticMeshComponent* Clumps = nullptr;
 		UInstancedStaticMeshComponent* Tufts = nullptr;
+		UInstancedStaticMeshComponent* Patches = nullptr;
+		bool bNear = false;
 	};
 
 	bool GetViewLocation(FVector& Out) const;
-	void FillCell(const FIntPoint& Key, float ViewZ, int32& Traces);
+	void FillCell(const FIntPoint& Key, float ViewZ, bool bNear, int32& Traces);
+	float Density() const;
 	UInstancedStaticMeshComponent* TakeComponent(UStaticMesh* Mesh, TArray<UInstancedStaticMeshComponent*>& Pool);
 	void ReleaseCell(FCell& Cell);
 
@@ -69,6 +87,9 @@ private:
 	UPROPERTY(Transient)
 	TObjectPtr<UStaticMesh> LoadedTuft;
 
+	UPROPERTY(Transient)
+	TObjectPtr<UStaticMesh> LoadedPatch;
+
 	/** Every component this actor made, so none is garbage collected while pooled. */
 	UPROPERTY(Transient)
 	TArray<TObjectPtr<UInstancedStaticMeshComponent>> AllComponents;
@@ -76,4 +97,5 @@ private:
 	TMap<FIntPoint, FCell> Cells;
 	TArray<UInstancedStaticMeshComponent*> ClumpPool;
 	TArray<UInstancedStaticMeshComponent*> TuftPool;
+	TArray<UInstancedStaticMeshComponent*> PatchPool;
 };

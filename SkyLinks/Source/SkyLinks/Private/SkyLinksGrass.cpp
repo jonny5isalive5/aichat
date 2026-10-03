@@ -31,6 +31,7 @@ ASkyLinksGrass::ASkyLinksGrass()
 	SetRootComponent(CreateDefaultSubobject<USceneComponent>(TEXT("Root")));
 	ClumpMesh = TSoftObjectPtr<UStaticMesh>(FSoftObjectPath(TEXT("/Game/Course/Grass/SM_GrassClump.SM_GrassClump")));
 	TuftMesh = TSoftObjectPtr<UStaticMesh>(FSoftObjectPath(TEXT("/Game/Course/Grass/SM_GrassTuft.SM_GrassTuft")));
+	PatchMesh = TSoftObjectPtr<UStaticMesh>(FSoftObjectPath(TEXT("/Game/Course/Grass/SM_GrassPatch.SM_GrassPatch")));
 }
 
 void ASkyLinksGrass::BeginPlay()
@@ -38,6 +39,7 @@ void ASkyLinksGrass::BeginPlay()
 	Super::BeginPlay();
 	LoadedClump = ClumpMesh.LoadSynchronous();
 	LoadedTuft = TuftMesh.LoadSynchronous();
+	LoadedPatch = PatchMesh.LoadSynchronous();  // optional: without it the near rough gets extra clumps instead
 	if (!LoadedClump)
 	{
 		UE_LOG(LogSkyLinks, Warning, TEXT("SkyLinksGrass: %s not found (run isl.import_grass() in the editor). No 3D grass."), *ClumpMesh.ToString());
@@ -77,7 +79,8 @@ void ASkyLinksGrass::Tick(float DeltaSeconds)
 		}
 	}
 
-	// Fill missing cells nearest first, within this frame's trace budget.
+	// Fill missing cells nearest first, within this frame's trace budget. A cell that has come within NearRadius
+	// (or gone back out past it, with a cell's width of slack so it doesn't flip back and forth) is grown again.
 	const int32 Reach = FMath::CeilToInt(Radius / CellSize);
 	const FIntPoint Here(FMath::FloorToInt(View.X / CellSize), FMath::FloorToInt(View.Y / CellSize));
 	TArray<TPair<float, FIntPoint>> Missing;
@@ -86,12 +89,17 @@ void ASkyLinksGrass::Tick(float DeltaSeconds)
 		for (int32 DX = -Reach; DX <= Reach; ++DX)
 		{
 			const FIntPoint Key(Here.X + DX, Here.Y + DY);
-			if (Cells.Contains(Key))
-			{
-				continue;
-			}
 			const FVector2D Centre = (FVector2D(Key) + FVector2D(0.5f, 0.5f)) * CellSize;
 			const float Distance = FVector2D::Distance(Centre, FVector2D(View));
+			if (const FCell* Existing = Cells.Find(Key))
+			{
+				const bool bRegrow = Existing->bNear ? Distance > NearRadius + CellSize * 1.5f : Distance < NearRadius;
+				if (bRegrow)
+				{
+					Missing.Add({ Distance, Key });
+				}
+				continue;
+			}
 			if (Distance < Radius + CellSize * 0.7f)
 			{
 				Missing.Add({ Distance, Key });
@@ -106,7 +114,12 @@ void ASkyLinksGrass::Tick(float DeltaSeconds)
 		{
 			break;
 		}
-		FillCell(Entry.Value, View.Z, Traces);
+		if (FCell* Existing = Cells.Find(Entry.Value))
+		{
+			ReleaseCell(*Existing);
+			Cells.Remove(Entry.Value);
+		}
+		FillCell(Entry.Value, View.Z, Entry.Key < NearRadius + CellSize * 0.5f, Traces);
 	}
 }
 
@@ -141,10 +154,24 @@ void ASkyLinksGrass::ReleaseCell(FCell& Cell)
 		Cell.Tufts->ClearInstances();
 		TuftPool.Add(Cell.Tufts);
 	}
+	if (Cell.Patches)
+	{
+		Cell.Patches->ClearInstances();
+		PatchPool.Add(Cell.Patches);
+	}
 	Cell = FCell();
 }
 
-void ASkyLinksGrass::FillCell(const FIntPoint& Key, float ViewZ, int32& Traces)
+float ASkyLinksGrass::Density() const
+{
+#if PLATFORM_ANDROID || PLATFORM_IOS
+	return DensityScale * 0.5f;  // phones: half as thick
+#else
+	return DensityScale;
+#endif
+}
+
+void ASkyLinksGrass::FillCell(const FIntPoint& Key, float ViewZ, bool bNear, int32& Traces)
 {
 	UWorld* World = GetWorld();
 	FRandomStream Random(static_cast<int32>(HashCombineFast(GetTypeHash(Key), 0x5EEDu)));
@@ -176,16 +203,19 @@ void ASkyLinksGrass::FillCell(const FIntPoint& Key, float ViewZ, int32& Traces)
 
 	TArray<FTransform> Clumps;
 	TArray<FTransform> Tufts;
+	TArray<FTransform> Patches;
 
-	// Rough: clumps scattered at random.
-	const int32 Count = FMath::RoundToInt(RoughDensity * CellSize * CellSize / 10000.f);
+	// Rough: near the camera a thick carpet of wide patches; further out, clumps scattered at random.
+	const bool bPatches = bNear && LoadedPatch;
+	const float PerSquareMetre = (bNear ? (LoadedPatch ? NearDensity : RoughDensity * 2.f) : RoughDensity) * Density();
+	const int32 Count = FMath::RoundToInt(PerSquareMetre * CellSize * CellSize / 10000.f);
 	for (int32 Index = 0; Index < Count; ++Index)
 	{
 		FHitResult Hit;
 		EPhysicalSurface Surface;
 		if (Ground(Origin.X + Random.FRand() * CellSize, Origin.Y + Random.FRand() * CellSize, Hit, Surface) && Surface == SURFACE_Rough && !OnPath(Hit))
 		{
-			Clumps.Add(Place(Hit, 1.f, 1.f));
+			(bPatches ? Patches : Clumps).Add(Place(Hit, 1.f, 1.f));
 		}
 	}
 
@@ -232,6 +262,12 @@ void ASkyLinksGrass::FillCell(const FIntPoint& Key, float ViewZ, int32& Traces)
 	}
 
 	FCell Cell;
+	Cell.bNear = bNear;
+	if (Patches.Num() > 0)
+	{
+		Cell.Patches = TakeComponent(LoadedPatch, PatchPool);
+		Cell.Patches->AddInstances(Patches, false, true);
+	}
 	if (Clumps.Num() > 0)
 	{
 		Cell.Clumps = TakeComponent(LoadedClump, ClumpPool);
