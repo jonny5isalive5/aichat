@@ -10,6 +10,16 @@
 #include "UObject/ConstructorHelpers.h"
 #include "Components/InstancedStaticMeshComponent.h"
 #include "EngineUtils.h"
+#include "SkyLinksDew.h"
+
+namespace
+{
+	/** Morning dew shows where the ball has been on the short grass. */
+	bool IsDewy(EGolfLie Lie)
+	{
+		return Lie == EGolfLie::Fairway || Lie == EGolfLie::Green || Lie == EGolfLie::Tee;
+	}
+}
 
 
 AGolfBall::AGolfBall()
@@ -305,6 +315,12 @@ void AGolfBall::StepFlightMode(float Dt)
 		const FGolfSurfaceParams& Surface = GolfPhysics::GetSurface(Lie);
 		const FVector N = Hit.ImpactNormal;
 		const float NormalSpeed = FVector::DotProduct(Sim.Velocity, N);
+		// Each landing knocks the dew off in a splash; a bounce lifts it off the grass (a new line after).
+		ASkyLinksDew::Lift(GetWorld(), this);
+		if (IsDewy(Lie))
+		{
+			ASkyLinksDew::Splash(GetWorld(), Hit.ImpactPoint, N, DewWidth() * FMath::Clamp(FMath::Abs(NormalSpeed) / 400.f, 1.5f, 3.5f));
+		}
 		const FVector NormalPart = N * NormalSpeed;
 		FVector Tangent = Sim.Velocity - NormalPart;
 
@@ -337,6 +353,7 @@ void AGolfBall::StepRollMode(float Dt)
 	{
 		// Rolled off an edge.
 		Mode = EMode::Flight;
+		ASkyLinksDew::Lift(GetWorld(), this);
 		return;
 	}
 
@@ -346,6 +363,14 @@ void AGolfBall::StepRollMode(float Dt)
 
 	const FVector N = Ground.ImpactNormal;
 	Sim.Location = Ground.Location + N * 0.1f;
+	if (IsDewy(Lie))
+	{
+		ASkyLinksDew::Touch(GetWorld(), this, Ground.ImpactPoint, N, DewWidth());
+	}
+	else
+	{
+		ASkyLinksDew::Lift(GetWorld(), this);
+	}
 
 	const FGolfSurfaceParams& Surface = GolfPhysics::GetSurface(Lie);
 	const FVector Slope = FVector::VectorPlaneProject(FVector(0.f, 0.f, -GolfPhysics::Gravity), N);
@@ -421,6 +446,7 @@ void AGolfBall::StepHoling(float Dt)
 
 void AGolfBall::Finish(EGolfShotResult Result)
 {
+	ASkyLinksDew::Lift(GetWorld(), this);
 	Mode = EMode::Rest;
 	Accumulator = 0.f;
 	Sim.Velocity = FVector::ZeroVector;

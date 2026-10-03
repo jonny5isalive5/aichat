@@ -100,6 +100,8 @@ private:
 	bool IsOverCup() const;
 	EGolfLie ProbeLie(const FVector& At) const;
 	void UpdateChaseCamera(float DeltaSeconds, bool bSnap);
+	/** Width of the line a rolling ball leaves in the dew: the ball as drawn (VisualScale), a little narrower. */
+	float DewWidth() const { return GolfPhysics::BallRadius * 2.f * VisualScale * 0.8f; }
 
 	EMode Mode = EMode::Rest;
 	FGolfBallState Sim;
