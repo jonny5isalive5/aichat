@@ -23,6 +23,8 @@
     isl.portal_views()          bake a picture of the next hole into each portal's swirl (re-run after changing holes)
     isl.fog_floaters()          soft mist clouds under every floating island you've kept (run again after changing them)
     isl.reimport_paths()        after the buggy paths' ground changed: surfaces, rock and vines re-imported in place
+    isl.dress_floaters()        Pandora plants on the floating islands (attached to them; nothing moves)
+    isl.pandora_plants()        glowing Pandora plants on the rough round the trees (Foliage mode edits them)
 
 Needs, from Scripts/import_trees.py, the stylised trees and their M_Tree_Bark / M_Tree_Leaves / M_Tree_Vines
 materials (the vines and the rope bridges use them too), and the SkyLinksForest C++ class (rebuild first).
@@ -35,6 +37,7 @@ Re-running replaces everything it made; it is safe to run twice.
 """
 import json
 import math
+import random
 from pathlib import Path
 
 import unreal
@@ -1515,6 +1518,197 @@ def dress_floaters(glow=8.0):
     unreal.get_editor_subsystem(unreal.LevelEditorSubsystem).save_current_level()
     print(f'FLOATER DRESS: {dressed} floaters dressed' + (f'; no dressing built yet for {sorted(missing)} '
           '(run Art/Blender/build_floater_dressing.py -- <those names>)' if missing else ''))
+
+
+PLANT_SOURCE = ROOT / 'Art' / 'Exports' / 'Plants'
+PLANT_DEST = '/Game/Course/Plants'
+PLANT_FOLIAGE = '/Game/Course/Foliage/Pandora'  # its own folder: the tree scripts never touch these
+PLANT_MIX = {'GlowFern': 0.25, 'BigLeaf': 0.25, 'GlowFlowers': 0.2, 'Mushrooms': 0.15, 'RedFlowers': 0.15}
+
+
+def _pandora_types():
+    """Import the SM_Pandora_* plants (no collision: the ball and buggy go through) and a foliage type for each."""
+    # The floater dressing's materials (kept as they are if dress_floaters() already made them).
+    materials = {slot: unreal.load_asset(f'{MAT_DIR}/{name}') for slot, name in
+                 (('FloaterLeaf', 'M_FloaterLeaf'), ('FloaterGlow', 'M_FloaterGlow'))}
+    if not all(materials.values()):
+        _floater_atlas()
+        materials = {'FloaterLeaf': _floater_plant_material('M_FloaterLeaf', False),
+                     'FloaterGlow': _floater_plant_material('M_FloaterGlow', True)}
+    types = {}
+    for fbx in sorted(PLANT_SOURCE.glob('SM_Pandora_*.fbx')):
+        options = unreal.FbxImportUI()
+        options.set_editor_property('import_mesh', True)
+        options.set_editor_property('import_as_skeletal', False)
+        options.set_editor_property('mesh_type_to_import', unreal.FBXImportType.FBXIT_STATIC_MESH)
+        options.set_editor_property('import_materials', False)
+        options.set_editor_property('import_textures', False)
+        data = options.static_mesh_import_data
+        data.set_editor_property('combine_meshes', True)
+        data.set_editor_property('auto_generate_collision', False)
+        data.set_editor_property('vertex_color_import_option', unreal.VertexColorImportOption.REPLACE)
+        mesh = _import(fbx, PLANT_DEST, options)
+        assert isinstance(mesh, unreal.StaticMesh), f'{fbx.name} did not import'
+        for index, slot in enumerate(mesh.get_editor_property('static_materials')):
+            slot_name = str(slot.get_editor_property('material_slot_name'))
+            mesh.set_material(index, materials['FloaterGlow' if slot_name.startswith('FloaterGlow') else 'FloaterLeaf'])
+        body = mesh.get_editor_property('body_setup')
+        if body:  # no simple shapes and "simple as complex": nothing for any trace to hit
+            body.set_editor_property('collision_trace_flag', unreal.CollisionTraceFlag.CTF_USE_SIMPLE_AS_COMPLEX)
+        unreal.EditorAssetLibrary.save_loaded_asset(mesh)
+        name = f'FT_{fbx.stem[3:]}'
+        path = f'{PLANT_FOLIAGE}/{name}'
+        foliage = unreal.load_asset(path) if unreal.EditorAssetLibrary.does_asset_exist(path) else \
+            tools.create_asset(name, PLANT_FOLIAGE, unreal.FoliageType_InstancedStaticMesh, None)
+        for key, value in [('mesh', mesh), ('random_yaw', True), ('align_to_normal', False),
+                           ('scaling', unreal.FoliageScaling.UNIFORM), ('scale_x', unreal.FloatInterval(0.8, 1.3)),
+                           ('ground_slope_angle', unreal.FloatInterval(0.0, 30.0)), ('density', 2.0), ('radius', 150.0)]:
+            try:
+                foliage.set_editor_property(key, value)
+            except Exception as error:
+                print(f'PLANTS note: {name}.{key}: {error}')
+        unreal.EditorAssetLibrary.save_loaded_asset(foliage)
+        types[fbx.stem.replace('SM_Pandora_', '')] = (mesh, foliage)
+    assert types, f'no SM_Pandora_*.fbx in {PLANT_SOURCE}: run Art/Blender/build_pandora_plants.py'
+    return types
+
+
+def _instances(actor_class=unreal.InstancedFoliageActor):
+    """(mesh, world location) of every instance in the level's foliage."""
+    for actor in _all():
+        if not isinstance(actor, actor_class):
+            continue
+        for component in actor.get_components_by_class(unreal.InstancedStaticMeshComponent):
+            mesh = component.get_editor_property('static_mesh')
+            for i in range(component.get_instance_count()):
+                result = component.get_instance_transform(i, True)
+                transform = result[1] if isinstance(result, tuple) else result
+                yield mesh, transform.translation
+
+
+def _distance_to_line(px, py, points):
+    best = 1e9
+    for (ax, ay), (bx, by) in zip(points, points[1:]):
+        dx, dy = bx - ax, by - ay
+        t = max(0.0, min(1.0, ((px - ax) * dx + (py - ay) * dy) / (dx * dx + dy * dy or 1e-9)))
+        best = min(best, math.hypot(px - ax - t * dx, py - ay - t * dy))
+    return best
+
+
+def _inside(px, py, outline):
+    inside = False
+    for (ax, ay), (bx, by) in zip(outline, outline[1:] + outline[:1]):
+        if (ay > py) != (by > py) and px < ax + (py - ay) * (bx - ax) / (by - ay):
+            inside = not inside
+    return inside
+
+
+def pandora_plants(near_trees=0.4, per_hole=40, spacing=3.0, seed=7, replace=False):
+    """Glowing ferns, mushrooms, glowing flowers, big leaves and red flowers scattered over the rough round the trees
+    on every hole: never on a fairway, green, tee, bunker or path, and a little way off their edges. They go into
+    the level's foliage (their own types, /Game/Course/Foliage/Pandora), so in Foliage mode they can be moved,
+    erased or painted more by hand. Nothing else is touched: no tree, floater or portal moves.
+
+    near_trees: chance of a plant beside each tree. per_hole: extra plants out in the open rough on each hole.
+    Run once; to scatter them again (losing any hand edits to these plants) use pandora_plants(replace=True)."""
+    types = _pandora_types()
+    meshes = {mesh.get_path_name(): kind for kind, (mesh, _) in types.items()}
+    existing = sum(1 for mesh, _ in _instances() if mesh and mesh.get_path_name() in meshes)
+    if existing and not replace:
+        print(f'PLANTS: {existing} Pandora plants are already in the level (hand edits kept). '
+              'pandora_plants(replace=True) scatters them again from scratch.')
+        return
+    world = unreal.get_editor_subsystem(unreal.UnrealEditorSubsystem).get_editor_world()
+    if existing:
+        unreal.SkyLinksForest.clear_foliage(world, [foliage for _, foliage in types.values()])
+
+    rng = random.Random(seed)
+    ignore = [a for a in _all() if isinstance(a, unreal.InstancedFoliageActor) or
+              str(a.get_folder_path()).startswith(('Course/FloaterDress', 'Course/FloaterFog'))]
+    trees = [(p.x / M, p.y / M, p.z / M) for mesh, p in _instances()
+             if mesh and '/Course/Trees/' in mesh.get_path_name()]
+    footpaths = [([(x, y) for x, y, _ in path['points']], path['width'])
+                 for path in json.loads((SOURCE / 'Paths.json').read_text()).get('paths', [])] \
+        if (SOURCE / 'Paths.json').is_file() else []
+    holes = [json.loads((SOURCE / f'Hole{n:02d}_spots.json').read_text()) for n in HOLES
+             if (SOURCE / f'Hole{n:02d}_spots.json').is_file()]
+    carts = [[(x, y) for x, y, _ in spots['cart_path']] for spots in holes if spots.get('cart_path')]
+    kinds = list(PLANT_MIX)
+    weights = [PLANT_MIX[k] for k in kinds]
+    taken = set()
+
+    def uv(hit, channel):
+        try:
+            result = unreal.GameplayStatics.find_collision_uv(hit, channel)
+        except Exception:
+            return None
+        if isinstance(result, tuple):
+            return result[1] if result[0] else None
+        return result
+
+    def try_plant(x, y, z_hint):
+        cell = (int(x // spacing), int(y // spacing))
+        if cell in taken:
+            return None
+        if any(_distance_to_line(x, y, line) < 4.0 for line in carts):
+            return None
+        if any(_distance_to_line(x, y, line) < width / 2 + 2.0 for line, width in footpaths):
+            return None
+        start = unreal.Vector(x * M, y * M, (z_hint + 40) * M)
+        end = unreal.Vector(x * M, y * M, (z_hint - 60) * M)
+        hit = unreal.SystemLibrary.line_trace_single(world, start, end, unreal.TraceTypeQuery.TRACE_TYPE_QUERY1, True,
+                                                     ignore, unreal.DrawDebugTrace.NONE, True)
+        if not hit:
+            return None
+        fields = unreal.GameplayStatics.break_hit_result(hit)
+        impact, normal, phys, actor = fields[5], fields[7], fields[8], fields[9]
+        if not phys or phys.get_name() != 'PM_Rough' or normal.z < 0.8:
+            return None
+        if not actor or not actor.get_actor_label().startswith('IslandTop'):
+            return None
+        path_uv = uv(hit, 3)  # metres to the buggy path's edge
+        if path_uv is not None and path_uv.x < 2.0:
+            return None
+        edge_uv = uv(hit, 2)  # y: metres to the nearest fairway / green / tee edge; x: to a bunker edge
+        if edge_uv is not None and (edge_uv.y < 2.5 or edge_uv.x < 2.5):
+            return None
+        taken.add(cell)
+        kind = rng.choices(kinds, weights)[0]
+        options = [k for k in types if k.startswith(kind)]
+        return rng.choice(options), unreal.Transform(impact - unreal.Vector(0, 0, 3), unreal.Rotator(0, 0, rng.uniform(0, 360)),
+                                                     unreal.Vector(1, 1, 1) * rng.uniform(0.8, 1.3))
+
+    placed = {}
+    for x, y, z in trees:
+        if rng.random() < near_trees:
+            a, d = rng.uniform(0, 2 * math.pi), rng.uniform(2.0, 6.0)
+            spot = try_plant(x + d * math.cos(a), y + d * math.sin(a), z)
+            if spot:
+                placed.setdefault(spot[0], []).append(spot[1])
+    for spots in holes:
+        outline = [tuple(p) for p in spots['land_outline']]
+        xs, ys = [p[0] for p in outline], [p[1] for p in outline]
+        z = spots['tee'][2]
+        made = 0
+        for _ in range(per_hole * 6):
+            if made >= per_hole:
+                break
+            x, y = rng.uniform(min(xs), max(xs)), rng.uniform(min(ys), max(ys))
+            if _inside(x, y, outline):
+                spot = try_plant(x, y, z)
+                if spot:
+                    placed.setdefault(spot[0], []).append(spot[1])
+                    made += 1
+
+    forest = actors.spawn_actor_from_class(unreal.SkyLinksForest, unreal.Vector(0, 0, 0), unreal.Rotator(0, 0, 0))
+    forest.set_editor_property('cull_distance', 30000.0)  # fade out beyond 300 m
+    total = 0
+    for kind, transforms in placed.items():
+        total += forest.add_trees(types[kind][0], transforms)
+    forest.convert_to_foliage([foliage for _, foliage in types.values()])
+    unreal.get_editor_subsystem(unreal.LevelEditorSubsystem).save_current_level()
+    print(f'PLANTS: {total} Pandora plants on the rough ({len(trees)} trees looked round, '
+          f'{", ".join(f"{k} {len(v)}" for k, v in sorted(placed.items()))})')
 
 
 def reimport_paths(holes=HOLES):
