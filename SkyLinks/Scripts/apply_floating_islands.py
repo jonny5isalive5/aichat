@@ -26,6 +26,7 @@
     isl.reimport_paths()        after the buggy paths' ground changed: surfaces, rock and vines re-imported in place
     isl.dress_floaters()        Pandora plants on the floating islands (attached to them; nothing moves)
     isl.pandora_plants()        glowing Pandora plants on the rough round the trees (Foliage mode edits them)
+    isl.dew()                   morning dew on the short grass, and the ball's trail through it (Build.bat first)
     isl.pandora_trees()         every tree and bush restyled Pandora (same shapes, none moved); isl.normal_trees() undoes it
 
 Needs, from Scripts/import_trees.py, the stylised trees and their M_Tree_Bark / M_Tree_Leaves / M_Tree_Vines
@@ -292,12 +293,26 @@ def _surface_inputs(mat, kind):
     return feeds
 
 
+# Morning dew on the short grass (fairway, green, tee): 0 none, 1 full. dew() changes it.
+DEW = 1.0
+DEW_KINDS = ('fairway', 'green', 'tee')
+DEW_CODE = """
+float d = Dew * (0.75 + 0.25 * M3);
+return lerp(C, C * float3(1.06, 1.14, 1.3) + float3(0.010, 0.018, 0.028), d);
+"""
+
+
 def surface_material(name, kind, roughness, physical):
-    """Island surface: base colour from SURFACE_CODE[kind]; sand also gets a world-space normal (grains, rake lines)."""
+    """Island surface: base colour from SURFACE_CODE[kind]; sand also gets a world-space normal (grains, rake lines).
+    The short grass also gets the morning dew: a cool silvery sheen and a wetter shine."""
     mat = _material(name)
     feeds = _surface_inputs(mat, kind)
     used = {k: v for k, v in feeds.items() if k in SURFACE_CODE[kind] or k in ('VC',)}
     colour = _custom(mat, SURFACE_CODE[kind], used, -700, 0)
+    if kind in DEW_KINDS and DEW > 0:
+        dew = _expr(mat, unreal.MaterialExpressionScalarParameter, -700, 250, parameter_name='Dew', default_value=DEW)
+        colour = _custom(mat, DEW_CODE, {'C': (colour, ''), 'M3': feeds['M3'], 'Dew': (dew, '')}, -450, 0)
+        roughness -= (roughness - 0.5) * 0.6 * DEW
     lib.connect_material_property(colour, '', unreal.MaterialProperty.MP_BASE_COLOR)
     lib.connect_material_property(_const(mat, roughness, -400, 400), '', unreal.MaterialProperty.MP_ROUGHNESS)
     if kind == 'bunker':
@@ -1887,6 +1902,49 @@ def normal_trees():
             swap[pandora] = original
     count = _swap_tree_meshes(swap)
     print(f'NORMAL TREES: {count} trees and bushes back to normal (none moved)')
+
+
+DEW_TRAIL_CODE = """
+float across = AcrossU > 0.5 ? UV.x : UV.y;
+float middle = smoothstep(0.5, 0.15, abs(across - 0.5));   // 1 down the middle of a strip, 0 at its sides
+return lerp(float3(1, 1, 1), Shade.rgb, middle * Strength);
+"""
+
+
+def dew_trail_material(strength=1.0, across_u=False):
+    """M_DewTrail: the line a ball leaves in the dew (ASkyLinksDew). Modulate: it darkens whatever grass is under
+    it, a little greener, soft at the sides."""
+    mat = _material('M_DewTrail')
+    mat.set_editor_property('blend_mode', unreal.BlendMode.BLEND_MODULATE)
+    mat.set_editor_property('shading_model', unreal.MaterialShadingModel.MSM_UNLIT)
+    mat.set_editor_property('used_with_instanced_static_meshes', True)
+    shade = _custom(mat, DEW_TRAIL_CODE, {
+        'UV': (_expr(mat, unreal.MaterialExpressionTextureCoordinate, -900, 0), ''),
+        'Shade': (_expr(mat, unreal.MaterialExpressionVectorParameter, -900, 150, parameter_name='Shade',
+                        default_value=unreal.LinearColor(0.6, 0.7, 0.62, 1)), ''),
+        'Strength': (_expr(mat, unreal.MaterialExpressionScalarParameter, -900, 300, parameter_name='Strength',
+                           default_value=strength), ''),
+        'AcrossU': (_const(mat, 1.0 if across_u else 0.0, -900, 400), ''),
+    }, -500, 100)
+    lib.connect_material_property(shade, '', unreal.MaterialProperty.MP_EMISSIVE_COLOR)
+    lib.recompile_material(mat)
+    unreal.EditorAssetLibrary.save_loaded_asset(mat)
+    return mat
+
+
+def dew(amount=1.0, trail=1.0, across_u=False):
+    """Morning dew: a cool silvery sheen on the fairways, greens and tees (amount: 0 off, 0.5 light, 1 full), and
+    M_DewTrail, the darker line a ball leaves where it lands and rolls (trail: how dark, 0.5 faint, 1.5 strong).
+    Needs Build.bat first (the trails are drawn by the game, ASkyLinksDew). Restart the editor after the first
+    run so the game finds M_DewTrail. If the trail shows as dashes across the line instead of a line, run
+    dew(across_u=True)."""
+    global DEW
+    DEW = amount
+    for slot, (name, kind, roughness, physical) in GRASS.items():
+        if kind in DEW_KINDS:
+            surface_material(name, kind, roughness, physical)
+    dew_trail_material(trail, across_u)
+    print(f'DEW: sheen {amount} on fairways, greens and tees; trail material M_DewTrail (strength {trail})')
 
 
 def check_path_uv(holes=(1, 2, 3)):
