@@ -1636,6 +1636,14 @@ def pandora_plants(near_trees=0.4, per_hole=40, spacing=3.0, seed=7, replace=Fal
     kinds = list(PLANT_MIX)
     weights = [PLANT_MIX[k] for k in kinds]
     taken = set()
+    why = {}  # why spots were turned down (printed at the end)
+    seen = {}
+
+    def no(reason, detail=None):
+        why[reason] = why.get(reason, 0) + 1
+        if detail is not None:
+            seen.setdefault(reason, set()).add(str(detail))
+        return None
 
     def uv(hit, channel):
         try:
@@ -1649,29 +1657,33 @@ def pandora_plants(near_trees=0.4, per_hole=40, spacing=3.0, seed=7, replace=Fal
     def try_plant(x, y, z_hint):
         cell = (int(x // spacing), int(y // spacing))
         if cell in taken:
-            return None
+            return no('too close to another plant')
         if any(_distance_to_line(x, y, line) < 4.0 for line in carts):
-            return None
+            return no('buggy path')
         if any(_distance_to_line(x, y, line) < width / 2 + 2.0 for line, width in footpaths):
-            return None
+            return no('footpath')
         start = unreal.Vector(x * M, y * M, (z_hint + 40) * M)
         end = unreal.Vector(x * M, y * M, (z_hint - 60) * M)
         hit = unreal.SystemLibrary.line_trace_single(world, start, end, unreal.TraceTypeQuery.TRACE_TYPE_QUERY1, True,
                                                      ignore, unreal.DrawDebugTrace.NONE, True)
         if not hit:
-            return None
+            return no('nothing under it')
         fields = unreal.GameplayStatics.break_hit_result(hit)
         impact, normal, phys, actor = fields[5], fields[7], fields[8], fields[9]
-        if not phys or phys.get_name() != 'PM_Rough' or normal.z < 0.8:
-            return None
         if not actor or not actor.get_actor_label().startswith('IslandTop'):
-            return None
+            return no('not on an island top', actor.get_actor_label() if actor else None)
+        if not phys or phys.get_name() != 'PM_Rough':
+            return no('not rough', phys.get_name() if phys else 'no physical material')
+        if normal.z < 0.8:
+            return no('too steep')
         path_uv = uv(hit, 3)  # metres to the buggy path's edge
-        if path_uv is not None and path_uv.x < 2.0:
-            return None
+        if path_uv is None:
+            no('path map unreadable (placed anyway)')
+        elif path_uv.x < 2.0:
+            return no('buggy path')
         edge_uv = uv(hit, 2)  # y: metres to the nearest fairway / green / tee edge; x: to a bunker edge
         if edge_uv is not None and (edge_uv.y < 2.5 or edge_uv.x < 2.5):
-            return None
+            return no('near a fairway, green, tee or bunker')
         taken.add(cell)
         kind = rng.choices(kinds, weights)[0]
         options = [k for k in types if k.startswith(kind)]
@@ -1709,6 +1721,42 @@ def pandora_plants(near_trees=0.4, per_hole=40, spacing=3.0, seed=7, replace=Fal
     unreal.get_editor_subsystem(unreal.LevelEditorSubsystem).save_current_level()
     print(f'PLANTS: {total} Pandora plants on the rough ({len(trees)} trees looked round, '
           f'{", ".join(f"{k} {len(v)}" for k, v in sorted(placed.items()))})')
+    for reason, count in sorted(why.items(), key=lambda item: -item[1]):
+        examples = sorted(seen.get(reason, ()))[:6]
+        print(f'PLANTS skipped {count}: {reason}' + (f' (e.g. {", ".join(examples)})' if examples else ''))
+
+
+def check_path_uv(holes=(1, 2, 3)):
+    """Why does the 3D grass grow on the buggy paths? Looks straight down onto the middle of each hole's buggy path
+    and prints what the game sees there: the island, its surface, and the path map (UV3: metres to the path's
+    edge, negative on the path). The grass needs that map; it reads None when Unreal keeps no UVs with the
+    collision (bSupportUVFromHitResults in Config/DefaultEngine.ini, then an editor restart)."""
+    world = unreal.get_editor_subsystem(unreal.UnrealEditorSubsystem).get_editor_world()
+    ignore = [a for a in _all() if isinstance(a, unreal.InstancedFoliageActor)]
+    for number in holes:
+        spots = json.loads((SOURCE / f'Hole{number:02d}_spots.json').read_text())
+        cart = spots.get('cart_path') or []
+        if not cart:
+            print(f'PATH UV hole {number}: no buggy path in its spots file')
+            continue
+        x, y, z = cart[len(cart) // 2]
+        hit = unreal.SystemLibrary.line_trace_single(world, unreal.Vector(x * M, y * M, (z + 30) * M),
+                                                     unreal.Vector(x * M, y * M, (z - 30) * M),
+                                                     unreal.TraceTypeQuery.TRACE_TYPE_QUERY1, True, ignore,
+                                                     unreal.DrawDebugTrace.NONE, True)
+        if not hit:
+            print(f'PATH UV hole {number}: nothing under ({x:.0f}, {y:.0f}, {z:.0f}) m')
+            continue
+        fields = unreal.GameplayStatics.break_hit_result(hit)
+        actor, phys, face = fields[9], fields[8], fields[15]
+        result = []
+        for channel in (0, 1, 2, 3):
+            try:
+                result.append(unreal.GameplayStatics.find_collision_uv(hit, channel))
+            except Exception as error:
+                result.append(f'error {error}')
+        print(f'PATH UV hole {number}: {actor.get_actor_label() if actor else None}, '
+              f'{phys.get_name() if phys else None}, face {face}, UV0..3 = {result}')
 
 
 def reimport_paths(holes=HOLES):
