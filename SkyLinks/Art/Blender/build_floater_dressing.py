@@ -433,4 +433,5 @@ def main():
     print(f'DRESS DONE: {len(paths)} floaters, {total} triangles in all')
 
 
-main()
+if __name__ == '__main__':
+    main()
