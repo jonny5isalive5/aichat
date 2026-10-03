@@ -1498,6 +1498,11 @@ def dress_floaters(glow=8.0):
                 missing.add(dress_name)
                 continue
             meshes[dress_name] = import_mesh(dress_name, materials, collide=False)
+            if (SOURCE / f'{name}.with_vines.fbx').is_file():
+                # Its old hanging vines were taken off (build_floater_dressing.py novines): re-import the floater
+                # itself in place. Every copy of it in the level updates; none of them moves.
+                import_mesh(name, {'Rough': unreal.load_asset(f'{MAT_DIR}/{GRASS["Rough"][0]}'),
+                                   'IslandRock': unreal.load_asset(f'{MAT_DIR}/{ROCK[0]}')}, collide=False)
         plants = actors.spawn_actor_from_object(meshes[dress_name], actor.get_actor_location(), actor.get_actor_rotation())
         plants.set_actor_scale3d(actor.get_actor_scale3d())
         plants.set_actor_label(f'{actor.get_actor_label()}_Dress')
