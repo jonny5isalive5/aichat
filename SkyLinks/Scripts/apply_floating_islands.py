@@ -21,6 +21,7 @@
     isl.raise_fog(20)           lift every cloud patch 20 m (or lower it with a negative number)
     isl.portals()               rope bridges out, portals in (drive through to the next hole); needs Build.bat first
     isl.portal_views()          bake a picture of the next hole into each portal's swirl (re-run after changing holes)
+    isl.fog_layer()             a mist layer above the course, below the big floaters
     isl.fog_floaters()          soft mist clouds under every floating island you've kept (run again after changing them)
     isl.reimport_paths()        after the buggy paths' ground changed: surfaces, rock and vines re-imported in place
     isl.dress_floaters()        Pandora plants on the floating islands (attached to them; nothing moves)
@@ -1372,24 +1373,32 @@ return saturate(edge * Density * (0.45 + 1.1 * Noise));
 """
 
 
-def mist_material():
+SOFT_MIST_CODE = """
+float facing = saturate(dot(normalize(N), normalize(V)));
+float edge = smoothstep(0.0, 0.85, facing);
+edge = edge * edge * edge;
+return saturate(edge * Density * (0.45 + 1.1 * Noise));
+"""
+
+
+def mist_material(name='M_FloaterMist', code=None, fade=800.0):
     """M_FloaterMist: soft see-through cloud for the mist blobs under the floating islands. Unlit, fades out
     towards the blob's rim (so a squashed sphere reads as a puff, not a ball), patchy with slowly drifting noise,
     and melts into the rock where it touches it."""
-    mat = _material('M_FloaterMist')
+    mat = _material(name)
     mat.set_editor_property('blend_mode', unreal.BlendMode.BLEND_TRANSLUCENT)
     mat.set_editor_property('shading_model', unreal.MaterialShadingModel.MSM_UNLIT)
     drift = _expr(mat, unreal.MaterialExpressionPanner, -1100, 300, speed_x=0.004, speed_y=0.002)
     lib.connect_material_expressions(_world_uv(mat, 60, -1300, 300), '', drift, 'Coordinate')
     noise = _tex(mat, 'T_Macro', drift, -900, 300)
     density = _expr(mat, unreal.MaterialExpressionScalarParameter, -900, 500, parameter_name='Density', default_value=0.8)
-    opacity = _custom(mat, MIST_CODE, {
+    opacity = _custom(mat, code or MIST_CODE, {
         'N': (_expr(mat, unreal.MaterialExpressionVertexNormalWS, -900, 100), ''),
         'V': (_expr(mat, unreal.MaterialExpressionCameraVectorWS, -900, 200), ''),
         'Noise': (noise, 'R'),
         'Density': (density, ''),
     }, -600, 300, output=unreal.CustomMaterialOutputType.CMOT_FLOAT1)
-    soft = _expr(mat, unreal.MaterialExpressionDepthFade, -350, 300, fade_distance_default=800.0)
+    soft = _expr(mat, unreal.MaterialExpressionDepthFade, -350, 300, fade_distance_default=fade)
     lib.connect_material_expressions(opacity, '', soft, 'Opacity')
     colour = _expr(mat, unreal.MaterialExpressionVectorParameter, -600, 0, parameter_name='Colour',
                    default_value=unreal.LinearColor(0.82, 0.85, 0.9, 1.0))
@@ -1439,6 +1448,52 @@ def fog_floaters(density=0.8):
         count += 1
     unreal.get_editor_subsystem(unreal.LevelEditorSubsystem).save_current_level()
     print(f'FLOATER MIST: clouds under {count} floating islands (density {density})')
+
+
+def fog_layer(height=45.0, density=0.5):
+    """A layer of soft mist above the course and below the big floating islands: flat cloud puffs hung `height`
+    metres above every hole's islands (the fog below the course is untouched). Same see-through cloud shapes as
+    fog_floaters(), so they show on phones too. Run again to rebuild it: it only clears its own puffs.
+    height: metres above the highest island top on each hole. density: 0.3 wispier, 0.8 thicker."""
+    folder = 'Course/CloudLayer'
+    for actor in _all():
+        if str(actor.get_folder_path()) == folder:
+            actors.destroy_actor(actor)
+    mat = mist_material('M_CloudLayerMist', SOFT_MIST_CODE, 3000.0)  # cubic rim falloff + long depth fade: no visible edge
+    instance_path = f'{MAT_DIR}/MI_CloudLayerMist'
+    instance = unreal.load_asset(instance_path) if unreal.EditorAssetLibrary.does_asset_exist(instance_path) else         tools.create_asset('MI_CloudLayerMist', MAT_DIR, unreal.MaterialInstanceConstant, unreal.MaterialInstanceConstantFactoryNew())
+    instance.set_editor_property('parent', mat)
+    unreal.MaterialEditingLibrary.set_material_instance_scalar_parameter_value(instance, 'Density', density)
+    unreal.EditorAssetLibrary.save_loaded_asset(instance)
+    sphere = unreal.load_asset('/Engine/BasicShapes/Sphere.Sphere')
+    floaters = []
+    for actor in _all():
+        if str(actor.get_folder_path()).endswith('/Floaters'):
+            origin, extent = actor.get_actor_bounds(False)
+            floaters.append((origin.z - extent.z) / M)
+    rng = random.Random(11)
+    count = 0
+    for actor in _all():
+        label = actor.get_actor_label()
+        if not label.startswith('IslandTop'):
+            continue
+        origin, extent = actor.get_actor_bounds(False)
+        top = (origin.z + extent.z) / M
+        z = top + height
+        if floaters:  # never poke up into a floating island
+            z = min(z, max(top + 10.0, min(floaters) - 25.0))
+        r = max(extent.x, extent.y) / M
+        for i in range(3):
+            size = r * rng.uniform(0.55, 0.9)
+            dx, dy = rng.uniform(-0.6, 0.6) * extent.x, rng.uniform(-0.6, 0.6) * extent.y
+            where = unreal.Vector(origin.x + dx, origin.y + dy, (z + rng.uniform(-6, 6)) * M)
+            blob = place(sphere, f'CloudLayer_{label}_{i}', folder, collide=False, shadow=False, location=where)
+            blob.set_actor_scale3d(unreal.Vector(2 * size, 2 * size, 0.3 * size))
+            blob.static_mesh_component.set_material(0, instance)
+            blob.static_mesh_component.set_editor_property('hidden_in_scene_capture', True)  # not in the minimap / landing view
+            count += 1
+    unreal.get_editor_subsystem(unreal.LevelEditorSubsystem).save_current_level()
+    print(f'CLOUD LAYER: {count} mist puffs {height:.0f} m above the course')
 
 
 def _floater_atlas():
@@ -1668,7 +1723,7 @@ def pandora_plants(near_trees=0.4, per_hole=40, spacing=3.0, seed=7, replace=Fal
                                                      ignore, unreal.DrawDebugTrace.NONE, True)
         if not hit:
             return no('nothing under it')
-        fields = unreal.GameplayStatics.break_hit_result(hit)
+        fields = hit.to_tuple()
         impact, normal, phys, actor = fields[5], fields[7], fields[8], fields[9]
         if not actor or not actor.get_actor_label().startswith('IslandTop'):
             return no('not on an island top', actor.get_actor_label() if actor else None)
@@ -1682,7 +1737,8 @@ def pandora_plants(near_trees=0.4, per_hole=40, spacing=3.0, seed=7, replace=Fal
         elif path_uv.x < 2.0:
             return no('buggy path')
         edge_uv = uv(hit, 2)  # y: metres to the nearest fairway / green / tee edge; x: to a bunker edge
-        if edge_uv is not None and (edge_uv.y < 2.5 or edge_uv.x < 2.5):
+        # Unreal flips V on import (v = 1 - authored), so the fairway/green/tee distance is 1 - y.
+        if edge_uv is not None and (1.0 - edge_uv.y < 2.5 or edge_uv.x < 2.5):
             return no('near a fairway, green, tee or bunker')
         taken.add(cell)
         kind = rng.choices(kinds, weights)[0]
@@ -1747,7 +1803,7 @@ def check_path_uv(holes=(1, 2, 3)):
         if not hit:
             print(f'PATH UV hole {number}: nothing under ({x:.0f}, {y:.0f}, {z:.0f}) m')
             continue
-        fields = unreal.GameplayStatics.break_hit_result(hit)
+        fields = hit.to_tuple()
         actor, phys, face = fields[9], fields[8], fields[15]
         result = []
         for channel in (0, 1, 2, 3):
