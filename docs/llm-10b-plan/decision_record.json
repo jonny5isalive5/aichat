@@ -1,0 +1,1412 @@
+{
+ "generated_by": "dr_calc.py",
+ "assumptions": {
+  "h100_peak_bf16_flops": 989000000000000.0,
+  "usd_gpu_hr_reserved": 2.2,
+  "usd_gpu_hr_ondemand": 2.9,
+  "usd_gpu_hr_spot": 1.5,
+  "mfu_main": 0.38,
+  "mfu_longctx_32k": 0.35,
+  "mfu_longctx_128k": 0.25,
+  "mfu_post": 0.3,
+  "mfu_rl_train": 0.25,
+  "overhead_main": 1.18,
+  "overhead_small": 1.25,
+  "overhead_post": 1.3,
+  "overhead_rl": 3.0,
+  "interrupts_per_day_per_512": 0.5,
+  "ckpt_interval_min": 30,
+  "restart_min": 15,
+  "usd_tb_month_object": 21.0,
+  "usd_tb_month_pfs": 80.0,
+  "usd_per_tb_egress": 50.0,
+  "usd_cpu_core_hr": 0.045,
+  "usd_ram_node_hr": 4.0,
+  "bytes_per_token_text": 4.5,
+  "weeks_total": 40,
+  "block2_start_week": 15,
+  "contract_start_window_weeks": 2,
+  "nvlink_gbps": 450000000000.0,
+  "ib_gbps": 50000000000.0,
+  "ib_gbps_realistic": 40000000000.0,
+  "tokenizer_shrink_web": 0.87,
+  "anneal_token_floor": 9000000000000.0,
+  "serving_tok_s_per_gpu": 2500.0,
+  "rl_gen_tok_s_per_gpu": 3000.0
+ },
+ "model": {
+  "d_model": 4096,
+  "n_layers": 40,
+  "n_heads": 32,
+  "n_kv_heads": 8,
+  "head_dim": 128,
+  "ffn_hidden": 14336,
+  "vocab_size": 131072,
+  "tied_embeddings": false,
+  "norm": "RMSNorm pre-norm eps 1e-5",
+  "qk_norm": "RMSNorm over head_dim on q and k, before RoPE, learnable scale",
+  "z_loss": 0.0001,
+  "rope_theta": {
+   "pretrain_4k": 500000,
+   "stage_32k": 4000000,
+   "stage_128k": 16000000
+  },
+  "biases": false,
+  "activation": "SwiGLU",
+  "seq_len": {
+   "pretrain": 4096,
+   "post_training": 8192,
+   "long_context_1": 32768,
+   "long_context_2": 131072
+  },
+  "params": {
+   "attn": 41943040,
+   "mlp": 176160768,
+   "norms": 8448,
+   "per_layer": 218112256,
+   "layers_total": 8724490240,
+   "final_norm": 4096,
+   "embed": 536870912,
+   "lm_head": 536870912,
+   "total": 9798236160,
+   "nonembed": 8724494336,
+   "flop_bearing": 9261365248
+  },
+  "params_total_B": 9.798,
+  "params_nonembed_B": 8.724,
+  "init": {
+   "std": 0.02,
+   "out_proj_std": 0.00224,
+   "lm_head_std": 0.0156
+  }
+ },
+ "training": {
+  "tokens_stable": 9900000000000.0,
+  "tokens_anneal": 1100000000000.0,
+  "tokens_pretrain": 11000000000000.0,
+  "decay_fraction": 0.1,
+  "tokens_design_point": 12000000000000.0,
+  "mfu_for_design_point": 0.404,
+  "stable_tokens_vs_mfu": {
+   "rule": "date-driven anneal start; stable tokens = (block days - acceptance - long-context days) x rate(MFU) - (anneal + selection tokens)",
+   "at_plan_0.38_T": 10.18,
+   "at_0.42_T": 11.39,
+   "at_0.36_T": 9.58,
+   "T_per_mfu_point": 0.3,
+   "option1_trigger_mfu": 0.371,
+   "floor_mfu": 0.341
+  },
+  "tokens_longctx_32k": 50000000000.0,
+  "tokens_longctx_128k": 20000000000.0,
+  "tokens_anneal_select": 200000000000.0,
+  "tokens_per_param": 1123,
+  "chinchilla_multiple": 56.1,
+  "global_batch_tokens": 8388608,
+  "micro_batch": 2,
+  "grad_accum": 2,
+  "global_batch_fallback_tokens": 4194304,
+  "batch_rule": "8M default (grad-accum 2, set_requires_all_reduce(False) on micro-step 1); 4M fallback only if the 1B batch ablation shows > 0.5 % post-decay penalty at the 8M-equivalent; the 4T decision from B_simple is 'step down to 4M', never up; LR unchanged",
+  "batch_ramp": {
+   "start": 2097152,
+   "mid": 4194304,
+   "end": 8388608,
+   "phase1_over_tokens": 100000000000.0,
+   "phase2_over_tokens": 400000000000.0,
+   "convention": "linear in steps",
+   "steps_phase1": 31789,
+   "steps_phase2": 63578,
+   "steps": 95367,
+   "implementation": "phase 1 (grad-accum 1): per-rank packed varlen window 4096 -> 8192 in 256-token increments; phase 2 (grad-accum 2): each of the two micro-step windows again 4096 -> 8192",
+   "plateaus_per_phase": 17,
+   "steps_per_plateau": [
+    1870,
+    3740
+   ],
+   "max_seqlen": 4096,
+   "compile": "cu_seqlens padded to 1024 int32 entries, token dim marked dynamic (torch._dynamo.mark_dynamic): 34 window recompiles total, zero per document count; G1 asserts zero extra recompiles over 3 document counts x 2 window sizes"
+  },
+  "warmup_tokens": 8000000000.0,
+  "warmup_steps": 3610,
+  "steps_stable": 1215935,
+  "steps_anneal": 131130,
+  "steps_total": 1347065,
+  "optimizer": "AdamW betas (0.9, 0.95) eps 1e-8 fused",
+  "peak_lr": 0.0003,
+  "peak_lr_rule": "clamp(lr*(N, D) extrapolated to 8.72B x 11.0T, 3e-04, 6e-04); prior 3e-4",
+  "peak_lr_clamp": [
+   0.0003,
+   0.0006
+  ],
+  "min_lr": 2.9999999999999997e-06,
+  "longctx_lr": 3e-05,
+  "schedule": "WSD: linear warmup, constant stable, 1-sqrt decay to 1 % of peak over the anneal",
+  "weight_decay": 0.1,
+  "grad_clip": 1.0,
+  "skip_step_rule": "skip update if grad-norm > 3x its 100-step EMA; 3 consecutive skips -> rollback + advance data seed",
+  "precision": "bf16 autocast, fp32 master weights, fp32 gradient reduce; FP8 piloted at 3B only",
+  "attention": {
+   "primary": "flash-attn 3 (hopper) flash_attn_varlen_func registered as an opaque torch custom op, pinned by commit",
+   "fallback": "FlexAttention with a block-causal document mask (compile-native, ~10-20 % slower backward)",
+   "packing": "cu_seqlens int32 per micro-batch, max_seqlen 4096, document-masked (no cross-document attention) in every phase"
+  },
+  "ladder": {
+   "batches_tokens": {
+    "150M": 524288,
+    "400M": 1048576,
+    "1B": 2097152,
+    "3B": 4194304
+   },
+   "lr_points": {
+    "150M": 6,
+    "400M": 5,
+    "1B": 4,
+    "3B": 3
+   },
+   "duration_axis": {
+    "1B x 120B": {
+     "tokens": 120000000000.0,
+     "lr_points": 3,
+     "batch": 2097152
+    },
+    "3B x 300B": {
+     "tokens": 300000000000.0,
+     "lr_points": 1,
+     "batch": 4194304
+    }
+   },
+   "corpus": "v0 corpus (>= 1.5T tokens, as-released per-dump-deduped FineWeb-Edu / score-2 / DCLM-baseline / Nemotron-CC medium-high / Stack v2 / FineMath shards in the frozen 131k tokenizer, ready at G1) for every ladder run and 1B/3B ablation; G2 fits are v0 fits; the 3B/300B rehearsal trains on the frozen mix",
+   "schedule": "main-run WSD + 10 % 1-sqrt decay on every run; LR ranked on post-decay loss; sqrt batch-LR correction; (LR, batch) swept jointly at 400M",
+   "lr_fit": "lr*(N) = a * N^-b, log-log least squares over 150M/400M/1B post-decay optima",
+   "lr_fit_r2": "R^2 of the 3-point lr*(N) fit is reported, not gated (a 2-parameter fit through 3 points cannot fail an R^2 test)",
+   "lr_gate_3b": "3-point log-LR parabola optimum at 3B/90B (fit x 0.67, 1.0, 1.5) within 1.5x of the extrapolated lr*(N); post-decay loss at the two bracketing LRs differs by <= 0.5 %",
+   "lr_regime_note": "the main run's 1,261 tokens/non-embedding-param is covered only by the stable/decay form (ladder spans 30-99 at 3B); the 3B/300B rehearsal is the last LR confirmation",
+   "loss_fit": "L(N, D) = E + A/N^0.34 + B/D^0.28, least squares on every ladder post-decay loss",
+   "g2_3b_band_nats": 0.02,
+   "g5_rule": "|stable-phase val loss at D - L_stable(N, D)| <= 0.02 nats at D = 1T / 4T / 8T on the 6-domain held-out set; L_stable(N, D) = L_postdecay(N, D / (1 - 0.1)) + delta, delta = stable-minus-postdecay gap logged per ladder run; anchored by the residual at the 3B/300B rehearsal's stable-phase loss at its decay start (270B); plus the per-source non-increase rule; with the data hot-swap the 1T gate uses the FineWeb-Edu + DCLM held-out subset only and the full-mix comparison moves to 2T",
+   "g5_band_nats": 0.02,
+   "g5_anchor": "3B/300B rehearsal, stable-phase loss at 270B",
+   "gradient_noise_scale": "B_simple every 10B tokens from the start of Block 2"
+  },
+  "epoch_proxy_ablation": {
+   "arms": 2,
+   "tokens_per_arm": 300000000000.0,
+   "gpu_hours": 6768,
+   "usd": 14889,
+   "design": "1B x 300B on v0: arm A = 100B unique HQ (FineWeb-Edu + DCLM at plan proportions) x 3 epochs; arm B = 300B unique HQ + score-2 / Nemotron-CC medium-high x 1 epoch; same WSD; ranked on post-decay loss and the 8-task aggregate",
+   "decision_rule_g2b": "if B beats A by more than the 2-seed noise floor: cap FineWeb-Edu and DCLM at 2.0 epochs incl. anneal, raise score-2 to 1.0 epoch (+1.82T), extension pool = Nemotron-CC medium-high"
+  },
+  "long_context": {
+   "cp": 8,
+   "cp_groups": 64,
+   "kernel_path": "primary: torchtitan SDPA-based context parallelism (torch.distributed.tensor.experimental context_parallel, flash backend) with EOS-separated causal packing (no document mask) at 32k and 128k, compile-supported and in-tree; upside: ring-flash-attention zigzag varlen (FA3 hopper backend, document mask on), pinned by commit, tested on the dev node by W10; document masking is dropped for these two stages only",
+   "stage_32k": {
+    "tokens": 50000000000.0,
+    "seq": 32768,
+    "micro_batch": 2,
+    "global_batch_tokens": 4194304,
+    "steps": 11921,
+    "activation_checkpointing": "selective op-level",
+    "mfu": 0.35,
+    "memory_GB": 55.98,
+    "g3b_tok_s_per_gpu_min": 3800
+   },
+   "stage_128k": {
+    "tokens": 20000000000.0,
+    "seq": 131072,
+    "micro_batch": 1,
+    "global_batch_tokens": 8388608,
+    "steps": 2384,
+    "activation_checkpointing": "full per-block",
+    "mfu": 0.25,
+    "memory_GB": 34.32,
+    "memory_GB_if_sac_op": 84.8,
+    "g3b_tok_s_per_gpu_min": 1300
+   },
+   "warmup_tokens": 1000000000.0,
+   "lr": 3e-05
+  },
+  "flops_per_token_4k": 62815948800,
+  "flops_per_token_32k": 91001671680,
+  "flops_per_token_128k": 187638435840,
+  "tok_per_s_cluster": 3063232,
+  "tok_per_s_per_gpu": 5983,
+  "step_time_s": 2.738,
+  "throughput_gates_tok_s_per_gpu": {
+   "g2_g3b_64_gpus_4k": 6300,
+   "g4_acceptance_2h_512_gpus": 6000,
+   "g5_rolling_512_gpus": 6000,
+   "g3b_32k": 3800,
+   "g3b_128k": 1300,
+   "mfu_definition": "MFU = tokens/s x 6.2816e+10 / 989e12 at seq 4096 (6ND + causal attention)",
+   "torchtitan_mfu_ratio": 1.064,
+   "shakedown": {
+    "hours": 2.0,
+    "tokens_B": 22.1
+   }
+  },
+  "checkpoint_interval_min": 30,
+  "checkpoint_every_steps": 657,
+  "checkpoint_full_GB": 117.6,
+  "checkpoint_bf16_GB": 19.6,
+  "checkpoint_per_gpu_MB": 230,
+  "checkpoint_upload_MBps_aggregate": 65,
+  "permanent_checkpoint_TB": 4.9,
+  "permanent_checkpoints": {
+   "full": 23,
+   "bf16": 110
+  },
+  "rolling_24h_checkpoint_TB": 2.8,
+  "retained_checkpoint_TB": 7.7,
+  "validation": {
+   "inloop_every_steps": 1000,
+   "inloop_tokens": 60000000.0,
+   "per_source_every_tokens": 10000000000.0,
+   "fraction_of_step_time": 0.0067
+  },
+  "anneal_start_rule": "anneal starts at Block 2 day 50.3 if >= 9.0T stable tokens are reached; stable tokens = whatever is reached by then (extension pool above 9.9T); below the floor exercise option 1 (by day 21) or option 2 (by day 42) instead",
+  "anneal_token_floor": 9000000000000.0,
+  "mfu_at_floor": 0.341,
+  "stable_days_lost_at_floor": 5.3
+ },
+ "compute": {
+  "n_gpus": 512,
+  "n_nodes": 64,
+  "hot_spare_nodes": 2,
+  "block2_gpus": 528,
+  "mfu_main": 0.38,
+  "mfu_main_6nd_basis": 0.356,
+  "mfu_upside": 0.42,
+  "mfu_gate_64_gpus": 0.4,
+  "framework_gate_g2": "run the 10B config on the same 64 GPUs in Megatron-Core/NeMo (bf16, TE kernels, TP=1) for one afternoon; if it beats torchtitan by >= 3 MFU points (>= 470 tok/s/GPU) the framework is decided at G2 and two engineer-weeks of checkpoint / serving export conversion are booked (sensitivity table)",
+  "overhead_main": 1.18,
+  "overhead_breakdown": {
+   "hardware interruptions: 25.4 events x (15 min lost + 15 min restart)": 0.0108,
+   "async checkpoint stalls (0.11 s NVMe write + DCP metadata, every 30 min)": 0.005,
+   "in-loop validation (0.24% every 1000 steps + per-source 0.43% every 10B tokens)": 0.01,
+   "dataloader, logging, optimizer step": 0.01,
+   "stragglers, slow nodes, IB congestion": 0.03,
+   "loss-spike rollbacks (2 x 6 h budgeted)": 0.01,
+   "torch.compile warmup after each restart (~5 min x ~25)": 0.002,
+   "unplanned debugging, MFU dips, config iterations": 0.1
+  },
+  "main_run_flops": 6.909754368e+23,
+  "main_run_6nd_flops": 6.4668358656e+23,
+  "main_run_gpu_hours_ideal": 510717,
+  "main_run_gpu_hours": 602646,
+  "main_run_days": 49.0,
+  "stable_days": 44.1,
+  "anneal_days": 4.9,
+  "anneal_select_days": 0.89,
+  "lc32k_days": 0.37,
+  "lc128k_days": 0.43,
+  "gpu_hours_per_T_stable": 54786,
+  "usd_per_T_stable": 120529,
+  "block2": {
+   "days": 56,
+   "acceptance_days": 4.0,
+   "need_days": 54.7,
+   "slack_days": 1.3,
+   "slack_tokens_T": 0.28,
+   "anneal_start_day": 50.3,
+   "stable_expected_T": 10.18,
+   "stable_T_at_mfu_42": 11.39,
+   "stable_T_at_mfu_36": 9.58,
+   "mfu_for_design_point_12T": 0.404,
+   "option1_trigger_mfu": 0.371,
+   "option1_deadline_block_day": 21,
+   "stable_T_at_option1_deadline": 3.81,
+   "idle_day_usd": 27878,
+   "option_week_usd": 195149,
+   "option2_week_usd": 212890,
+   "option2_price": 2.4,
+   "option_week_tokens_T": 1.57,
+   "options_in_base_plan": false,
+   "acceptance_billed": true,
+   "token_milestones_block_day": {
+    "1T": 8.5,
+    "4T": 21.8,
+    "8T": 39.7
+   }
+  },
+  "workloads": {
+   "stable": {
+    "block": "B2",
+    "gpu_hours_ideal": 459645,
+    "gpu_hours": 542381,
+    "gpus": 512,
+    "days": 44.14,
+    "usd": 1193239
+   },
+   "anneal": {
+    "block": "B2",
+    "gpu_hours_ideal": 51072,
+    "gpu_hours": 60265,
+    "gpus": 512,
+    "days": 4.9,
+    "usd": 132582
+   },
+   "anneal_select": {
+    "block": "B2",
+    "gpu_hours_ideal": 9286,
+    "gpu_hours": 10957,
+    "gpus": 512,
+    "days": 0.89,
+    "usd": 24106
+   },
+   "lc32k": {
+    "block": "B2",
+    "gpu_hours_ideal": 3651,
+    "gpu_hours": 4564,
+    "gpus": 512,
+    "days": 0.37,
+    "usd": 10041
+   },
+   "lc128k": {
+    "block": "B2",
+    "gpu_hours_ideal": 4216,
+    "gpu_hours": 5270,
+    "gpus": 512,
+    "days": 0.43,
+    "usd": 11594
+   },
+   "accept": {
+    "block": "B2",
+    "gpu_hours_ideal": 50688,
+    "gpu_hours": 50688,
+    "gpus": 528,
+    "days": 4.0,
+    "usd": 111514
+   },
+   "evals_inrun": {
+    "block": "B2",
+    "gpu_hours_ideal": 330,
+    "gpu_hours": 330,
+    "gpus": 8,
+    "days": 1.72,
+    "usd": 726
+   },
+   "ladder_150M": {
+    "block": "B1",
+    "gpu_hours_ideal": 294,
+    "gpu_hours": 368,
+    "gpus": 64,
+    "days": 0.24,
+    "usd": 809
+   },
+   "ladder_400M": {
+    "block": "B1",
+    "gpu_hours_ideal": 733,
+    "gpu_hours": 916,
+    "gpus": 64,
+    "days": 0.6,
+    "usd": 2015
+   },
+   "ladder_1B": {
+    "block": "B1",
+    "gpu_hours_ideal": 1083,
+    "gpu_hours": 1354,
+    "gpus": 64,
+    "days": 0.88,
+    "usd": 2978
+   },
+   "ladder_3B": {
+    "block": "B1",
+    "gpu_hours_ideal": 5032,
+    "gpu_hours": 6291,
+    "gpus": 64,
+    "days": 4.1,
+    "usd": 13839
+   },
+   "ladder_dur_1B": {
+    "block": "B1",
+    "gpu_hours_ideal": 3248,
+    "gpu_hours": 4061,
+    "gpus": 64,
+    "days": 2.64,
+    "usd": 8933
+   },
+   "ladder_dur_3B": {
+    "block": "B1",
+    "gpu_hours_ideal": 5592,
+    "gpu_hours": 6990,
+    "gpus": 64,
+    "days": 4.55,
+    "usd": 15377
+   },
+   "fp8": {
+    "block": "B1",
+    "gpu_hours_ideal": 1677,
+    "gpu_hours": 2097,
+    "gpus": 64,
+    "days": 1.37,
+    "usd": 4613
+   },
+   "abl1b": {
+    "block": "B1",
+    "gpu_hours_ideal": 5414,
+    "gpu_hours": 6768,
+    "gpus": 64,
+    "days": 4.41,
+    "usd": 14889
+   },
+   "abl_epoch": {
+    "block": "B1",
+    "gpu_hours_ideal": 5414,
+    "gpu_hours": 6768,
+    "gpus": 64,
+    "days": 4.41,
+    "usd": 14889
+   },
+   "abl3b": {
+    "block": "B1",
+    "gpu_hours_ideal": 3355,
+    "gpu_hours": 4194,
+    "gpus": 64,
+    "days": 2.73,
+    "usd": 9226
+   },
+   "rehearsal": {
+    "block": "B1",
+    "gpu_hours_ideal": 5592,
+    "gpu_hours": 6990,
+    "gpus": 64,
+    "days": 4.55,
+    "usd": 15377
+   },
+   "dress": {
+    "block": "B1",
+    "gpu_hours_ideal": 512,
+    "gpu_hours": 512,
+    "gpus": 64,
+    "days": 0.33,
+    "usd": 1126
+   },
+   "data_gpu": {
+    "block": "B1",
+    "gpu_hours_ideal": 7622,
+    "gpu_hours": 7622,
+    "gpus": 64,
+    "days": 4.96,
+    "usd": 16768
+   },
+   "sft": {
+    "block": "B3",
+    "gpu_hours_ideal": 1126,
+    "gpu_hours": 1464,
+    "gpus": 32,
+    "days": 1.91,
+    "usd": 3222
+   },
+   "rm": {
+    "block": "B3",
+    "gpu_hours_ideal": 90,
+    "gpu_hours": 117,
+    "gpus": 32,
+    "days": 0.15,
+    "usd": 258
+   },
+   "dpo": {
+    "block": "B3",
+    "gpu_hours_ideal": 360,
+    "gpu_hours": 469,
+    "gpus": 32,
+    "days": 0.61,
+    "usd": 1031
+   },
+   "rl": {
+    "block": "B3",
+    "gpu_hours_ideal": 24192,
+    "gpu_hours": 24192,
+    "gpus": 48,
+    "days": 21.0,
+    "usd": 53222
+   },
+   "judge": {
+    "block": "B3",
+    "gpu_hours_ideal": 2000,
+    "gpu_hours": 2000,
+    "gpus": 16,
+    "days": 5.21,
+    "usd": 4400
+   },
+   "evals_post": {
+    "block": "B3",
+    "gpu_hours_ideal": 1900,
+    "gpu_hours": 1900,
+    "gpus": 16,
+    "days": 4.95,
+    "usd": 4180
+   },
+   "serve_b3": {
+    "block": "B3",
+    "gpu_hours_ideal": 2688,
+    "gpu_hours": 2688,
+    "gpus": 8,
+    "days": 14.0,
+    "usd": 5914
+   },
+   "serve_od": {
+    "block": "OD",
+    "gpu_hours_ideal": 13440,
+    "gpu_hours": 13440,
+    "gpus": 8,
+    "days": 70.0,
+    "usd": 38976
+   },
+   "dev": {
+    "block": "DEV",
+    "gpu_hours_ideal": 53760,
+    "gpu_hours": 53760,
+    "gpus": 8,
+    "days": 280.0,
+    "usd": 118272
+   }
+  },
+  "blocks": [
+   {
+    "key": "DEV",
+    "name": "Dev node (W1-40): standing 8-GPU allocation",
+    "gpus": 8,
+    "weeks": 40,
+    "gpu_hr": 53760,
+    "price": 2.2,
+    "usd": 118272.0,
+    "used": 53760,
+    "util": 1.0,
+    "range": "W1-W40"
+   },
+   {
+    "key": "B1",
+    "name": "Block 1 (W7-14): ladder, FP8 pilot, ablations, rehearsal, data GPU jobs",
+    "gpus": 64,
+    "weeks": 8,
+    "gpu_hr": 86016,
+    "price": 2.2,
+    "usd": 189235.2,
+    "used": 54927.324,
+    "util": 0.639,
+    "range": "W7-W14"
+   },
+   {
+    "key": "B2",
+    "name": "Block 2 (W15-22): main run, 512 compute + 16 hot-spare GPUs",
+    "gpus": 528,
+    "weeks": 8,
+    "gpu_hr": 709632,
+    "price": 2.2,
+    "usd": 1561190.4,
+    "used": 674455.456,
+    "util": 0.95,
+    "range": "W15-W22"
+   },
+   {
+    "key": "B3",
+    "name": "Block 3 (W23-30): SFT, RM, DPO, GRPO, judge, evals, serving pilot start",
+    "gpus": 48,
+    "weeks": 8,
+    "gpu_hr": 64512,
+    "price": 2.2,
+    "usd": 141926.4,
+    "used": 32830.106,
+    "util": 0.509,
+    "range": "W23-W30"
+   },
+   {
+    "key": "OD",
+    "name": "Serving pilot on-demand (W31-40)",
+    "gpus": 8,
+    "weeks": 10,
+    "gpu_hr": 13440,
+    "price": 2.9,
+    "usd": 38976.0,
+    "used": 13440,
+    "util": 1.0,
+    "range": "W31-W40"
+   }
+  ],
+  "reserved_gpu_hours": 913920,
+  "total_gpu_hours_bought": 927360,
+  "attributed_gpu_hours": 829413,
+  "utilisation": 0.894,
+  "rounding_note": "rows rounded independently; totals from unrounded values",
+  "memory_per_gpu_GB": {
+   "fp32 sharded params (FSDP2 master DTensor; bf16 copies live only in all-gather buffers)": 4.56,
+   "fp32 Adam m + v (sharded)": 9.13,
+   "fp32 sharded grads (reduce_dtype = fp32)": 4.56,
+   "bf16 all-gather buffers: 2 blocks in flight + embedding + lm_head": 2.81,
+   "activations, SAC(op): 368 MB/layer/seq x 40 layers x micro-batch 2": 28.79,
+   "logits, chunked fused linear+CE (chunk 2048, fp32 logits + grad)": 2.0,
+   "CUDA context, NCCL buffers, cuBLAS workspace, allocator fragmentation": 4.0
+  },
+  "memory_total_GB": 55.85,
+  "memory_headroom_GB": 24.15,
+  "memory_per_gpu_GB_128k": {
+   "fp32 params + Adam m + v + grads, 8-way sharded (unchanged)": 18.25,
+   "bf16 all-gather buffers (unchanged)": 2.81,
+   "full AC: saved bf16 block inputs, 16,384 local tokens x 4,096 x 2 B x 40 layers": 5.0,
+   "one live block during recompute (no SAC inside it), 16,384 local tokens": 2.13,
+   "ring-attention K/V receive buffers (double-buffered)": 0.12,
+   "logits, chunked fused linear+CE (chunk 2048)": 2.0,
+   "CUDA context, NCCL buffers, cuBLAS workspace, allocator fragmentation": 4.0
+  },
+  "memory_total_GB_128k": 34.32,
+  "memory_total_GB_32k": 55.98,
+  "parallelism": {
+   "fsdp2_hsdp": {
+    "shard": 8,
+    "replicate": 64
+   },
+   "tp": 1,
+   "pp": 1,
+   "cp_longctx": 8,
+   "longctx_mesh": {
+    "cp": 8,
+    "dp_shard": 8,
+    "dp_replicate": 8
+   },
+   "activation_checkpointing": "selective op-level (4k, 32k); full per-block (128k)",
+   "compile": "per TransformerBlock, fullgraph"
+  },
+  "mfu_replacement_rule": "mfu_main = G2 64-GPU measurement - 0.02, set before the W12 freeze and the Block 2 fit regenerated; the budget is built at 0.38 and never re-based upward (extra MFU becomes stable tokens through the date rule); G2 variants: bf16 reduce with fp32 accumulate, dp_shard 16, grad-accum 1 (4M) vs 2 (8M), inductor max-autotune-no-cudagraphs",
+  "comm_per_step_s": {
+   "all_gather_bf16_per_micro_step": 0.076,
+   "all_gather_bf16": 0.152,
+   "reduce_scatter_fp32_per_micro_step": 0.076,
+   "reduce_scatter_fp32": 0.152,
+   "all_reduce_fp32_ib": 0.193,
+   "all_reduce_fp32_ib_realistic": 0.241,
+   "total_at_line_rate": 0.498,
+   "all_reduce_share_of_step": 0.088,
+   "all_reduce_share_of_step_at_4M": 0.176,
+   "non_overlappable_tail": 0.024,
+   "tokens_per_gpu_per_step": 16384.0
+  },
+  "interruptions_expected": 25.4,
+  "lost_min_per_interruption": 30.0,
+  "hot_spare_policy": "Slurm reservation with preemption: the main job takes spare 1 automatically on a second failure; eval jobs requeue to the dev node"
+ },
+ "cost": {
+  "total_budget_usd": 5000000,
+  "budget_lines": {
+   "GPU compute: 4 reserved blocks + on-demand serving tail (incl. 16 hot-spare GPUs)": 2049600,
+   "Team (7.7 FTE, loaded)": 1785833,
+   "Data processing: CPU cluster + RAM nodes": 54513,
+   "Storage: object store + parallel FS": 67181,
+   "Egress and DR replication": 4744,
+   "Human data, evaluation, red team, judge API": 220000,
+   "Serving pilot non-GPU infra (gateway, LB, logging, 2 CPU nodes)": 15000,
+   "Software / SaaS (W&B, CI, paging, HF)": 15000,
+   "Contingency (residual)": 788129
+  },
+  "compute_total_usd": 2049600,
+  "team_total_usd": 1785833,
+  "contingency_usd": 788129,
+  "contingency_pct": 15.8,
+  "team_fte": 7.7,
+  "team_usd_per_week": 45385,
+  "team": [
+   {
+    "role": "Program tech lead (pretraining, architecture, recipe; backs up the systems engineer)",
+    "hc": 1.0,
+    "loaded_usd_yr": 450000,
+    "months": 10,
+    "start_week": "W-2",
+    "usd": 375000
+   },
+   {
+    "role": "Distributed-training engineer (torchtitan/FSDP2, perf, checkpointing)",
+    "hc": 1.0,
+    "loaded_usd_yr": 390000,
+    "months": 9,
+    "start_week": "W1",
+    "usd": 292500
+   },
+   {
+    "role": "Data engineer (datatrove / NeMo Curator pipeline: global dedup + quality only)",
+    "hc": 1.0,
+    "loaded_usd_yr": 340000,
+    "months": 8,
+    "start_week": "W1",
+    "usd": 226667
+   },
+   {
+    "role": "Data-pipeline contractor (downloads, 131k tokenizer + v0 corpus, PII / opt-out, provenance manifest; planned, not conditional)",
+    "hc": 1.0,
+    "loaded_usd_yr": 340000,
+    "months": 3,
+    "start_week": "W1",
+    "usd": 85000
+   },
+   {
+    "role": "Research engineer (ladder, ablations, anneal selection, held-out suite, long-context; later RL)",
+    "hc": 1.0,
+    "loaded_usd_yr": 340000,
+    "months": 8,
+    "start_week": "W5",
+    "usd": 226667
+   },
+   {
+    "role": "Post-training and evaluation engineer (SFT/DPO/GRPO, harness, safety)",
+    "hc": 1.0,
+    "loaded_usd_yr": 360000,
+    "months": 6,
+    "start_week": "W13",
+    "usd": 180000
+   },
+   {
+    "role": "Infra/SRE (cluster, Slurm, storage, observability, vLLM; backs up the data engineer)",
+    "hc": 1.0,
+    "loaded_usd_yr": 330000,
+    "months": 10,
+    "start_week": "W-2",
+    "usd": 275000
+   },
+   {
+    "role": "Program manager / ops (vendor contracts, annotation vendors)",
+    "hc": 0.5,
+    "loaded_usd_yr": 200000,
+    "months": 10,
+    "start_week": "W-2",
+    "usd": 83333
+   },
+   {
+    "role": "Legal / data-licence counsel, fractional (signs the licence manifest at G3)",
+    "hc": 0.2,
+    "loaded_usd_yr": 250000,
+    "months": 10,
+    "start_week": "W1",
+    "usd": 41667
+   }
+  ],
+  "team_rounding_note": "rows rounded independently; total from unrounded values",
+  "data_contractor": {
+   "usd": 85000,
+   "months": 3,
+   "weeks": "W1-W13",
+   "planned": true,
+   "scope": "downloads, 131k tokenizer + v0 corpus, PII / opt-out, provenance manifest (the data engineer owns dedup + quality only)",
+   "extension_1_month_usd": 28333
+  },
+  "data_slip_usd": {
+   "2_weeks_float_consumed": 96683,
+   "4_weeks_float_plus_contract_window": 193366,
+   "per_idle_block2_day": 27878
+  },
+  "sensitivities_usd": {
+   "price +0.10 on reserved hours": 91392,
+   "price 2.60 instead of 2.20": 365568,
+   "MFU below 0.371 (the 9.9T plan is missed): +1-week option 1 on Block 2 at 2.20 (exercisable by block day 21)": 195149,
+   "late restart / token floor: +1-week option 2 on Block 2 at <= 2.40 (exercisable by block day 42)": 212890,
+   "two-week block-start slip beyond the contract window (idle Block 2)": 390298,
+   "one-week block-start slip": 195149,
+   "4-week program slip (team run rate + dev node)": 193366,
+   "Block 1 first 2 weeks on on-demand if contract signing slips (64 x 336 h x (2.90 - 2.20))": 15053,
+   "human preference data doubled (40k pairs)": 100000,
+   "human preference pairs at USD 15 instead of 5 (vendor quote risk, 20k pairs)": 200000,
+   "data-pipeline contractor +1 month (G3 slips past W12)": 28333,
+   "framework switch to Megatron-Core at G2: 2 engineer-weeks of checkpoint / serving export conversion (distributed-training engineer, W9-10)": 15000,
+   "3-month contractor (key-person loss)": 97500
+  },
+  "contingency_coverage_usd": {
+   "price_2.60_plus_option1_plus_one_idle_week": 755866,
+   "price_2.60_plus_option1_plus_4wk_slip": 754082,
+   "price_2.60_plus_both_options_plus_4wk_slip": 966972,
+   "price_2.40_plus_both_options_plus_4wk_slip": 784188
+  },
+  "procurement": {
+   "loi_by": "W2",
+   "signed_by": "W4",
+   "block2_start_fixed_by": "W6",
+   "walk_away_price": 2.4,
+   "target_price": 2.2,
+   "master_contract": "913,920 reserved GPU-h over W1-W40 (dev node to W40; the 64/528/48-GPU blocks end W30)"
+  },
+  "serving_usd_per_M_output_tokens": {
+   "reserved": 0.244,
+   "on_demand": 0.322
+  },
+  "compute_only_counterfactual": {
+   "tokens_uncapped_T": 29.9,
+   "tokens_capped_T": 15.0,
+   "capped_days": 66.9,
+   "left_usd": 1793509
+  }
+ },
+ "timeline": {
+  "weeks_total": 40,
+  "months": 9.2,
+  "weeks_total_note": "includes the W13-14 pre-block float, the 2-week contract start window and the W39-40 buffer",
+  "block1_weeks": "W7-W14",
+  "pre_block_float": "W13-W14",
+  "block2_start_week": 15,
+  "block2_weeks": "W15-W22",
+  "contract_start_window_weeks": 2,
+  "block3_weeks": "W23-W30",
+  "serving_hardening": "W31-W34",
+  "pilot_handoff": "W35-W38",
+  "end_buffer": "W39-W40",
+  "anneal_start": "W22 d2",
+  "milestones": {
+   "1T": "W16 d2",
+   "4T": "W18 d1",
+   "8T": "W20 d5"
+  },
+  "option1_deadline": "W18 d1",
+  "data_readiness": {
+   "tokenizer_frozen": "W5 d1 (trained W3-4; digit / whitespace tests at G1 still apply)",
+   "v0_corpus": ">= 1.5T tokens tokenized by end of W6 (G1); every ladder run and 1B/3B ablation trains on v0",
+   "dedup_threshold_ablation_corpora": "W5-6 on the CPU partition: 10-dump subset at Jaccard 0.7 / 0.8 / 0.9 (1.1 days)",
+   "w3_measurement": "domain-stratified 5% sample across all dumps of the four CC sources (0.31 days)",
+   "production_pass_1_due": "W10 d3",
+   "production_pass_2_due": "W11 d7",
+   "g3a": "tokenization of the frozen mix >= 300B tokens by W11 d7 (globally shuffled) so the 3B/300B rehearsal starts W12 d1; if G3a slips the rehearsal starts on v0 and the G5 anchor is re-based at the 1T checkpoint",
+   "quality_classifier": "0.5B classifier (labels: public FineWeb-Edu Llama-3-70B annotations 450k + DCLM OH-2.5 / ELI5 positives) is NOT on the freeze path; W12 uses the shipped FineWeb-Edu score and DCLM fastText probability; the classifier runs W13 d4-W14 on Block 1 (dev-node overflow) for the anneal pools only, due W18",
+   "held_out_suite": "research engineer builds a private 10-task held-out suite (>= 500 items each, never used in ablations, hashed and decontaminated) due W18; decides the anneal mix at G5c",
+   "human_preference_pairs": "20,000 pairs compare outputs of the W23 d4 SFT checkpoint; ordered W23 d5, delivered 10k/week (W24 d5, W25 d5), used for the reward model; W13-22 vendor work = 2,000 expert SFT examples only"
+  }
+ },
+ "data": {
+  "unique_available_T": 8.725,
+  "unique_available_source_tokenizer_T": 9.911,
+  "cc_derived_unique_source_tokenizer_T": 5.615,
+  "cc_derived_raw_per_dump_source_tokenizer_T": 10.3,
+  "tokenizer_shrink_web": 0.87,
+  "unique_touched_T": 6.12,
+  "avg_epochs": 1.62,
+  "max_epochs_stable": 2.5,
+  "max_epochs_incl_anneal": 2.73,
+  "max_epochs_subpool_incl_stable": 3.38,
+  "epoch_caps": {
+   "stable_web": 3.0,
+   "incl_anneal_any_source_or_subpool": 4.0
+  },
+  "web_used_T": 7.118,
+  "web_unique_T": 3.799,
+  "capacity_T": {
+   "all_rows_at_cap": 18.27,
+   "hq_rows_at_cap": 14.36,
+   "hq_rows_at_cap_uniques_25pct_low": 11.16,
+   "score2_to_1_epoch_adds": 1.82
+  },
+  "extension_pool": {
+   "rows": [
+    "FineWeb-Edu (score>=3)",
+    "DCLM-baseline (dedup vs FineWeb-Edu)",
+    "Nemotron-CC HQ, real text (dedup vs pool)"
+   ],
+   "rule": "stable tokens beyond the 9.9T plan are drawn from the HQ web rows in proportion to their room below the 3-epoch stable cap; synthetic, Cosmopedia, filler and multilingual stay at their planned counts; the dataloader's mixture weights switch at 9.9T; replaced by score-2 + Nemotron-CC medium-high if the G2b epoch-proxy ablation decides for unique tokens",
+   "capacity_T": 2.527,
+   "needed_at_mfu_42_T": 1.492,
+   "tokens_at_mfu_42_T": {
+    "FineWeb-Edu (score>=3)": 0.234,
+    "DCLM-baseline (dedup vs FineWeb-Edu)": 0.976,
+    "Nemotron-CC HQ, real text (dedup vs pool)": 0.283
+   },
+   "epochs_at_mfu_42_stable_incl_anneal": {
+    "FineWeb-Edu (score>=3)": [
+     2.8,
+     2.96
+    ],
+    "DCLM-baseline (dedup vs FineWeb-Edu)": [
+     2.59,
+     2.69
+    ],
+    "Nemotron-CC HQ, real text (dedup vs pool)": [
+     2.59,
+     2.59
+    ]
+   }
+  },
+  "g3_gate": {
+   "rule": "for every source: measured unique tokens in our tokenizer >= max(planned stable tokens / cap_stable, (stable + anneal) / 4); planned tokens stand and epochs are recomputed when it holds; a failing row is clipped to measured x cap and the score-2 filler absorbs the difference (dr_calc.py prints the re-solved mix, writes decision_record.g3_resolved.json and exits 2 for sign-off; exit 1 if even the re-solved mix breaks a cap)",
+   "measured_unique_file": "measured_unique.json (absent = planning values)",
+   "measured_sources": [],
+   "failed_sources": [],
+   "near_dup_check": "1M sampled docs queried against the full-corpus LSH index; <= 1 % with a neighbour at Jaccard >= 0.8",
+   "w3_measurement": "domain-stratified sample across ALL CC dumps: keep every document whose hash(registered domain) mod 20 == 0 in every dump of FineWeb-Edu, score-2, DCLM-baseline and Nemotron-CC HQ real (5% of 46,350 GB), then the full MinHash 5-gram/112/14x8 on the slice (5,794 core-h, 0.31 days on the 768-core partition); measured removal rates for all four CC sources written to measured_unique.json; the synthetic slice is derived from the real-text survival; recrawls stay together so cross-dump and cross-source rates are unbiased (cross-domain syndication biases a few points low)",
+   "w3_measurement_g1_requirement": "measured rates published for all four CC sources (not 'per-source removal rates')",
+   "why_not_per_dump": "a 4-of-~100-dump sample catches a page recrawled in k dumps only if >= 2 copies fall in the sample: P = 0.001 (k=2), 0.012 (k=5), 0.049 (k=10), 0.18 (k=20); it reads 5-15 % where the global pass removes 30-70 %",
+   "fallback_order": [
+    "re-solve the mix at the caps",
+    "score-2 tier to 1.0 epoch",
+    "Nemotron synthetic to 12 % of stable",
+    "date-driven WSD cut, never below the 9.0T anneal floor"
+   ]
+  },
+  "tokenized_tokens": 11270000000000.0,
+  "tokenized_TB_uint32": 45.1,
+  "pipeline": {
+   "g1_gb_per_h": 300.0,
+   "partition_gb_per_h": 307,
+   "days_per_pass": 9.5,
+   "raw_text_GB": 69700,
+   "cc_text_GB": 46350,
+   "pre_production_core_hours": {
+    "w3_measurement": 5794,
+    "dedup_threshold_corpora": 20857,
+    "v0_tokenization": 2025
+   },
+   "cpu_need_core_hours": 377179,
+   "cpu_booked_core_hours": 1032192,
+   "g3a_tokens": 300000000000.0
+  },
+  "generator_terms": {
+   "Nemotron-CC HQ, synthetic rephrase/QA": {
+    "generator_and_output_terms": "Mistral-NeMo-12B-Instruct / Mixtral-8x22B-Instruct (Apache-2.0; no output restriction)",
+    "status": "keep"
+   },
+   "Cosmopedia v2 (synthetic textbooks)": {
+    "generator_and_output_terms": "Mixtral-8x7B-Instruct (Apache-2.0; no output restriction)",
+    "status": "keep"
+   },
+   "Nemotron-CC synthetic HQ (QA / distill / extract)": {
+    "generator_and_output_terms": "Mistral-NeMo-12B-Instruct / Mixtral-8x22B-Instruct (Apache-2.0)",
+    "status": "keep"
+   },
+   "Code HQ (Stack v2 edu-filtered, python-edu, synthetic with unit tests)": {
+    "generator_and_output_terms": "synthetic subset: open Apache-2.0/MIT generators only (per-file provenance)",
+    "status": "keep"
+   },
+   "Math HQ, anneal-only (Nemotron-CC-Math v1, OpenMathInstruct-2; CC-BY-4.0)": {
+    "generator_and_output_terms": "OpenMathInstruct-2: Llama-3.1-405B/70B-Instruct (Llama 3.1 Community License: a model trained on its outputs must carry 'Llama' at the start of its name); Nemotron-CC-Math v1: LLM-cleaned real CC text, generator per the dataset card",
+    "status": "counsel: accept a 'Llama-' prefixed release name (recorded in the model card) or drop OpenMathInstruct-2 for Nemotron-CC-Math v1 real text + open-generator math sets (DeepSeek-R1 / Qwen-generated, MIT / Apache-2.0)"
+   },
+   "Instruction-style (Nemotron-Pretraining-SFT-v1, SmolTalk, Tulu-3 SFT mix)": {
+    "generator_and_output_terms": "Nemotron-Pretraining-SFT-v1: open generators per the dataset card (CC-BY-4.0); SmolTalk: Qwen2.5-72B-Instruct (Qwen licence attribution clause); Tulu-3 SFT mix (ODC-By): subsets generated with GPT-4o (OpenAI terms prohibit use to develop competing models)",
+    "status": "counsel: drop the GPT-4o-derived Tulu-3 subsets by default and keep the rest; Qwen attribution recorded in the model card"
+   }
+  },
+  "counsel_w3_memo": "positions on (a) the Llama-output naming clause, (b) OpenAI-output training clauses, (c) Qwen attribution, (d) CC-BY-SA 4.0 for weights; the G3 manifest signature certifies the generator column",
+  "stable_mix": [
+   {
+    "source": "FineWeb-Edu (score>=3)",
+    "raw_T": 1.3,
+    "dedup_loss": 0.3,
+    "unique_src_T": 0.91,
+    "tok_factor": 0.87,
+    "unique_plan_T": 0.7917,
+    "unique_T": 0.7917,
+    "licence": "ODC-By 1.0",
+    "epochs_plan": 2.5,
+    "cap_stable": 3.0,
+    "note": "CC HTML; anchor; global cross-dump dedup, keep newest",
+    "measured": false,
+    "residual": false,
+    "tokens_plan_T": 1.9792,
+    "g3_min_unique_T": 0.6597,
+    "g3_fail": false,
+    "tokens_T": 1.9792,
+    "epochs_stable": 2.5,
+    "mix_pct": 19.9924,
+    "anneal_T": 0.132,
+    "epochs_incl_anneal": 2.6667
+   },
+   {
+    "source": "DCLM-baseline (dedup vs FineWeb-Edu)",
+    "raw_T": 3.8,
+    "dedup_loss": 0.5,
+    "unique_src_T": 1.9,
+    "tok_factor": 0.87,
+    "unique_plan_T": 1.653,
+    "unique_T": 1.653,
+    "licence": "CC-BY-4.0 (dataset card)",
+    "epochs_plan": 2.0,
+    "cap_stable": 3.0,
+    "note": "CC HTML; global dedup (per-shard Bloom only upstream) + vs FineWeb-Edu",
+    "measured": false,
+    "residual": false,
+    "tokens_plan_T": 3.306,
+    "g3_min_unique_T": 1.102,
+    "g3_fail": false,
+    "tokens_T": 3.306,
+    "epochs_stable": 2.0,
+    "mix_pct": 33.3939,
+    "anneal_T": 0.165,
+    "epochs_incl_anneal": 2.0998
+   },
+   {
+    "source": "Nemotron-CC HQ, real text (dedup vs pool)",
+    "raw_T": 1.1,
+    "dedup_loss": 0.5,
+    "unique_src_T": 0.55,
+    "tok_factor": 0.87,
+    "unique_plan_T": 0.4785,
+    "unique_T": 0.4785,
+    "licence": "CC-BY-4.0",
+    "epochs_plan": 2.0,
+    "cap_stable": 3.0,
+    "note": "CC HTML; already global-deduped upstream; high overlap with the two above",
+    "measured": false,
+    "residual": false,
+    "tokens_plan_T": 0.957,
+    "g3_min_unique_T": 0.319,
+    "g3_fail": false,
+    "tokens_T": 0.957,
+    "epochs_stable": 2.0,
+    "mix_pct": 9.6667,
+    "anneal_T": 0.0,
+    "epochs_incl_anneal": 2.0
+   },
+   {
+    "source": "Nemotron-CC HQ, synthetic rephrase/QA",
+    "raw_T": 1.9,
+    "dedup_loss": 0.47,
+    "unique_src_T": 1.007,
+    "tok_factor": 0.87,
+    "unique_plan_T": 0.8761,
+    "unique_T": 0.8761,
+    "licence": "CC-BY-4.0",
+    "epochs_plan": 1.0,
+    "cap_stable": 1.0,
+    "note": "slice whose source doc survived (loss derived from the measured real-text survival); ~9 % of stable",
+    "measured": false,
+    "residual": false,
+    "tokens_plan_T": 0.8761,
+    "g3_min_unique_T": 0.8761,
+    "g3_fail": false,
+    "tokens_T": 0.8761,
+    "epochs_stable": 1.0,
+    "mix_pct": 8.8494,
+    "anneal_T": 0.143,
+    "epochs_incl_anneal": 1.1632
+   },
+   {
+    "source": "FinePDFs (edu-filtered subset)",
+    "raw_T": 1.0,
+    "dedup_loss": 0.0,
+    "unique_src_T": 1.0,
+    "tok_factor": 0.87,
+    "unique_plan_T": 0.87,
+    "unique_T": 0.87,
+    "licence": "ODC-By 1.0",
+    "epochs_plan": 1.0,
+    "cap_stable": 2.0,
+    "note": "PDF corpus, not CC HTML; MinHash-deduped upstream",
+    "measured": false,
+    "residual": false,
+    "tokens_plan_T": 0.87,
+    "g3_min_unique_T": 0.435,
+    "g3_fail": false,
+    "tokens_T": 0.87,
+    "epochs_stable": 1.0,
+    "mix_pct": 8.7879,
+    "anneal_T": 0.055,
+    "epochs_incl_anneal": 1.0632
+   },
+   {
+    "source": "FineWeb-Edu score-2 tier (mid web, filler)",
+    "raw_T": 4.1,
+    "dedup_loss": 0.45,
+    "unique_src_T": 2.255,
+    "tok_factor": 0.87,
+    "unique_plan_T": 1.9618,
+    "unique_T": 1.9618,
+    "licence": "ODC-By 1.0",
+    "epochs_plan": null,
+    "cap_stable": 1.0,
+    "note": "residual; first 3T of stable only; global dedup keep newest",
+    "measured": false,
+    "residual": true,
+    "tokens_plan_T": 0.1397,
+    "g3_min_unique_T": 0.1397,
+    "g3_fail": false,
+    "tokens_T": 0.1397,
+    "epochs_stable": 0.0712,
+    "mix_pct": 1.4107,
+    "anneal_T": 0.0,
+    "epochs_incl_anneal": 0.0712
+   },
+   {
+    "source": "The Stack v2 (permissive licences, dedup)",
+    "raw_T": 0.6,
+    "dedup_loss": 0.0,
+    "unique_src_T": 0.6,
+    "tok_factor": 1.0,
+    "unique_plan_T": 0.6,
+    "unique_T": 0.6,
+    "licence": "per-file permissive + SWH terms; opt-out applied",
+    "epochs_plan": 1.5,
+    "cap_stable": 3.0,
+    "note": "code",
+    "measured": false,
+    "residual": false,
+    "tokens_plan_T": 0.9,
+    "g3_min_unique_T": 0.3,
+    "g3_fail": false,
+    "tokens_T": 0.9,
+    "epochs_stable": 1.5,
+    "mix_pct": 9.0909,
+    "anneal_T": 0.176,
+    "epochs_incl_anneal": 1.7933
+   },
+   {
+    "source": "FineWeb-2 (12 languages, top quality bin)",
+    "raw_T": 1.5,
+    "dedup_loss": 0.0,
+    "unique_src_T": 1.5,
+    "tok_factor": 0.87,
+    "unique_plan_T": 1.305,
+    "unique_T": 1.305,
+    "licence": "ODC-By 1.0",
+    "epochs_plan": 0.4,
+    "cap_stable": 2.0,
+    "note": "de fr es it pt nl pl ru ja zh ko ar",
+    "measured": false,
+    "residual": false,
+    "tokens_plan_T": 0.522,
+    "g3_min_unique_T": 0.261,
+    "g3_fail": false,
+    "tokens_T": 0.522,
+    "epochs_stable": 0.4,
+    "mix_pct": 5.2727,
+    "anneal_T": 0.088,
+    "epochs_incl_anneal": 0.4674
+   },
+   {
+    "source": "FineMath 3+ / InfiWebMath 3+ / OpenWebMath",
+    "raw_T": 0.07,
+    "dedup_loss": 0.0,
+    "unique_src_T": 0.07,
+    "tok_factor": 1.0,
+    "unique_plan_T": 0.07,
+    "unique_T": 0.07,
+    "licence": "ODC-By 1.0",
+    "epochs_plan": 2.0,
+    "cap_stable": 3.0,
+    "note": "math web",
+    "measured": false,
+    "residual": false,
+    "tokens_plan_T": 0.14,
+    "g3_min_unique_T": 0.0467,
+    "g3_fail": false,
+    "tokens_T": 0.14,
+    "epochs_stable": 2.0,
+    "mix_pct": 1.4141,
+    "anneal_T": 0.033,
+    "epochs_incl_anneal": 2.4714
+   },
+   {
+    "source": "peS2o v2 + arXiv (CC-BY / CC0 papers)",
+    "raw_T": 0.07,
+    "dedup_loss": 0.0,
+    "unique_src_T": 0.07,
+    "tok_factor": 1.0,
+    "unique_plan_T": 0.07,
+    "unique_T": 0.07,
+    "licence": "ODC-By 1.0 / per-paper CC-BY",
+    "epochs_plan": 2.0,
+    "cap_stable": 3.0,
+    "note": "papers",
+    "measured": false,
+    "residual": false,
+    "tokens_plan_T": 0.14,
+    "g3_min_unique_T": 0.0477,
+    "g3_fail": false,
+    "tokens_T": 0.14,
+    "epochs_stable": 2.0,
+    "mix_pct": 1.4141,
+    "anneal_T": 0.0508,
+    "epochs_incl_anneal": 2.7253
+   },
+   {
+    "source": "Wikipedia (en + 20 languages, 2026 dump)",
+    "raw_T": 0.015,
+    "dedup_loss": 0.0,
+    "unique_src_T": 0.015,
+    "tok_factor": 1.0,
+    "unique_plan_T": 0.015,
+    "unique_T": 0.015,
+    "licence": "CC-BY-SA 4.0",
+    "epochs_plan": 2.0,
+    "cap_stable": 3.0,
+    "note": "encyclopedic",
+    "measured": false,
+    "residual": false,
+    "tokens_plan_T": 0.03,
+    "g3_min_unique_T": 0.0102,
+    "g3_fail": false,
+    "tokens_T": 0.03,
+    "epochs_stable": 2.0,
+    "mix_pct": 0.303,
+    "anneal_T": 0.0109,
+    "epochs_incl_anneal": 2.7253
+   },
+   {
+    "source": "Books, public domain (Gutenberg, Standard Ebooks)",
+    "raw_T": 0.006,
+    "dedup_loss": 0.0,
+    "unique_src_T": 0.006,
+    "tok_factor": 1.0,
+    "unique_plan_T": 0.006,
+    "unique_T": 0.006,
+    "licence": "public domain",
+    "epochs_plan": 2.0,
+    "cap_stable": 3.0,
+    "note": "long-form",
+    "measured": false,
+    "residual": false,
+    "tokens_plan_T": 0.012,
+    "g3_min_unique_T": 0.0041,
+    "g3_fail": false,
+    "tokens_T": 0.012,
+    "epochs_stable": 2.0,
+    "mix_pct": 0.1212,
+    "anneal_T": 0.0044,
+    "epochs_incl_anneal": 2.7253
+   },
+   {
+    "source": "Cosmopedia v2 (synthetic textbooks)",
+    "raw_T": 0.028,
+    "dedup_loss": 0.0,
+    "unique_src_T": 0.028,
+    "tok_factor": 1.0,
+    "unique_plan_T": 0.028,
+    "unique_T": 0.028,
+    "licence": "Apache-2.0",
+    "epochs_plan": 1.0,
+    "cap_stable": 1.0,
+    "note": "synthetic, kept separate from real text",
+    "measured": false,
+    "residual": false,
+    "tokens_plan_T": 0.028,
+    "g3_min_unique_T": 0.028,
+    "g3_fail": false,
+    "tokens_T": 0.028,
+    "epochs_stable": 1.0,
+    "mix_pct": 0.2828,
+    "anneal_T": 0.0,
+    "epochs_incl_anneal": 1.0
+   }
+  ],
+  "anneal_mix": [
+   {
+    "component": "FineWeb-Edu score>=4 (top bin)",
+    "share": 0.12,
+    "tokens_B": 132.0,
+    "subpool_unique_T": 0.15,
+    "epochs_subpool_incl_stable": 3.38,
+    "parent": "FineWeb-Edu (score>=3)"
+   },
+   {
+    "component": "DCLM-baseline top decile (DCLM fastText probability at W12; 0.5B classifier refinement by W18)",
+    "share": 0.15,
+    "tokens_B": 165.0,
+    "subpool_unique_T": 0.165,
+    "epochs_subpool_incl_stable": 3.0,
+    "parent": "DCLM-baseline (dedup vs FineWeb-Edu)"
+   },
+   {
+    "component": "Nemotron-CC synthetic HQ (QA / distill / extract)",
+    "share": 0.13,
+    "tokens_B": 143.0,
+    "subpool_unique_T": 0.435,
+    "epochs_subpool_incl_stable": 1.3287,
+    "parent": "Nemotron-CC HQ, synthetic rephrase/QA"
+   },
+   {
+    "component": "Code HQ (Stack v2 edu-filtered, python-edu, synthetic with unit tests)",
+    "share": 0.16,
+    "tokens_B": 176.0,
+    "subpool_unique_T": 0.2,
+    "epochs_subpool_incl_stable": 2.38,
+    "parent": "The Stack v2 (permissive licences, dedup)"
+   },
+   {
+    "component": "Math HQ from the stable pool (FineMath 4+, InfiWebMath 4+, OpenWebMath)",
+    "share": 0.03,
+    "tokens_B": 33.0,
+    "subpool_unique_T": 0.04,
+    "epochs_subpool_incl_stable": 2.825,
+    "parent": "FineMath 3+ / InfiWebMath 3+ / OpenWebMath"
+   },
+   {
+    "component": "Math HQ, anneal-only (Nemotron-CC-Math v1, OpenMathInstruct-2; CC-BY-4.0)",
+    "share": 0.1,
+    "tokens_B": 110.0,
+    "subpool_unique_T": 0.15,
+    "epochs_subpool_incl_stable": 0.7333,
+    "parent": "anneal-only"
+   },
+   {
+    "component": "Instruction-style (Nemotron-Pretraining-SFT-v1, SmolTalk, Tulu-3 SFT mix)",
+    "share": 0.12,
+    "tokens_B": 132.0,
+    "subpool_unique_T": 0.08,
+    "epochs_subpool_incl_stable": 1.65,
+    "parent": "anneal-only"
+   },
+   {
+    "component": "Papers + Wikipedia + PD books",
+    "share": 0.06,
+    "tokens_B": 66.0,
+    "subpool_unique_T": 0.091,
+    "epochs_subpool_incl_stable": 0.7253,
+    "parent": "anneal-only"
+   },
+   {
+    "component": "FinePDFs top bin",
+    "share": 0.05,
+    "tokens_B": 55.0,
+    "subpool_unique_T": 0.174,
+    "epochs_subpool_incl_stable": 1.3161,
+    "parent": "FinePDFs (edu-filtered subset)"
+   },
+   {
+    "component": "Multilingual (FineWeb-2 top bin)",
+    "share": 0.08,
+    "tokens_B": 88.0,
+    "subpool_unique_T": 0.348,
+    "epochs_subpool_incl_stable": 0.6529,
+    "parent": "FineWeb-2 (12 languages, top quality bin)"
+   }
+  ],
+  "longctx_mix": [
+   {
+    "component": "Repo-level concatenated code (Stack v2)",
+    "share": 0.25,
+    "tokens_B_32k": 12.5,
+    "tokens_B_128k": 5.0
+   },
+   {
+    "component": "Papers (peS2o / arXiv full text)",
+    "share": 0.25,
+    "tokens_B_32k": 12.5,
+    "tokens_B_128k": 5.0
+   },
+   {
+    "component": "Public-domain books",
+    "share": 0.2,
+    "tokens_B_32k": 10.0,
+    "tokens_B_128k": 4.0
+   },
+   {
+    "component": "Long web / PDF documents > 8k tokens",
+    "share": 0.1,
+    "tokens_B_32k": 5.0,
+    "tokens_B_128k": 2.0
+   },
+   {
+    "component": "Short-context replay (packed anneal mix)",
+    "share": 0.2,
+    "tokens_B_32k": 10.0,
+    "tokens_B_128k": 4.0
+   }
+  ],
+  "human_data": {
+   "human_pairs": 20000,
+   "usd_per_pair": 5.0,
+   "vendor_quotes_by": "W3",
+   "onpolicy_judge_pairs": 280000,
+   "expert_sft_examples": 2000,
+   "usd_per_expert_example": 25.0
+  },
+  "dedup": {
+   "minhash": "5-gram, 112 hashes, 14 bands x 8 rows, Jaccard ~0.8",
+   "scope": "global, union level, across CC dumps and sources; keep the NEWEST copy",
+   "cross_source_order": "FineWeb-Edu <- DCLM <- Nemotron-CC",
+   "decontamination": "13-gram against every eval set"
+  },
+  "opt_out": "robots.txt at crawl time (inherited from the FineWeb/DCLM/Nemotron-CC crawls) plus the HF/Spawning opt-out list, refreshed weekly; SWH opt-out list for The Stack v2 with per-file attribution",
+  "licence_positions": "counsel's W3 memo states the position on CC-BY-SA 4.0 (Wikipedia) for model weights; The Stack v2 attribution kept in the provenance manifest"
+ }
+}
