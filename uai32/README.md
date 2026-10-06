@@ -1,26 +1,26 @@
 # Sentovara µAI-32
 
-A genuinely trainable neural network, written in 210 lines of plain C, whose **executable plus saved learned
+A genuinely trainable neural network, written in 213 lines of plain C, whose **executable plus saved learned
 state fits in 32,768 bytes**. It learns from examples by gradient descent, changes its weights, generalises
 to examples it has never seen, saves what it learned to a file, reloads it in a fresh process and keeps
 predicting (or keeps training). Nothing is hard-coded: the same 7 KB program learns flowers, spirals and
-handwritten digits.
+handwritten digits. A numpy re-implementation (`refcheck.py`) reproduces its results and checks its gradients.
 
 | model (trained by `make measure`) | executable | model file | **combined** | held-out accuracy |
 |---|---:|---:|---:|---|
-| iris (4 features, 3 classes, 8 hidden)        | 7,260 B | 158 B    | **7,418 B**  | 96.7% on 30 unseen flowers |
-| spirals (2 features, 2 classes, 32 hidden)    | 7,260 B | 340 B    | **7,600 B**  | 99.3% on 300 unseen points |
-| rings (2 features, 3 classes, 16 hidden)      | 7,260 B | 214 B    | **7,474 B**  | 100% on 300 unseen points |
-| MNIST digits 14×14 (196 features, 10 classes, 48 hidden) | 7,260 B | 20,684 B | **27,944 B** | **97.8%** on the 10,000 unseen test digits |
+| iris (4 features, 3 classes, 8 hidden)        | 7,452 B | 174 B    | **7,626 B**  | 96.7% on 30 unseen flowers |
+| spirals (2 features, 2 classes, 32 hidden)    | 7,452 B | 348 B    | **7,800 B**  | 99.3% on 300 unseen points |
+| rings (2 features, 3 classes, 16 hidden)      | 7,452 B | 222 B    | **7,674 B**  | 100% on 300 unseen points |
+| MNIST digits 14×14 (196 features, 10 classes, 48 hidden) | 7,452 B | 21,468 B | **28,920 B** | **97.8%** on the 10,000 unseen test digits |
 
-Limit: 32,768 bytes. Worst case above leaves 4,824 bytes spare. Sizes are from `gcc 13.3 / glibc 2.39, x86-64 Linux`;
+Limit: 32,768 bytes. Worst case above leaves 3,848 bytes spare. Sizes are from `gcc 13.3 / glibc 2.39, x86-64 Linux`;
 run `make measure` to get them on your machine. The exact files measured are committed in `dist/` with `SHA256SUMS`.
 
 ## Try it (needs a C compiler, make, sh, awk; python3 + numpy only for regenerating data)
 
 ```sh
-make            # builds ./uai32 (7,260 bytes)
-make verify     # 16 PASS/FAIL checks, one per requirement, in under a second
+make            # builds ./uai32 (7,452 bytes) and ./uai32.elf (same binary with section headers, for nm/objdump)
+make verify     # 24 PASS/FAIL checks (23 before MNIST is trained), in about a second
 make measure    # trains the demo models into work/ and prints the size table
 ```
 
@@ -52,15 +52,17 @@ For the digits: `python3 get_mnist.py` downloads MNIST (11 MB) and writes it as 
 
 | requirement | evidence (all printed by `verify.sh`) |
 |---|---|
-| learns from examples | iris held-out accuracy 50% with the random initial weights (saved after 0 epochs) → 96.7% after 60 epochs; training loss 0.57 → 0.08 |
-| alters internal state | the 158-byte model file before and after training differs (`cmp`) |
+| learns from examples | iris held-out accuracy 53% with the random initial weights (saved after 0 epochs) → 96.7% after 60 epochs; training loss 0.57 → 0.08 |
+| alters internal state | the 174-byte model file before and after training differs (`cmp`) |
 | generalises to unseen examples | train/test files are disjoint splits: iris 96.7%, spirals 99.3%, rings 100% on the test files |
 | ...and not by accident | **control**: trained on the spirals with scrambled labels it scores 47% on the real test set (chance = 50%) |
 | saves what it learned | `train` writes the model file; `test`/`predict` are separate processes that only have that file |
 | reloads it and continues inference | a copy of the model file, read by a fresh process, gives byte-identical predictions, 99.3% correct |
-| continues training | `train` on an existing file prints `continuing` and keeps learning (100 more epochs at a lower rate) |
+| continues training | `train` on an existing file prints `continuing`, changes the weights and keeps learning (100 more epochs at a lower rate) |
+| the maths is right | `refcheck.py` (numpy, no C) re-implements inference from the file-format description and reproduces the C accuracy and loss exactly; one C SGD step matches the analytic softmax cross-entropy gradient |
+| the build is honest | building twice gives identical bytes; `uai32` is byte-for-byte `uai32.elf` minus the section header table (`objcopy --strip-section-headers`) |
 | reproducible | two runs with the same data and seed write byte-identical model files |
-| size limit | executable + each model ≤ 32,768 bytes, numbers printed |
+| size limit | executable + each model ≤ 32,768 bytes, numbers printed; each model file's size equals the formula computed from its own header |
 
 ## How it works (the whole thing is `uai32.c`)
 
@@ -68,26 +70,28 @@ For the digits: `python3 get_mnist.py` downloads MNIST (11 MB) and writes it as 
   Inputs are standardised with per-feature statistics learned from the training data (shift by the mean,
   scale by the range), and the statistics are stored in the model file as ordinary parameters.
 * **Learning.** Plain stochastic gradient descent, one example at a time, with backpropagation of the
-  cross-entropy gradient (`learn()` is 15 lines). Examples are reshuffled every epoch with a seeded xorshift32
-  generator, so runs are deterministic. Weights start He-uniform (`±sqrt(6/fan_in)`), biases at zero.
+  cross-entropy gradient (`learn()` is 15 lines). The loss is computed in the stable log-sum-exp form.
+  Examples are reshuffled every epoch with a seeded xorshift32 generator, so runs are deterministic.
+  Weights start He-uniform (`±sqrt(6/fan_in)`), biases at zero.
 * **Everything learned is one float array `P`:** `mean[NI] scale[NI] W1[NH][NI+1] W2[NO][NH+1]`
   (the last column of each matrix is the bias). Parameter count = `2·NI + NH·(NI+1) + NO·(NH+1)`.
-* **Model file** = 8-byte header + 2 bytes per parameter, all little-endian:
+* **Model file** = 8-byte header, the normalisation statistics as float32, then 2 bytes per weight, all little-endian:
 
   | bytes | content |
   |---|---|
   | 0–1 | magic `0xA132` |
   | 2–3, 4–5, 6–7 | `NI`, `NH`, `NO` as u16 |
-  | 8… | each parameter as **bfloat16**: the top 16 bits of its IEEE-754 float, rounded to nearest even |
+  | 8 … 8+8·NI | `mean[NI]`, `scale[NI]` as exact float32 (a rounded mean would shift every input) |
+  | then | each weight as **bfloat16**: the top 16 bits of its IEEE-754 float, rounded to nearest even |
 
   bfloat16 keeps the float32 exponent and 8 bits of mantissa (3 significant digits). It halves the file
   for a negligible accuracy cost (MNIST: 97.8% both ways) and loading is a 16-bit shift. Weights are
-  trained in float32 and rounded only when saved.
+  trained in float32 and rounded only when saved. File size = `8 + 8·NI + 2·(NH·(NI+1) + NO·(NH+1))`.
 * **Data format.** Text, one example per line: the features, then the integer label (`0,1,2,…`). The
   feature count comes from the first line, the class count from the largest label. `predict` reads the
   same rows from stdin and ignores anything after the features, so a labelled file can be piped straight in.
 
-## Where the 7,260 bytes go, and why nothing else counts
+## Where the 7,452 bytes go, and why nothing else counts
 
 The executable is a normal dynamically linked ELF that uses the C library already on the machine
 (`libc.so.6`, `libm.so.6`, the dynamic loader) for file I/O, `printf`, `expf`, `log`, `sqrtf` and `strtof`.
@@ -99,14 +103,16 @@ the compiler and the datasets.
 | code (`.text`) | ≈3,900 | forward pass, backprop, file format, data reader, CLI |
 | dynamic linking tables (`.dynsym`, `.dynstr`, `.rela.dyn`, `.dynamic`, `.got`, version info) | ≈1,900 | the 16 libc/libm symbols it imports |
 | strings (`.rodata`) | ≈650 | messages and `printf` formats |
-| ELF + program headers, interpreter path, crt start-up code | ≈800 | |
+| ELF + program headers, interpreter path, crt start-up code | ≈1,000 | |
 
 The `Makefile` gets there with ordinary flags, no hand-written assembly and no packer:
 `-Os`, no unwind tables, no stack protector, no PIE, `-fno-plt` (calls go straight through the GOT),
 `-fcf-protection=none`, `--gc-sections`, `--build-id=none`, `-z noseparate-code` (no page padding between
-segments) and `-s`. Finally `shrink.py` (20 lines) drops the ELF *section header table*, which only linkers and
-debuggers read — the same thing the classic `sstrip` tool does — saving about 1.8 KB. `ldd`, `readelf -l` and the
-kernel are unaffected. A default `gcc -O2 -s` build of the same source is about 18 KB.
+segments), `-s`, and `-z nosectionheader`, which leaves out the ELF *section header table* that only linkers
+and debuggers read (about 1.8 KB; `ldd`, `readelf -l` and the kernel never look at it). `-ffp-contract=off`
+forbids fused multiply-adds so model bytes do not depend on the optimisation level or CPU. `uai32.elf` is the
+same link with the table kept, for `nm`/`objdump`; `verify.sh` proves the two are otherwise identical.
+A default `gcc -O2 -s` build of the same source is about 18 KB.
 
 ## Datasets
 
@@ -126,18 +132,18 @@ kernel are unaffected. A default `gcc -O2 -s` build of the same source is about 
 * Reproducibility is byte-exact on one machine; another libm may round `expf` differently, which changes
   low bits of the weights (not the accuracy).
 * The text data format is slow for big data (MNIST load ≈ 2 s), chosen because it is the simplest to audit.
-* `shrink.py` makes `nm`/`objdump` unhappy (they want section headers); build without it with `make CC=cc` and
-  skip the step, or just inspect the pre-shrink file: the behaviour is identical.
+* `nm`/`objdump` want section headers, so inspect `uai32.elf`; it is the same link with the table kept.
 
 ## Files
 
 | file | purpose |
 |---|---|
-| `uai32.c` | the program (210 lines) |
+| `uai32.c` | the program (213 lines) |
 | `Makefile` | `make`, `make verify`, `make measure`, `make dist`, `make clean` |
-| `shrink.py` | removes the ELF section header table after linking |
+| `refcheck.py` | numpy re-implementation of inference + gradient check of one SGD step |
 | `verify.sh` | the evidence script |
 | `measure.sh` | trains the demo models and prints the size table |
 | `gen_data.py`, `get_mnist.py` | dataset generation / download |
 | `data/` | iris, spirals, rings (train/test); MNIST text files appear here after `get_mnist.py` |
 | `dist/` | the measured deliverable: `uai32` executable, four `.model` files, `SHA256SUMS` |
+| `uai32.elf` (built, not committed) | the executable with section headers, for inspection |

@@ -1,30 +1,38 @@
 # Sentovara uAI-32 -- build, measure, verify.
-#   make            build ./uai32 with the size-reducing flags
-#   make measure    print the byte sizes that the challenge counts
+#   make            build ./uai32 with the size-reducing flags (and ./uai32.elf, the same binary with section headers)
+#   make measure    train the demo models into work/ and print the byte sizes that the challenge counts
 #   make verify     run the full evidence script (builds first)
 #   make dist       copy the measured deliverable (executable + trained models + checksums) into dist/
 #   make clean
 CC      ?= cc
 PROG    := uai32
-# Generic flags: optimise for size, drop everything that is not code.
-CFLAGS  ?= -std=c99 -Os -Wall -Wextra -pedantic -U_FORTIFY_SOURCE -fno-asynchronous-unwind-tables \
+# Optimise for size, drop everything that is not code, and never fuse multiply-adds (keeps model bytes
+# identical across optimisation levels and CPUs).  None of these change what the program computes.
+CFLAGS  ?= -std=c99 -Os -Wall -Wextra -pedantic -ffp-contract=off -U_FORTIFY_SOURCE -fno-asynchronous-unwind-tables \
            -fno-stack-protector -fno-ident -fno-pie -fno-plt -fcf-protection=none -fno-math-errno \
            -ffunction-sections -fdata-sections
 LDFLAGS ?= -s -no-pie -Wl,--gc-sections -Wl,-z,now -lm
-# GNU ld only: these remove page-alignment padding and metadata that costs bytes on disk.
+# GNU ld only: remove page-alignment padding and metadata that costs bytes on disk.
 ifeq ($(shell uname -s),Linux)
 LDFLAGS += -Wl,--build-id=none -Wl,-z,norelro -Wl,-z,noseparate-code -Wl,--hash-style=gnu \
            -Wl,-z,max-page-size=4096 -Wl,--no-eh-frame-hdr
 endif
+# The section header table is only read by linkers and debuggers, never by the kernel or the dynamic
+# loader.  binutils >= 2.41 can leave it out; older ones keep it (about 1.8 KB more).
+NOSH := $(shell printf 'int main(){return 0;}' | $(CC) -x c - -o /dev/null -Wl,-z,nosectionheader 2>/dev/null && echo -Wl,-z,nosectionheader)
 
-$(PROG): uai32.c shrink.py
+all: $(PROG) $(PROG).elf
+
+$(PROG): uai32.c
+	$(CC) $(CFLAGS) $< -o $@ $(LDFLAGS) $(NOSH)
+
+$(PROG).elf: uai32.c                     # identical build with section headers, for nm/objdump/readelf -S
 	$(CC) $(CFLAGS) $< -o $@ $(LDFLAGS)
-	@python3 shrink.py $@ || echo "note: python3 not found, section headers kept (about 1.9 KB)"
 
 measure: $(PROG)
 	@./measure.sh
 
-verify: $(PROG)
+verify: $(PROG) $(PROG).elf
 	@./verify.sh
 
 dist: $(PROG)
@@ -34,6 +42,6 @@ dist: $(PROG)
 	@cd dist && sha256sum $(PROG) *.model > SHA256SUMS && cat SHA256SUMS && wc -c $(PROG) *.model
 
 clean:
-	rm -rf $(PROG) work dist
+	rm -rf $(PROG) $(PROG).elf work dist
 
-.PHONY: measure verify dist clean
+.PHONY: all measure verify dist clean

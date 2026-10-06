@@ -9,17 +9,18 @@
  *   uai32 test  DATA MODEL                                   accuracy + loss of MODEL on DATA
  *   uai32 predict MODEL  < rows                              print class + probabilities per row
  *
- * If MODEL already exists, `train` loads it and keeps training it (HIDDEN and SEED are then
- * ignored, pass anything).  Delete the file to start from scratch.
+ * If MODEL already exists, `train` loads it and keeps training it (HIDDEN is then ignored,
+ * pass anything; SEED still seeds the shuffle).  Delete the file to start from scratch.
  *
  * DATA format: one example per line, whitespace-separated numbers: the features, then the
  * integer class label (0,1,2,...).  The number of features is taken from the first line.
  * Blank lines and lines that do not start with a number are skipped.  `predict` reads rows
  * from stdin and ignores anything after the features, so a labelled file can be piped in.
  *
- * MODEL format (all little-endian):  u16 magic 0xA132, u16 NI, u16 NH, u16 NO, then every
- * parameter as bfloat16 (the top 16 bits of an IEEE-754 float, rounded to nearest).
- * Parameter order: mean[NI], scale[NI], W1[NH][NI+1], W2[NO][NH+1]  (last column = bias).
+ * MODEL format (all little-endian):  u16 magic 0xA132, u16 NI, u16 NH, u16 NO, then the
+ * parameters in the order mean[NI], scale[NI], W1[NH][NI+1], W2[NO][NH+1] (last column = bias).
+ * mean and scale are stored as exact float32; every weight as bfloat16 (the top 16 bits of
+ * an IEEE-754 float, rounded to nearest even), which halves the file at no accuracy cost.
  */
 #define _POSIX_C_SOURCE 200809L
 #include <stdio.h>
@@ -29,7 +30,7 @@
 
 static int NI, NH, NO;                 /* inputs, hidden units, outputs (classes)       */
 static float *P, *mean, *scale, *W1, *W2;  /* all learned parameters live in P           */
-static float *xn, *hid, *out, *dh;     /* normalised input, hidden, softmax, hidden grad */
+static float *xn, *hid, *z, *out, *dh, lse;  /* normalised input, hidden, logits, softmax, hidden grad, log-sum-exp */
 static unsigned rng = 1;               /* xorshift32 state; SEED sets it                */
 
 static void die(const char *m) { fprintf(stderr, "uai32: %s\n", m); exit(1); }
@@ -43,13 +44,13 @@ static int nparams(void) { return 2 * NI + NH * (NI + 1) + NO * (NH + 1); }
 
 static void alloc(void) {
     P = calloc(nparams(), sizeof *P);
-    xn = calloc(NI + 2 * NH + NO, sizeof *xn);
+    xn = calloc(NI + 2 * NH + 2 * NO, sizeof *xn);
     if (!P || !xn) die("out of memory");
     mean = P; scale = mean + NI; W1 = scale + NI; W2 = W1 + NH * (NI + 1);
-    hid = xn + NI; dh = hid + NH; out = dh + NH;
+    hid = xn + NI; dh = hid + NH; z = dh + NH; out = z + NO;
 }
 
-/* Forward pass: fills xn, hid (ReLU), out (softmax probabilities); returns the argmax class. */
+/* Forward pass: fills xn, hid (ReLU), z (logits), lse, out (softmax probabilities); returns the argmax class. */
 static int forward(const float *x) {
     int i, j, k, best = 0; float m = -1e30f, s = 0;
     for (i = 0; i < NI; i++) xn[i] = (x[i] - mean[i]) * scale[i];
@@ -61,10 +62,11 @@ static int forward(const float *x) {
     for (k = 0; k < NO; k++) {
         float *w = W2 + k * (NH + 1), a = w[NH];
         for (j = 0; j < NH; j++) a += w[j] * hid[j];
-        out[k] = a; if (a > m) { m = a; best = k; }
+        z[k] = a; if (a > m) { m = a; best = k; }
     }
-    for (k = 0; k < NO; k++) s += out[k] = expf(out[k] - m);
-    for (k = 0; k < NO; k++) out[k] /= s;
+    for (k = 0; k < NO; k++) s += expf(z[k] - m);
+    lse = m + logf(s);                                         /* log of the softmax denominator, computed stably */
+    for (k = 0; k < NO; k++) out[k] = expf(z[k] - lse);
     return best;
 }
 
@@ -88,15 +90,15 @@ static void learn(const float *x, int y, float lr) {
 /* ---- model file ---- */
 static void put16(unsigned v, FILE *f) { putc(v & 255, f); putc(v >> 8 & 255, f); }
 static int  get16(FILE *f) { int lo = getc(f), hi = getc(f); if (hi < 0) die("truncated model file"); return lo | hi << 8; }
+static unsigned bits(float v) { unsigned b; memcpy(&b, &v, 4); return b; }
+static float   value(unsigned b) { float v; memcpy(&v, &b, 4); return v; }
 
 static void save(const char *path) {
     FILE *f = fopen(path, "wb"); int i, n = nparams();
     if (!f) die("cannot write model file");
     put16(0xA132, f); put16(NI, f); put16(NH, f); put16(NO, f);
-    for (i = 0; i < n; i++) {
-        unsigned b; memcpy(&b, &P[i], 4);
-        put16((b + 0x7FFF + (b >> 16 & 1)) >> 16, f);         /* float32 -> bfloat16, round to nearest even */
-    }
+    for (i = 0; i < 2 * NI; i++) { put16(bits(P[i]) & 0xFFFF, f); put16(bits(P[i]) >> 16, f); }   /* mean, scale: float32 */
+    for (; i < n; i++) put16((bits(P[i]) + 0x7FFF + (bits(P[i]) >> 16 & 1)) >> 16, f);         /* weights: bfloat16, round to nearest even */
     if (fclose(f)) die("cannot write model file");
 }
 
@@ -105,7 +107,8 @@ static int load(const char *path) {                           /* returns 0 if th
     if (!f) return 0;
     if (get16(f) != 0xA132) die("not a uai32 model file");
     NI = get16(f); NH = get16(f); NO = get16(f); alloc();
-    for (i = 0, n = nparams(); i < n; i++) { unsigned b = (unsigned)get16(f) << 16; memcpy(&P[i], &b, 4); }
+    for (i = 0, n = nparams(); i < 2 * NI; i++) { unsigned lo = get16(f); P[i] = value(lo | (unsigned)get16(f) << 16); }
+    for (; i < n; i++) P[i] = value((unsigned)get16(f) << 16);
     fclose(f); return 1;
 }
 
@@ -145,7 +148,7 @@ static void read_data(const char *path, int need_labels) {    /* fixes NI if it 
 /* Accuracy and mean cross-entropy of the current model over the loaded data (no learning). */
 static void report(const char *tag) {
     int i, ok = 0; double loss = 0;
-    for (i = 0; i < N; i++) { ok += forward(X + (size_t)i * NI) == Y[i]; loss -= log(out[Y[i]] + 1e-9); }
+    for (i = 0; i < N; i++) { ok += forward(X + (size_t)i * NI) == Y[i]; loss += lse - z[Y[i]]; }   /* -log p_y */
     printf("%s loss %.4f  accuracy %d/%d = %.1f%%\n", tag, loss / N, ok, N, 100.0 * ok / N);
 }
 

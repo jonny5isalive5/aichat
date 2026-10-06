@@ -1,5 +1,6 @@
 # build output and scratch; the measured deliverable is committed under dist/
 /uai32
+/uai32.elf
 /work/
 /data/mnist*
 /data/*.gz
