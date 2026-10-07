@@ -68,6 +68,12 @@ Bring commands, inputs, hashes and results so others can check the counterexampl
 
 Project code and release documentation in `uai32/` are offered under [Apache-2.0](LICENSE).
 Datasets retain their own terms; see [attribution and third-party notices](release/THIRD_PARTY_NOTICES.md).
+
+**MNIST licensing note:** This release does not redistribute MNIST images, labels, source archives,
+or generated dataset files. Reproduction requires users to obtain MNIST separately from the documented
+upstream mirrors and comply with whatever terms apply to that dataset. Sentovara does not grant any
+rights in MNIST and does not make an independent claim about its upstream licence.
+
 This branch prepares a reviewable release package. It does not merge PR #2, create a release tag or publish
 a GitHub release.
 

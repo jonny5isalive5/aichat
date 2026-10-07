@@ -77,7 +77,10 @@ Any subsequent code/artifact change needs fresh evidence before the claim is car
 Apache-2.0 is the owner's selected project license; datasets retain the terms in
 [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md).
 
-Before publication, confirm the upstream MNIST dataset terms recorded by the downloader; the historical
-homepage was unavailable during this documentation review. No MNIST dataset files are bundled.
+**MNIST licensing note:** This release does not redistribute MNIST images, labels, source archives,
+or generated dataset files. Reproduction requires users to obtain MNIST separately from the documented
+upstream mirrors and comply with whatever terms apply to that dataset. Sentovara does not grant any
+rights in MNIST and does not make an independent claim about its upstream licence.
+
 Prepare and verify the final release package and its checksum manifest, then update this draft's
 status text for the approved tag and publication state.

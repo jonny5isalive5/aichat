@@ -27,9 +27,13 @@ See the [historical dataset homepage](http://yann.lecun.com/exdb/mnist/), as lin
 The homepage was unavailable during the 7 October 2026 documentation review; the mirror remains
 available for dataset provenance and download information.
 The preserved downloader identifies MNIST as CC BY-SA 3.0; this attribution is part of the audited source.
-That source comment is not independent confirmation of the upstream terms. Confirm those terms before
-publication or any redistribution of MNIST dataset material; this overlay makes no new data-license grant.
-The release package includes no MNIST images, labels, source archives or generated text dataset files.
+That source comment is not independent confirmation of the upstream terms.
+
+**MNIST licensing note:** This release does not redistribute MNIST images, labels, source archives,
+or generated dataset files. Reproduction requires users to obtain MNIST separately from the documented
+upstream mirrors and comply with whatever terms apply to that dataset. Sentovara does not grant any
+rights in MNIST and does not make an independent claim about its upstream licence.
+
 Reproduction downloads the four hash-pinned archives from the documented CVDF/OSSCI mirrors and uses
 2×2 average pooling with rounding to convert 28×28 images into 14×14 integer features.
 Consult the dataset's applicable terms when redistributing dataset material; the project software
