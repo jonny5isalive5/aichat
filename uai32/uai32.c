@@ -234,7 +234,9 @@ int main(int argc, char **argv) {
         for (j = 0; j < NI; j++) {                             /* feature normalisation: shift by the mean, scale by the range */
             float lo = X[j], hi = X[j]; double s = 0;
             for (i = 0; i < N; i++) { float v = X[(size_t)i * NI + j]; s += v; if (v < lo) lo = v; if (v > hi) hi = v; }
-            mean[j] = s / N; scale[j] = hi > lo ? 1 / (hi - lo) : 0;
+            float range = hi - lo;                             /* finite inputs can still overflow here (3e38 - -3e38) */
+            if (!(range <= FLT_MAX)) die("feature range overflows float");
+            mean[j] = s / N; scale[j] = range > 0 ? 1 / range : 0;
         }
         for (i = 0; i < NH * (NI + 1); i++) W1[i] = (i + 1) % (NI + 1) ? frand() * sqrtf(6.0f / NI) : 0;  /* He-uniform, zero bias */
         for (i = 0; i < NO * (NH + 1); i++) W2[i] = (i + 1) % (NH + 1) ? frand() * sqrtf(6.0f / NH) : 0;

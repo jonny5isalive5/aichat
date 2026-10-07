@@ -38,14 +38,23 @@ measure: $(PROG)
 verify: $(PROG) $(PROG).elf
 	@./verify.sh
 
+# The deliverable is assembled and validated in work/stage.*, then published by renaming.  The previous
+# dist/ is set aside as work/previous-dist.<pid> first and put back if the final rename fails, so a failed
+# publication never leaves dist/ missing or partial (regression_tests.py injects that failure).
 dist: $(PROG)
 	@./measure.sh > /dev/null
-	@set -eu; stage=$$(mktemp -d work/dist.XXXXXX); trap 'rm -rf "$$stage"' EXIT HUP INT TERM; \
+	@set -eu; stage=$$(mktemp -d work/stage.XXXXXX); old=work/previous-dist.$$$$; \
+	  trap 'rm -rf "$$stage"' EXIT HUP INT TERM; \
 	  cp $(PROG) "$$stage/"; \
 	  for n in iris spirals rings mnist14; do cp "work/$$n.model" "$$stage/"; done; \
 	  (cd "$$stage" && $(SHA256) uai32 iris.model mnist14.model rings.model spirals.model > SHA256SUMS); \
 	  python3 check_artifacts.py "$$stage" --manifest --data data; \
-	  rm -rf dist; mv "$$stage" dist; cat dist/SHA256SUMS; wc -c dist/uai32 dist/*.model
+	  rm -rf "$$old"; if [ -e dist ]; then mv dist "$$old"; fi; \
+	  if ! mv "$$stage" dist; then \
+	    echo "dist: publication failed; restoring the previous dist/" >&2; \
+	    if [ -e "$$old" ]; then mv "$$old" dist; fi; exit 1; \
+	  fi; \
+	  rm -rf "$$old"; cat dist/SHA256SUMS; wc -c dist/uai32 dist/*.model
 
 test: all
 	python3 regression_tests.py

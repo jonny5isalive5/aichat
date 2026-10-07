@@ -8,18 +8,18 @@ handwritten digits. A numpy re-implementation (`refcheck.py`) reproduces its res
 
 | model (trained by `make measure`) | executable | model file | **combined** | held-out accuracy |
 |---|---:|---:|---:|---|
-| iris (4 features, 3 classes, 8 hidden)        | 9,060 B | 174 B    | **9,234 B**  | 96.7% on 30 held-out rows; one has duplicate features in training |
-| spirals (2 features, 2 classes, 32 hidden)    | 9,060 B | 348 B    | **9,408 B**  | 99.3% on 300 unseen points |
-| rings (2 features, 3 classes, 16 hidden)      | 9,060 B | 222 B    | **9,282 B**  | 100% on 300 unseen points |
-| MNIST digits 14×14 (196 features, 10 classes, 48 hidden) | 9,060 B | 21,468 B | **30,528 B** | **9,781/10,000 = 97.81%** (printed as 97.8%) |
+| iris (4 features, 3 classes, 8 hidden)        | 9,188 B | 174 B    | **9,362 B**  | 96.7% on 30 held-out rows; one has duplicate features in training |
+| spirals (2 features, 2 classes, 32 hidden)    | 9,188 B | 348 B    | **9,536 B**  | 99.3% on 300 unseen points |
+| rings (2 features, 3 classes, 16 hidden)      | 9,188 B | 222 B    | **9,410 B**  | 100% on 300 unseen points |
+| MNIST digits 14×14 (196 features, 10 classes, 48 hidden) | 9,188 B | 21,468 B | **30,656 B** | **9,781/10,000 = 97.81%** (printed as 97.8%) |
 
-Limit: 32,768 bytes. Worst case above leaves 2,240 bytes spare. Sizes are from `gcc 15.2 / binutils 2.46 / glibc 2.43, x86-64 Linux`;
+Limit: 32,768 bytes. Worst case above leaves 2,112 bytes spare. Sizes are from `gcc 13.3 / binutils 2.42 / glibc 2.39, x86-64 Linux`;
 run `make measure` to get them on your machine. The exact files measured are committed in `dist/` with `SHA256SUMS`.
 
 ## Try it (C compiler, make, sh, awk, cmp, SHA-256 tools; python3 + numpy and GNU objcopy for complete verification)
 
 ```sh
-make                 # builds ./uai32 (9,060 bytes) and ./uai32.elf with section headers for inspection
+make                 # builds ./uai32 (9,188 bytes) and ./uai32.elf with section headers for inspection
 python3 get_mnist.py # downloads and validates the four pinned MNIST source archives
 make dist            # trains all four models, evaluates them, checks sizes, then replaces dist/
 make test            # audit exploit regressions; requires sanitizer support in the compiler
@@ -76,7 +76,10 @@ Its gradient check covers one example and the weights whose updates exceed bfloa
 
 `make test` runs isolated regressions for corrupt/missing models and checksums, numeric conversions and
 non-finite state under sanitizers, failed evaluation/loss comparison, missing/oversized distribution artifacts,
-and malformed MNIST caches/downloads. Neither failed measurement nor failed packaging replaces `dist/`.
+and malformed MNIST caches/downloads. Neither failed measurement nor failed packaging replaces `dist/`, and
+if the final rename that publishes a new `dist/` fails, the previous `dist/` is put back (that failure is injected
+by a regression test). A training set whose feature range overflows a float (for example 3e38 and -3e38) is
+refused rather than silently normalised with scale 0.
 
 ## How it works (the whole thing is `uai32.c`)
 
@@ -106,7 +109,7 @@ and malformed MNIST caches/downloads. Neither failed measurement nor failed pack
   same rows from stdin and ignores extra numeric columns after the features, so a labelled file can be piped
   straight in (a non-numeric token anywhere in a row is an error).
 
-## Where the 9,060 bytes go, and why nothing else counts
+## Where the 9,188 bytes go, and why nothing else counts
 
 The executable is a normal dynamically linked ELF that uses the C library already on the machine
 (`libc.so.6`, `libm.so.6`, the dynamic loader) for file I/O, formatting, elementary math and numeric parsing.

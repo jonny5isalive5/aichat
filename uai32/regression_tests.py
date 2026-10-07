@@ -226,6 +226,34 @@ class AuditRegression(unittest.TestCase):
                 "m.urllib.request.urlretrieve=lambda url,target:pathlib.Path(target).write_bytes(b'bad'); m.main(False)")
         self.invoke([sys.executable,'-c',script])
 
+    def test_normalisation_range_overflow_fails_closed(self):
+        # Finite inputs whose range exceeds FLT_MAX used to give scale = 1/inf = 0 silently (feature dropped).
+        data = self.tmp / 'range.txt'; data.write_text('3e38 0\n-3e38 1\n')
+        for exe in [ROOT / 'uai32', self.sanitized]:
+            with self.subTest(exe=exe.name):
+                m = self.tmp / 'range.model'; m.unlink(missing_ok=True)
+                p = self.invoke([exe, 'train', data, m, '4', '1', '0.05'])
+                self.assertIn('feature range overflows', p.stderr); self.assertFalse(m.exists())
+        data.write_text('1.7e38 0\n-1.7e38 1\n')   # the widest range that still fits in a float trains normally
+        m = self.tmp / 'wide.model'; self.invoke([ROOT / 'uai32', 'train', data, m, '4', '1', '0.05'], fails=False)
+        self.assertTrue(m.exists())
+
+    def test_dist_publication_failure_preserves_previous_dist(self):
+        p = self.fixture(); self.fake_training_exe(p)      # measurement succeeds instantly with the committed models
+        tools = self.tmp / 'tools'; tools.mkdir(); real_mv = shutil.which('mv')
+        (tools / 'mv').write_text('#!/bin/sh\ncase "$1" in work/stage.*) echo "injected publication failure" >&2; exit 1;; esac\n'
+                                  f'exec {real_mv} "$@"\n')
+        (tools / 'mv').chmod(0o755); env = {'PATH': str(tools) + os.pathsep + os.environ['PATH']}
+        before = {f.name: f.read_bytes() for f in (p / 'dist').iterdir()}
+        r = self.invoke(['make', 'dist'], cwd=p, env=env)
+        self.assertIn('restoring the previous dist/', r.stderr)
+        self.assertEqual({f.name: f.read_bytes() for f in (p / 'dist').iterdir()}, before)
+        self.assertEqual([x.name for x in (p / 'work').glob('stage.*')], [])
+        self.assertEqual([x.name for x in (p / 'work').glob('previous-dist.*')], [])
+        self.invoke(['make', 'dist'], cwd=p, fails=False)   # without the injected failure publication completes
+        self.assertEqual(sorted(f.name for f in (p / 'dist').iterdir()), sorted(before))
+        self.assertEqual([x.name for x in (p / 'work').glob('previous-dist.*')], [])
+
     def test_iris_caveat_and_full_verification_count_are_documented(self):
         readme=(ROOT/'README.md').read_text()
         self.assertNotIn('30 unseen flowers',readme)
