@@ -1,10 +1,67 @@
 # Sentovara µAI-32
 
-A genuinely trainable neural network, written in plain C, whose **executable plus saved learned
-state fits in 32,768 bytes**. It learns from examples by gradient descent, changes its weights, generalises
-to examples it has never seen, saves what it learned to a file, reloads it in a fresh process and keeps
-predicting (or keeps training). Nothing is hard-coded: the same 9 KB program learns flowers, spirals and
-handwritten digits. A numpy re-implementation (`refcheck.py`) reproduces its results and checks its gradients.
+A trainable neural classifier in plain C, with its executable and saved learned state under 32,768 bytes.
+It trains by stochastic gradient descent, saves and reloads its weights, and supports inference and continued training.
+
+**Release preparation draft — 7 October 2026.** The audited implementation is
+[`3e924e600ef6b65eff9f00668cb283b259930049`](https://github.com/jonny5isalive5/aichat/commit/3e924e600ef6b65eff9f00668cb283b259930049) from [PR #2](https://github.com/jonny5isalive5/aichat/pull/2).
+This documentation and license overlay is a separate change; the PASS applies to that exact audited commit.
+
+## Claim
+
+The committed x86-64 Linux executable is **9,188 bytes** and its saved MNIST model is **21,468 bytes**:
+**30,656 bytes combined**, with **2,112 bytes** remaining under the 32,768-byte limit.
+That executable/model pair correctly classifies **9,781 of the standard 10,000 MNIST test images (97.81%)**
+after the documented 28×28 to 14×14 preprocessing. The printed loss is **0.0766**.
+
+## Scope and accounting
+
+Count the complete executable file plus one complete saved model file, including the model header,
+normalization statistics, weights and biases. This is an **on-disk file-size claim** for the identified
+artifacts on a host that supplies `libc.so.6`, `libm.so.6` and the ELF dynamic loader.
+Those host libraries, the operating system, RAM, datasets, compiler, verification tools, source,
+documentation and archive/checksum metadata are excluded. These exclusions are part of the claim.
+The executable includes training as well as inference. All four demonstration models are alternatives;
+the MNIST claim counts its one model, not the entire release download.
+
+## Evidence
+
+The original focused audit reports **PASS**, **28/28 mandatory verification checks**, **18 regression
+groups** and **222 recorded subprocess invocations**, including sanitizer checks. It records exact
+toolchain reproduction of the executable, all four models and the checksum manifest.
+The [evidence index](release/EVIDENCE.md) links those results, the unchanged original archive and hashes.
+These are recorded audit results; release preparation is not a new independent certification.
+
+## Known limits
+
+This is a one-hidden-layer classifier, not a language model or proof of general intelligence.
+There is no claim of being the world's smallest AI, of bare-metal operation, of a 32 KiB RAM footprint,
+or of universal accuracy or byte-identical builds across environments. The standard MNIST test set is
+a public benchmark; the audit does not establish a never-consulted development holdout. One iris test
+row duplicates a training row. The size-oriented executable omits several hardening features.
+See [release notes](release/RELEASE_NOTES.md) and the detailed limits below.
+
+## Reproduce
+
+Start with the [exact-SHA reproduction guide](release/REPRODUCE.md). Verify the committed checksums
+before rebuilding; train into scratch files before any optional `make dist`. A full pass requires every
+prerequisite and all 28 checks. Failures must be reported, never converted into skipped checks.
+
+## Disprove us
+
+Reproduce the result. Challenge the accounting or dependencies. Find data leakage, incorrect learning,
+invalid-input behavior or a reproducible test failure. Build a smaller comparable implementation.
+The [Disprove us challenge](release/CHALLENGE.md) gives the reporting format and comparison rules.
+Bring commands, inputs, hashes and results so others can check the counterexample.
+
+## License and release status
+
+Project code and release documentation in `uai32/` are offered under [Apache-2.0](LICENSE).
+Datasets retain their own terms; see [attribution and third-party notices](release/THIRD_PARTY_NOTICES.md).
+This branch prepares a reviewable release package. It does not merge PR #2, create a release tag or publish
+a GitHub release.
+
+## Recorded demonstration results
 
 | model (trained by `make measure`) | executable | model file | **combined** | held-out accuracy |
 |---|---:|---:|---:|---|
@@ -16,12 +73,12 @@ handwritten digits. A numpy re-implementation (`refcheck.py`) reproduces its res
 Limit: 32,768 bytes. Worst case above leaves 2,112 bytes spare. Sizes are from `gcc 13.3 / binutils 2.42 / glibc 2.39, x86-64 Linux`;
 run `make measure` to get them on your machine. The exact files measured are committed in `dist/` with `SHA256SUMS`.
 
-## Try it (C compiler, make, sh, awk, cmp, SHA-256 tools; python3 + numpy and GNU objcopy for complete verification)
+## Local command reference (use a disposable checkout; full prerequisites in the reproduction guide)
 
 ```sh
 make                 # builds ./uai32 (9,188 bytes) and ./uai32.elf with section headers for inspection
 python3 get_mnist.py # downloads and validates the four pinned MNIST source archives
-make dist            # trains all four models, evaluates them, checks sizes, then replaces dist/
+make measure         # trains all four models into work/; preserves the committed dist/
 make test            # audit exploit regressions; requires sanitizer support in the compiler
 make verify          # exactly 28 mandatory checks; missing prerequisites cause failure
 ```
@@ -101,7 +158,7 @@ refused rather than silently normalised with scale 0.
   | 8 … 8+8·NI | `mean[NI]`, `scale[NI]` as exact float32 (a rounded mean would shift every input) |
   | then | each weight as **bfloat16**: the top 16 bits of its IEEE-754 float, rounded to nearest even |
 
-  bfloat16 keeps the float32 exponent and 8 bits of mantissa (3 significant digits). It halves the file
+  bfloat16 keeps the float32 exponent and 7 explicit fraction bits (8 bits of precision including the implicit leading bit). It halves the file
   for a negligible accuracy cost (MNIST: 97.8% both ways) and loading is a 16-bit shift. Weights are
   trained in float32 and rounded only when saved. File size = `8 + 8·NI + 2·(NH·(NI+1) + NO·(NH+1))`.
 * **Data format.** Text, one example per line: the features, then the integer label (`0,1,2,…`). The
@@ -109,7 +166,7 @@ refused rather than silently normalised with scale 0.
   same rows from stdin and ignores extra numeric columns after the features, so a labelled file can be piped
   straight in (a non-numeric token anywhere in a row is an error).
 
-## Where the 9,188 bytes go, and why nothing else counts
+## Executable layout and host-library exclusions
 
 The executable is a normal dynamically linked ELF that uses the C library already on the machine
 (`libc.so.6`, `libm.so.6`, the dynamic loader) for file I/O, formatting, elementary math and numeric parsing.
@@ -151,7 +208,7 @@ A default `gcc -O2 -s` build of the same source is about 18 KB.
 * Sizes are u16, so at most 65,535 features, hidden units or classes, and at most 100 million parameters; the dataset is held in memory as floats. Labels are integers 0..65,534. HIDDEN is an integer 0..65,535 (0 is a continuation placeholder; a new model requires at least 1). EPOCHS is an integer 0..2,147,483,646; 0 saves initialization without training. SEED is an unsigned 32-bit decimal integer; 0 retains the original alias for seed 1. RATE must be finite, positive and at most 1,000,000.
 * Invalid numeric tokens, non-finite loaded parameters, negative normalization scales, truncated/trailing model bytes and numeric overflow fail non-zero. Continued training restores saved bfloat16 weights and reseeds its shuffle; it is not an exact interrupted float32 training resume.
 * Reproducibility is byte-exact on one machine; another libm may round `expf` differently, which changes
-  low bits of the weights (not the accuracy).
+  low bits of the weights and potentially the accuracy. The gates must still pass.
 * The text data format is slow for big data (loading the 28 MB MNIST file takes about half a second), chosen because it is the simplest to audit.
 * `nm`/`objdump` want section headers, so inspect `uai32.elf`; it is the same link with the table kept.
 
