@@ -1,6 +1,6 @@
 # Sentovara µAI-32
 
-A genuinely trainable neural network, written in 213 lines of plain C, whose **executable plus saved learned
+A genuinely trainable neural network, written in 216 lines of plain C, whose **executable plus saved learned
 state fits in 32,768 bytes**. It learns from examples by gradient descent, changes its weights, generalises
 to examples it has never seen, saves what it learned to a file, reloads it in a fresh process and keeps
 predicting (or keeps training). Nothing is hard-coded: the same 7 KB program learns flowers, spirals and
@@ -8,18 +8,18 @@ handwritten digits. A numpy re-implementation (`refcheck.py`) reproduces its res
 
 | model (trained by `make measure`) | executable | model file | **combined** | held-out accuracy |
 |---|---:|---:|---:|---|
-| iris (4 features, 3 classes, 8 hidden)        | 7,452 B | 174 B    | **7,626 B**  | 96.7% on 30 unseen flowers |
-| spirals (2 features, 2 classes, 32 hidden)    | 7,452 B | 348 B    | **7,800 B**  | 99.3% on 300 unseen points |
-| rings (2 features, 3 classes, 16 hidden)      | 7,452 B | 222 B    | **7,674 B**  | 100% on 300 unseen points |
-| MNIST digits 14×14 (196 features, 10 classes, 48 hidden) | 7,452 B | 21,468 B | **28,920 B** | **97.8%** on the 10,000 unseen test digits |
+| iris (4 features, 3 classes, 8 hidden)        | 7,732 B | 174 B    | **7,906 B**  | 96.7% on 30 unseen flowers |
+| spirals (2 features, 2 classes, 32 hidden)    | 7,732 B | 348 B    | **8,080 B**  | 99.3% on 300 unseen points |
+| rings (2 features, 3 classes, 16 hidden)      | 7,732 B | 222 B    | **7,954 B**  | 100% on 300 unseen points |
+| MNIST digits 14×14 (196 features, 10 classes, 48 hidden) | 7,732 B | 21,468 B | **29,200 B** | **97.8%** on the 10,000 unseen test digits |
 
-Limit: 32,768 bytes. Worst case above leaves 3,848 bytes spare. Sizes are from `gcc 13.3 / glibc 2.39, x86-64 Linux`;
+Limit: 32,768 bytes. Worst case above leaves 3,568 bytes spare. Sizes are from `gcc 13.3 / glibc 2.39, x86-64 Linux`;
 run `make measure` to get them on your machine. The exact files measured are committed in `dist/` with `SHA256SUMS`.
 
-## Try it (needs a C compiler, make, sh, awk; python3 + numpy only for regenerating data)
+## Try it (needs a C compiler, make, sh, awk, cmp; python3 + numpy only for the data scripts and `refcheck.py`)
 
 ```sh
-make            # builds ./uai32 (7,452 bytes) and ./uai32.elf (same binary with section headers, for nm/objdump)
+make            # builds ./uai32 (7,732 bytes) and ./uai32.elf (same binary with section headers, for nm/objdump)
 make verify     # 24 PASS/FAIL checks (23 before MNIST is trained), in about a second
 make measure    # trains the demo models into work/ and prints the size table
 ```
@@ -29,17 +29,17 @@ The whole interface is three verbs:
 ```sh
 $ ./uai32 train data/iris_train.txt iris.model 8 60 0.05 1      # HIDDEN EPOCHS RATE SEED
 new model: 4 inputs, 8 hidden, 3 classes, 75 parameters
-epoch 1/60  train loss 0.5715  accuracy 85/120 = 70.8%
+epoch 1/60  train loss 0.5715  accuracy 109/120 = 90.8%
 ...
 epoch 60/60  train loss 0.0802  accuracy 116/120 = 96.7%
 
-$ ./uai32 test data/iris_test.txt iris.model                     # 30 flowers never used in training
-test loss 0.0808  accuracy 29/30 = 96.7%
+$ ./uai32 test data/iris_test.txt iris.model                     # 30 flowers held out from training
+test loss 0.0794  accuracy 29/30 = 96.7%
 
 $ head -3 data/iris_test.txt | ./uai32 predict iris.model        # class, then probability of each class
 0 0.999 0.001 0.000
 1 0.001 0.998 0.001
-1 0.001 0.909 0.091
+1 0.001 0.912 0.087
 
 $ ./uai32 train data/iris_train.txt iris.model 0 20 0.01         # file exists -> reload and keep learning
 continuing: 4 inputs, 8 hidden, 3 classes
@@ -54,7 +54,7 @@ For the digits: `python3 get_mnist.py` downloads MNIST (11 MB) and writes it as 
 |---|---|
 | learns from examples | iris held-out accuracy 53% with the random initial weights (saved after 0 epochs) → 96.7% after 60 epochs; training loss 0.57 → 0.08 |
 | alters internal state | the 174-byte model file before and after training differs (`cmp`) |
-| generalises to unseen examples | train/test files are disjoint splits: iris 96.7%, spirals 99.3%, rings 100% on the test files |
+| generalises to unseen examples | train/test files are disjoint splits (checked; the UCI iris file itself contains duplicate flowers, so one iris test row has a verbatim twin in training): iris 96.7%, spirals 99.3%, rings 100% on the test files |
 | ...and not by accident | **control**: trained on the spirals with scrambled labels it scores 47% on the real test set (chance = 50%) |
 | saves what it learned | `train` writes the model file; `test`/`predict` are separate processes that only have that file |
 | reloads it and continues inference | a copy of the model file, read by a fresh process, gives byte-identical predictions, 99.3% correct |
@@ -91,18 +91,18 @@ For the digits: `python3 get_mnist.py` downloads MNIST (11 MB) and writes it as 
   feature count comes from the first line, the class count from the largest label. `predict` reads the
   same rows from stdin and ignores anything after the features, so a labelled file can be piped straight in.
 
-## Where the 7,452 bytes go, and why nothing else counts
+## Where the 7,732 bytes go, and why nothing else counts
 
 The executable is a normal dynamically linked ELF that uses the C library already on the machine
-(`libc.so.6`, `libm.so.6`, the dynamic loader) for file I/O, `printf`, `expf`, `log`, `sqrtf` and `strtof`.
+(`libc.so.6`, `libm.so.6`, the dynamic loader) for file I/O, `printf`, `expf`, `logf` and `strtof` (`sqrtf` is inlined to one instruction).
 Those are the "operating-system libraries already provided" that the challenge excludes, as are the source,
 the compiler and the datasets.
 
 | part | bytes | what |
 |---|---:|---|
 | code (`.text`) | ≈3,900 | forward pass, backprop, file format, data reader, CLI |
-| dynamic linking tables (`.dynsym`, `.dynstr`, `.rela.dyn`, `.dynamic`, `.got`, version info) | ≈1,900 | the 16 libc/libm symbols it imports |
-| strings (`.rodata`) | ≈650 | messages and `printf` formats |
+| dynamic linking tables (`.dynsym`, `.dynstr`, `.rela.dyn`, `.dynamic`, `.got`, version info) | ≈2,000 | the 17 libc/libm symbols it imports |
+| strings (`.rodata`) | ≈750 | messages and `printf` formats |
 | ELF + program headers, interpreter path, crt start-up code | ≈1,000 | |
 
 The `Makefile` gets there with ordinary flags, no hand-written assembly and no packer:
@@ -128,17 +128,17 @@ A default `gcc -O2 -s` build of the same source is about 18 KB.
 
 * One hidden layer, plain SGD with a constant rate per run: good for tabular data and small images, not a
   language model. Learning-rate decay is done by hand with a second, lower-rate `train` run on the same file.
-* Sizes are u16, so at most 65,535 features, hidden units or classes; the dataset is held in memory as floats.
+* Sizes are u16, so at most 65,535 features, hidden units or classes, and at most 100 million parameters; the dataset is held in memory as floats. SEED is a 32-bit integer.
 * Reproducibility is byte-exact on one machine; another libm may round `expf` differently, which changes
   low bits of the weights (not the accuracy).
-* The text data format is slow for big data (MNIST load ≈ 2 s), chosen because it is the simplest to audit.
+* The text data format is slow for big data (loading the 28 MB MNIST file takes about half a second), chosen because it is the simplest to audit.
 * `nm`/`objdump` want section headers, so inspect `uai32.elf`; it is the same link with the table kept.
 
 ## Files
 
 | file | purpose |
 |---|---|
-| `uai32.c` | the program (213 lines) |
+| `uai32.c` | the program (216 lines) |
 | `Makefile` | `make`, `make verify`, `make measure`, `make dist`, `make clean` |
 | `refcheck.py` | numpy re-implementation of inference + gradient check of one SGD step |
 | `verify.sh` | the evidence script |

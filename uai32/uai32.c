@@ -43,6 +43,7 @@ static float frand(void) {             /* uniform in [-1, 1) */
 static int nparams(void) { return 2 * NI + NH * (NI + 1) + NO * (NH + 1); }
 
 static void alloc(void) {
+    if (NI < 1 || NH < 1 || NO < 1 || (double)NH * (NI + 1) + (double)NO * (NH + 1) + 2.0 * NI > 1e8) die("bad size");
     P = calloc(nparams(), sizeof *P);
     xn = calloc(NI + 2 * NH + 2 * NO, sizeof *xn);
     if (!P || !xn) die("out of memory");
@@ -134,6 +135,7 @@ static void read_data(const char *path, int need_labels) {    /* fixes NI if it 
             if (!X || !Y) die("out of memory");
         }
         parse(line, row, NI + 1);
+        for (n = 0; n < NI; n++) if (!(row[n] - row[n] == 0)) die("feature is not a finite number");   /* NaN or inf */
         memcpy(X + (size_t)N * NI, row, NI * sizeof *X);
         if (need_labels) {
             if (row[NI] < 0 || row[NI] != (int)row[NI]) die("labels must be non-negative integers");
@@ -153,7 +155,7 @@ static void report(const char *tag) {
 }
 
 static void usage(void) {
-    die("usage:\n  uai32 train DATA MODEL [HIDDEN=16] [EPOCHS=50] [RATE=0.05] [SEED=1]\n"
+    die("usage:\n  uai32 train DATA MODEL [HIDDEN=16] [EPOCHS=50] [RATE=0.05] [SEED=1 (integer)]\n"
         "  uai32 test DATA MODEL\n  uai32 predict MODEL < rows");
 }
 
@@ -181,13 +183,14 @@ int main(int argc, char **argv) {
     if (strcmp(argv[1], "train")) usage();                     /* ---- train (fresh or continued) ---- */
     int hidden = argc > 4 ? strtof(argv[4], 0) : 16, epochs = argc > 5 ? strtof(argv[5], 0) : 50;
     float lr = argc > 6 ? strtof(argv[6], 0) : 0.05f;
-    rng = argc > 7 ? strtof(argv[7], 0) : 1; if (!rng) rng = 1;
+    rng = argc > 7 ? strtoul(argv[7], 0, 10) : 1; if (!rng) rng = 1;
+    if (!(lr > 0) || lr > 1e6f) die("RATE must be a positive number");
     int resumed = load(argv[3]);
     read_data(argv[2], 1);
     if (!resumed) {
         NH = hidden; NO = 0;
         for (i = 0; i < N; i++) if (Y[i] >= NO) NO = Y[i] + 1;
-        if (NH < 1 || NI < 1 || NI > 65535 || NH > 65535 || NO > 65535) die("bad size");
+        if (NI > 65535 || NH > 65535 || NO > 65535) die("bad size");
         alloc();
         for (j = 0; j < NI; j++) {                             /* feature normalisation: shift by the mean, scale by the range */
             float lo = X[j], hi = X[j]; double s = 0;

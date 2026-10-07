@@ -32,16 +32,16 @@ T1=$(tail -1 $W/iris_train.out | awk -F'= ' '{print $2+0}'); T2=$(acc data/iris_
 check $([ "$T1" = "$T2" ] && echo 1 || echo 0) "the reloaded bfloat16 model scores the same on the training set as the in-memory float32 one ($T1%)"
 
 echo "== 2. it alters internal state: the saved weights change"
-if cmp -s $W/iris0.model $W/iris.model; then check 0 "model bytes changed"; else check 1 "model file changed (same size: $(size $W/iris0.model) -> $(size $W/iris.model) bytes)"; fi
+if [ -s $W/iris0.model ] && [ -s $W/iris.model ] && ! cmp -s $W/iris0.model $W/iris.model; then check 1 "model file changed (same size: $(size $W/iris0.model) -> $(size $W/iris.model) bytes)"; else check 0 "model bytes changed"; fi
 
 echo "== 3. it generalises: accuracy on examples never seen in training"
 D=$(sort data/spirals_train.txt data/spirals_test.txt data/rings_train.txt data/rings_test.txt | uniq -d | wc -l)
-DI=$(sort data/iris_train.txt data/iris_test.txt | uniq -d | wc -l)
-check $((D == 0)) "no spirals/rings test row also appears in training (iris has $DI exact-duplicate flowers in the source data that land on both sides)"
+sort -u data/iris_train.txt > $W/a.txt; sort -u data/iris_test.txt > $W/b.txt; DI=$(comm -12 $W/a.txt $W/b.txt | wc -l | tr -d ' ')
+check $((D == 0)) "no spirals/rings test row also appears in training ($DI iris test row is a verbatim duplicate of a training row: the UCI file itself has duplicate flowers)"
 ./uai32 train data/spirals_train.txt $W/spirals.model 32 500 0.05 1 > /dev/null
 ./uai32 train data/rings_train.txt   $W/rings.model   16 200 0.05 1 > /dev/null
 S=$(acc data/spirals_test.txt $W/spirals.model); R=$(acc data/rings_test.txt $W/rings.model)
-check $(ge "$A1" 90 && echo 1 || echo 0) "iris:    $A1% on 30 unseen flowers"
+check $(ge "$A1" 90 && echo 1 || echo 0) "iris:    $A1% on 30 held-out flowers"
 check $(ge "$S" 95 && echo 1 || echo 0)  "spirals: $S% on 300 unseen points (curved boundary, 2 classes)"
 check $(ge "$R" 95 && echo 1 || echo 0)  "rings:   $R% on 300 unseen points (3 concentric classes)"
 # Control: destroy the relationship between features and labels; the model must then fail on the test set.

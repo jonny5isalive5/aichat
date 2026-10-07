@@ -11,12 +11,15 @@ PROG    := uai32
 CFLAGS  ?= -std=c99 -Os -Wall -Wextra -pedantic -ffp-contract=off -U_FORTIFY_SOURCE -fno-asynchronous-unwind-tables \
            -fno-stack-protector -fno-ident -fno-pie -fno-plt -fcf-protection=none -fno-math-errno \
            -ffunction-sections -fdata-sections
-LDFLAGS ?= -s -no-pie -Wl,--gc-sections -Wl,-z,now -lm
-# GNU ld only: remove page-alignment padding and metadata that costs bytes on disk.
+LDFLAGS ?= -s -no-pie
+LDLIBS  ?= -lm
+# GNU ld only: drop unused sections, bind at load time (needed by -fno-plt), and remove page-alignment
+# padding and metadata that costs bytes on disk.
 ifeq ($(shell uname -s),Linux)
-LDFLAGS += -Wl,--build-id=none -Wl,-z,norelro -Wl,-z,noseparate-code -Wl,--hash-style=gnu \
-           -Wl,-z,max-page-size=4096 -Wl,--no-eh-frame-hdr
+LDFLAGS += -Wl,--gc-sections -Wl,-z,now -Wl,--build-id=none -Wl,-z,norelro -Wl,-z,noseparate-code \
+           -Wl,--hash-style=gnu -Wl,-z,max-page-size=4096 -Wl,--no-eh-frame-hdr
 endif
+SHA256 := $(shell command -v sha256sum > /dev/null 2>&1 && echo sha256sum || echo "shasum -a 256")
 # The section header table is only read by linkers and debuggers, never by the kernel or the dynamic
 # loader.  binutils >= 2.41 can leave it out; older ones keep it (about 1.8 KB more).
 NOSH := $(shell printf 'int main(){return 0;}' | $(CC) -x c - -o /dev/null -Wl,-z,nosectionheader 2>/dev/null && echo -Wl,-z,nosectionheader)
@@ -24,10 +27,10 @@ NOSH := $(shell printf 'int main(){return 0;}' | $(CC) -x c - -o /dev/null -Wl,-
 all: $(PROG) $(PROG).elf
 
 $(PROG): uai32.c
-	$(CC) $(CFLAGS) $< -o $@ $(LDFLAGS) $(NOSH)
+	$(CC) $(CFLAGS) $< -o $@ $(LDFLAGS) $(NOSH) $(LDLIBS)
 
 $(PROG).elf: uai32.c                     # identical build with section headers, for nm/objdump/readelf -S
-	$(CC) $(CFLAGS) $< -o $@ $(LDFLAGS)
+	$(CC) $(CFLAGS) $< -o $@ $(LDFLAGS) $(LDLIBS)
 
 measure: $(PROG)
 	@./measure.sh
@@ -39,7 +42,7 @@ dist: $(PROG)
 	@./measure.sh > /dev/null
 	@rm -rf dist && mkdir dist && cp $(PROG) dist/
 	@for n in iris spirals rings mnist14; do [ -f work/$$n.model ] && cp work/$$n.model dist/; done; true
-	@cd dist && sha256sum $(PROG) *.model > SHA256SUMS && cat SHA256SUMS && wc -c $(PROG) *.model
+	@cd dist && $(SHA256) $(PROG) *.model > SHA256SUMS && cat SHA256SUMS && wc -c $(PROG) *.model
 
 clean:
 	rm -rf $(PROG) $(PROG).elf work dist

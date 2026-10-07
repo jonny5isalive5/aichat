@@ -23,11 +23,12 @@ def fetch(name):
     if not os.path.exists(path):
         for m in MIRRORS:
             try:
-                print("downloading", m + name); urllib.request.urlretrieve(m + name, path); break
-            except Exception as e:  # try the next mirror
+                print("downloading", m + name); urllib.request.urlretrieve(m + name, path + ".part"); break
+            except Exception as e:  # try the next mirror; a half-written file is never kept
                 print("  failed:", e)
         else:
             sys.exit("could not download " + name)
+        os.replace(path + ".part", path)
     return gzip.open(path).read()
 
 def main(full):
@@ -39,7 +40,7 @@ def main(full):
         if not full:  # 2x2 average pooling, 28x28 -> 14x14
             X = X.reshape(n, 14, 2, 14, 2).mean(axis=(2, 4)).round().astype(np.uint8)
         X = X.reshape(n, -1)
-        name = f"mnist{X.shape[1] and (28 if full else 14)}_{split}.txt"
+        name = f"mnist{28 if full else 14}_{split}.txt"
         with open(os.path.join(OUT, name), "w") as f:
             for row, lab in zip(X, y):
                 f.write(" ".join(map(str, row.tolist())) + f" {lab}\n")
