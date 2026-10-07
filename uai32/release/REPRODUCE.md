@@ -26,8 +26,10 @@ cd uai32
 Expected HEAD: `3e924e600ef6b65eff9f00668cb283b259930049`. Expected initial status: empty.
 Release documentation and the added Apache-2.0 license live in a later review overlay; they are absent
 from this frozen checkout. Keep the reviewed documentation/evidence beside this checkout.
-For the assembled release package, inspect `release/PROVENANCE.json` and the package checksum
-manifest; its code/artifact baseline remains this SHA even though the documentation is newer.
+Before publishing an assembled release package, prepare and verify a checksum manifest for that package
+alongside `release/PROVENANCE.json`. The current `dist/SHA256SUMS` covers only the five audited executable/model
+artifacts, not the complete release overlay. The code/artifact baseline remains this SHA even though the
+documentation is newer.
 
 ## 2. Check the committed artifact identity before rebuilding
 

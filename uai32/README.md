@@ -1,5 +1,15 @@
 # Sentovara µAI-32
 
+**AI engineering contributors**\
+OpenAI GPT-5.6 Sol\
+Anthropic Fable 5.1\
+OpenAI Codex
+
+**Project direction and release stewardship**\
+Sentovara
+
+µAI-32 was developed through collaborative human direction and AI-assisted engineering, implementation, adversarial review, verification, and release preparation.
+
 A trainable neural classifier in plain C, with its executable and saved learned state under 32,768 bytes.
 It trains by stochastic gradient descent, saves and reloads its weights, and supports inference and continued training.
 
@@ -76,7 +86,7 @@ run `make measure` to get them on your machine. The exact files measured are com
 ## Local command reference (use a disposable checkout; full prerequisites in the reproduction guide)
 
 ```sh
-make                 # builds ./uai32 (9,188 bytes) and ./uai32.elf with section headers for inspection
+make                 # builds ./uai32 and ./uai32.elf; byte size depends on the toolchain
 python3 get_mnist.py # downloads and validates the four pinned MNIST source archives
 make measure         # trains all four models into work/; preserves the committed dist/
 make test            # audit exploit regressions; requires sanitizer support in the compiler
@@ -107,18 +117,18 @@ continuing: 4 inputs, 8 hidden, 3 classes
 For the digits: `python3 get_mnist.py` downloads MNIST (11 MB) and writes it as text, then `make measure` trains
 196-48-10 for 12 epochs at rate 0.01 plus 4 epochs at 0.002 (about 15 s) and `./uai32 test data/mnist14_test.txt work/mnist14.model` reports the accuracy.
 
-## What `make verify` proves
+## What `make verify` checks
 
 | requirement | evidence (all printed by `verify.sh`) |
 |---|---|
 | learns from examples | iris held-out accuracy 53% with the random initial weights (saved after 0 epochs) → 96.7% after 60 epochs; training loss 0.57 → 0.08 |
 | alters internal state | the 174-byte model file before and after training differs (`cmp`) |
-| generalises to unseen examples | train/test files are disjoint splits (checked; the UCI iris file itself contains duplicate flowers, so one iris test row has a verbatim twin in training): iris 96.7%, spirals 99.3%, rings 100% on the test files |
+| evaluates examples outside the training split | spirals/rings train/test rows are disjoint (checked); the UCI iris file contains duplicate flowers, so one iris test row has a verbatim twin in training: iris 96.7%, spirals 99.3%, rings 100% on the test files |
 | ...and not by accident | **control**: trained on the spirals with scrambled labels it scores 47% on the real test set (chance = 50%) |
 | saves what it learned | `train` writes the model file; `test`/`predict` are separate processes that only have that file |
 | reloads it and continues inference | a copy of the model file, read by a fresh process, gives byte-identical predictions, 99.3% correct |
 | continues training | `train` on an existing file prints `continuing`, changes the weights and keeps learning (100 more epochs at a lower rate) |
-| the maths is right | `refcheck.py` (numpy, no C) re-implements inference from the file-format description and reproduces the C accuracy and loss exactly; one C SGD step matches the analytic softmax cross-entropy gradient |
+| numerical reference agreement | `refcheck.py` (NumPy) independently computes inference and compares it with the C output: exact correct/total counts and displayed accuracy, finite loss within 0.0001; one C SGD step agrees with the analytic gradient within 10% relative error for weights whose updates exceed bfloat16 rounding noise |
 | the build is honest | building twice gives identical bytes; `uai32` is byte-for-byte `uai32.elf` minus the section header table (`objcopy --strip-section-headers`) |
 | reproducible | two runs with the same data and seed write byte-identical model files |
 | size limit | executable + each model ≤ 32,768 bytes, numbers printed; each model file's size equals the formula computed from its own header |
@@ -155,7 +165,7 @@ refused rather than silently normalised with scale 0.
   |---|---|
   | 0–1 | magic `0xA132` |
   | 2–3, 4–5, 6–7 | `NI`, `NH`, `NO` as u16 |
-  | 8 … 8+8·NI | `mean[NI]`, `scale[NI]` as exact float32 (a rounded mean would shift every input) |
+  | 8 … 8+8·NI−1 | `mean[NI]`, `scale[NI]` as exact float32 (a rounded mean would shift every input) |
   | then | each weight as **bfloat16**: the top 16 bits of its IEEE-754 float, rounded to nearest even |
 
   bfloat16 keeps the float32 exponent and 7 explicit fraction bits (8 bits of precision including the implicit leading bit). It halves the file
@@ -185,7 +195,8 @@ The `Makefile` gets there with ordinary flags, no hand-written assembly and no p
 `-fcf-protection=none`, `--gc-sections`, `--build-id=none`, `-z noseparate-code` (no page padding between
 segments), `-s`, and `-z nosectionheader`, which leaves out the ELF *section header table* that only linkers
 and debuggers read (about 1.8 KB; `ldd`, `readelf -l` and the kernel never look at it). `-ffp-contract=off`
-forbids fused multiply-adds so model bytes do not depend on the optimisation level or CPU. `uai32.elf` is the
+forbids fused multiply-add contraction, reducing one source of numerical variation; it does not guarantee
+identical model bytes across optimisation levels, CPUs or host libraries. `uai32.elf` is the
 same link with the table kept, for `nm`/`objdump`; `verify.sh` proves the two are otherwise identical.
 A default `gcc -O2 -s` build of the same source is about 18 KB.
 

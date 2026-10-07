@@ -1,5 +1,15 @@
 # Sentovara µAI-32 — public release draft
 
+**AI engineering contributors**\
+OpenAI GPT-5.6 Sol\
+Anthropic Fable 5.1\
+OpenAI Codex
+
+**Project direction and release stewardship**\
+Sentovara
+
+µAI-32 was developed through collaborative human direction and AI-assisted engineering, implementation, adversarial review, verification, and release preparation.
+
 Prepared 7 October 2026. **Review only: no release tag or GitHub release has been published.**
 
 ## Claim
@@ -66,3 +76,8 @@ identify its actual commit; keep `3e924e600ef6b65eff9f00668cb283b259930049` expl
 Any subsequent code/artifact change needs fresh evidence before the claim is carried forward.
 Apache-2.0 is the owner's selected project license; datasets retain the terms in
 [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md).
+
+Before publication, confirm the upstream MNIST dataset terms recorded by the downloader; the historical
+homepage was unavailable during this documentation review. No MNIST dataset files are bundled.
+Prepare and verify the final release package and its checksum manifest, then update this draft's
+status text for the approved tag and publication state.

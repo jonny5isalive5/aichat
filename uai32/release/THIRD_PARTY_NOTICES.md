@@ -21,9 +21,14 @@ These transformations and that caveat are retained; the data is not relicensed u
 ## MNIST
 
 Yann LeCun, Corinna Cortes and Christopher J. C. Burges, *The MNIST database of handwritten digits*.
-See the [dataset homepage](https://yann.lecun.org/exdb/mnist/) and the
-[CVDF mirror](https://github.com/cvdfoundation/mnist).
+See the [historical dataset homepage](http://yann.lecun.com/exdb/mnist/), as linked by the
+[CVDF mirror](https://github.com/cvdfoundation/mnist) and
+[TensorFlow Datasets catalog](https://www.tensorflow.org/datasets/catalog/mnist).
+The homepage was unavailable during the 7 October 2026 documentation review; the mirror remains
+available for dataset provenance and download information.
 The preserved downloader identifies MNIST as CC BY-SA 3.0; this attribution is part of the audited source.
+That source comment is not independent confirmation of the upstream terms. Confirm those terms before
+publication or any redistribution of MNIST dataset material; this overlay makes no new data-license grant.
 The release package includes no MNIST images, labels, source archives or generated text dataset files.
 Reproduction downloads the four hash-pinned archives from the documented CVDF/OSSCI mirrors and uses
 2×2 average pooling with rounding to convert 28×28 images into 14×14 integer features.
