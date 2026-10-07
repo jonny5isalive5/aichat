@@ -103,7 +103,8 @@ and malformed MNIST caches/downloads. Neither failed measurement nor failed pack
   trained in float32 and rounded only when saved. File size = `8 + 8·NI + 2·(NH·(NI+1) + NO·(NH+1))`.
 * **Data format.** Text, one example per line: the features, then the integer label (`0,1,2,…`). The
   feature count comes from the first line, the class count from the largest label. `predict` reads the
-  same rows from stdin and ignores anything after the features, so a labelled file can be piped straight in.
+  same rows from stdin and ignores extra numeric columns after the features, so a labelled file can be piped
+  straight in (a non-numeric token anywhere in a row is an error).
 
 ## Where the 9,060 bytes go, and why nothing else counts
 
@@ -137,7 +138,7 @@ A default `gcc -O2 -s` build of the same source is about 18 KB.
 * MNIST (not committed, 11 MB): `get_mnist.py` downloads the four IDX files from the cvdf-datasets or
   ossci-datasets mirrors and average-pools each 28×28 image to 14×14 (196 integers 0–255), writing
   `data/mnist14_train.txt` (60,000 rows) and `data/mnist14_test.txt` (10,000 rows). `--full` keeps 28×28.
-  Cached and newly downloaded archives must match the pinned source hashes; IDX magic, 28×28 dimensions,
+  Cached and newly downloaded archives must match the pinned SHA-256 source hashes; IDX magic, 28×28 dimensions,
   split counts, exact payload lengths, image/label agreement and labels 0..9 are checked before use.
 
 ## Honest limits

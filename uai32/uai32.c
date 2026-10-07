@@ -15,7 +15,7 @@
  * DATA format: one example per line, whitespace-separated numbers: the features, then the
  * integer class label (0,1,2,...).  The number of features is taken from the first line.
  * Blank lines and lines that do not start with a number are skipped.  `predict` reads rows
- * from stdin and ignores anything after the features, so a labelled file can be piped in.
+ * from stdin and ignores extra numeric columns after the features, so a labelled file can be piped in.
  *
  * MODEL format (all little-endian):  u16 magic 0xA132, u16 NI, u16 NH, u16 NO, then the
  * parameters in the order mean[NI], scale[NI], W1[NH][NI+1], W2[NO][NH+1] (last column = bias).

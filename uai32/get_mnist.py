@@ -6,6 +6,8 @@
 
 By default each 28x28 image is average-pooled 2x2 to 14x14 = 196 features (integers 0..255),
 which keeps the text files and the training time small.  Files are not committed (see .gitignore).
+Every archive, cached or freshly downloaded, must match its pinned SHA-256; the IDX magic numbers,
+counts, dimensions, lengths and image/label agreement are validated; anything malformed exits non-zero.
 Source: Yann LeCun / Corinna Cortes / Christopher Burges, MNIST database (CC BY-SA 3.0),
 mirrored at storage.googleapis.com/cvdf-datasets/mnist/ and ossci-datasets.s3.amazonaws.com/mnist/.
 """
@@ -17,15 +19,15 @@ OUT = os.path.join(HERE, "data")
 MIRRORS = ["https://storage.googleapis.com/cvdf-datasets/mnist/", "https://ossci-datasets.s3.amazonaws.com/mnist/"]
 FILES = {"train": ("train-images-idx3-ubyte.gz", "train-labels-idx1-ubyte.gz"),
          "test": ("t10k-images-idx3-ubyte.gz", "t10k-labels-idx1-ubyte.gz")}
-HASHES = {"train-images-idx3-ubyte.gz": "f68b3c2dcbeaaa9fbdd348bbdeb94873",
-          "train-labels-idx1-ubyte.gz": "d53e105ee54ea40749a09fcbcd1e9432",
-          "t10k-images-idx3-ubyte.gz": "9fb629c4189551a2d022fa330f9573f3",
-          "t10k-labels-idx1-ubyte.gz": "ec29112dd5afa0611ce80d1b7f02629c"}
+HASHES = {"train-images-idx3-ubyte.gz": "440fcabf73cc546fa21475e81ea370265605f56be210a4024d2ca8f203523609",   # SHA-256
+          "train-labels-idx1-ubyte.gz": "3552534a0a558bbed6aed32b30c495cca23d567ec52cac8be1a0730e8010255c",
+          "t10k-images-idx3-ubyte.gz": "8d422c7b0a1c1c79245a5bcf07fe86e33eeafee792b84584aec276f5a2dbc4e6",
+          "t10k-labels-idx1-ubyte.gz": "f7ae60f92e00ec6debd23a6088c31dbd2371eca3ffa0defaefb259924204aec6"}
 
 def checked_archive(path, name):
     with open(path, "rb") as f:
         compressed = f.read()
-    if hashlib.md5(compressed).hexdigest() != HASHES[name]:
+    if hashlib.sha256(compressed).hexdigest() != HASHES[name]:
         raise ValueError("MNIST source hash mismatch: " + name)
     return gzip.decompress(compressed)
 
