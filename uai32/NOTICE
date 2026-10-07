@@ -1,0 +1,15 @@
+Sentovara µAI-32
+Copyright 2026 Sentovara µAI-32 contributors
+
+Repository: https://github.com/jonny5isalive5/aichat
+Audited implementation: 3e924e600ef6b65eff9f00668cb283b259930049
+
+Project code and release documentation in uai32/ are licensed under the Apache
+License, Version 2.0. See LICENSE. Dataset terms are separate; see
+release/THIRD_PARTY_NOTICES.md. Host libraries and development tools are not
+bundled or relicensed. This notice does not license the unrelated SkyLinks or
+golf projects in the repository.
+
+This release overlay changes README.md and adds licensing, documentation and
+evidence copies. The audited implementation, tests, size accounting, datasets
+and committed dist/ bytes remain unchanged.
