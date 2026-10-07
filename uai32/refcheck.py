@@ -7,7 +7,7 @@
                                            softmax cross-entropy (needs ./uai32 in the same directory)
 Exit status 0 if both agree, 1 otherwise.
 """
-import os, subprocess, sys, tempfile
+import os, subprocess, sys, tempfile, re, math
 import numpy as np
 
 def load(path):
@@ -36,9 +36,20 @@ def main(model, data):
         _, _, z, lse = forward(xi, mean, scale, W1, W2)
         ok += z.argmax() == yi; loss += lse - z[yi]
     print(f"numpy: loss {loss / len(y):.4f}  accuracy {int(ok)}/{len(y)} = {100 * ok / len(y):.1f}%")
-    c = subprocess.run(["./uai32", "test", data, model], capture_output=True, text=True).stdout.strip()
+    evaluation = subprocess.run(["./uai32", "test", data, model], capture_output=True, text=True)
+    c = evaluation.stdout.strip()
     print("c:    ", c)
-    same = c.split()[-3:] == f"{int(ok)}/{len(y)} = {100 * ok / len(y):.1f}%".split()
+    match = re.fullmatch(r"test loss (\S+)  accuracy (\d+)/(\d+) = (\S+)%", c)
+    same = evaluation.returncode == 0 and match is not None
+    if same:
+        closs, correct, count, accuracy = match.groups()
+        closs, accuracy = float(closs), float(accuracy)
+        same = (math.isfinite(closs) and math.isfinite(accuracy)
+                and int(correct) == int(ok) and int(count) == len(y)
+                and accuracy == float(f"{100 * ok / len(y):.1f}")
+                and abs(closs - loss / len(y)) <= 0.0001)
+    if not same:
+        print("DISAGREE: evaluation status, accuracy or loss"); return 1
     # Gradient check: one SGD step on one example with a tiny rate, compared with the analytic gradient.
     xi = X[0]; xn, h, z, lse = forward(xi, mean, scale, W1, W2)
     lr, yi = 0.5, (int(z.argmax()) + 1) % len(z)   # a wrong label and a big rate: the update must dwarf bfloat16 rounding

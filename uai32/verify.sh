@@ -1,25 +1,29 @@
 #!/bin/sh
 # verify.sh -- evidence that uAI-32 meets every requirement of the Sentovara challenge.
 # Every check prints PASS or FAIL with the numbers behind it; the exit status is non-zero if any check fails.
-# Needs: sh, make, a C compiler, awk, cmp; python3+numpy and objcopy enable two extra checks.  Runs in a few seconds.
-set -u
+# Full verification requires python3+numpy, GNU objcopy and prepared MNIST data/models. No checks are optional.
+set -eu
 cd "$(dirname "$0")"
-LIMIT=32768; W=work; FAIL=0
+LIMIT=32768; W=work; FAIL=0; CHECKS=0; EXPECTED=28
 mkdir -p $W; cd $W && rm -f iris0.model iris.model iris_again.model spirals.model rings.model scrambled.model copy.model more.model twin *.txt *.out; cd ..
 size() { wc -c < "$1" | tr -d ' '; }
-acc()  { ./uai32 test "$1" "$2" | awk -F'= ' '{print $2+0}'; }   # held-out accuracy in percent
-check() { if [ "$1" -eq 1 ]; then echo "PASS  $2"; else echo "FAIL  $2"; FAIL=1; fi; }
+acc()  { output=$(./uai32 test "$1" "$2") || return 1; printf '%s\n' "$output" | awk -F'= ' '{print $2+0}'; }
+check() { CHECKS=$((CHECKS + 1)); if [ "$1" -eq 1 ]; then echo "PASS  $2"; else echo "FAIL  $2"; FAIL=1; fi; }
 ge() { awk "BEGIN{exit !($1 >= $2)}"; }   # float compare: ge A B
 
 echo "== 0. build from source"
 make -s uai32 uai32.elf || { echo "FAIL  build"; exit 1; }
+python3 -c 'import numpy' || { echo "FAIL  numpy is required"; exit 1; }
+python3 check_artifacts.py work --exe ./uai32 --mnist
+python3 check_artifacts.py dist --manifest
+check 1 "committed artifacts have valid formats, sizes and SHA-256 checksums"
 EXE=$(size uai32)
 check $((EXE <= LIMIT)) "executable is $EXE bytes (limit $LIMIT)"
 S1=$(sha256sum uai32 | cut -c1-16); make -s -B uai32 > /dev/null; S2=$(sha256sum uai32 | cut -c1-16)
 check $([ "$S1" = "$S2" ] && echo 1 || echo 0) "building twice gives the same bytes (sha256 $S1...)"
-if objcopy --strip-section-headers uai32.elf $W/twin 2>/dev/null; then
+if objcopy --strip-section-headers uai32.elf $W/twin; then
     check $(cmp -s $W/twin uai32 && echo 1 || echo 0) "uai32 is exactly uai32.elf ($(size uai32.elf) bytes) minus the ELF section header table"
-fi
+else check 0 "section-header identity check could not run"; fi
 
 echo "== 1. it learns: the same program, before and after training (iris, 4-8-3)"
 ./uai32 train data/iris_train.txt $W/iris0.model 8 0 0.05 1 > /dev/null   # 0 epochs = random initial weights, saved
@@ -74,18 +78,25 @@ for n in iris spirals rings; do
     s=$(size $W/$n.model); p=$(od -An -tu2 -j2 -N6 $W/$n.model | awk '{print 8 + 8*$1 + 2*($2*($1+1) + $3*($2+1))}')
     check $((s == p)) "$n.model is $s bytes = 8 + 8*NI + 2*(NH*(NI+1) + NO*(NH+1)) from its own header"
 done
-if python3 -c 'import numpy' 2>/dev/null; then
-    python3 refcheck.py $W/spirals.model data/spirals_test.txt > $W/ref.out 2>&1
-    check $(grep -q '^AGREE' $W/ref.out && echo 1 || echo 0) "numpy re-implementation reproduces the C accuracy/loss and the backprop step matches the analytic gradient"
-    sed 's/^/      /' $W/ref.out | grep -E 'numpy|c:|gradient'
-fi
+python3 refcheck.py $W/spirals.model data/spirals_test.txt > $W/ref.out 2>&1
+check $(grep -q '^AGREE' $W/ref.out && echo 1 || echo 0) "numpy re-implementation reproduces the C accuracy/loss and the backprop step matches the analytic gradient"
+sed 's/^/      /' $W/ref.out | grep -E 'numpy|c:|gradient'
+python3 check_artifacts.py work --exe ./uai32
+check 1 "all four scratch models have the required dimensions, finite parameters and exact sizes"
+python3 check_artifacts.py work --exe ./uai32 --mnist --data data
+check 1 "scratch MNIST model loads and scores at least 9781/10000"
+python3 check_artifacts.py dist --mnist --data data
+check 1 "committed MNIST executable/model loads and scores at least 9781/10000"
 
 echo "== 8. size: executable + saved learned state must be <= $LIMIT bytes"
 for n in iris spirals rings; do
     s=$(size $W/$n.model); c=$((EXE + s))
     check $((c <= LIMIT)) "$n: $EXE + $s = $c bytes ($((LIMIT - c)) spare)"
 done
-[ -f $W/mnist14.model ] && { s=$(size $W/mnist14.model); c=$((EXE + s)); check $((c <= LIMIT)) "mnist14: $EXE + $s = $c bytes ($((LIMIT - c)) spare)"; }
+s=$(size $W/mnist14.model); c=$((EXE + s)); check $((c <= LIMIT)) "mnist14: $EXE + $s = $c bytes ($((LIMIT - c)) spare)"
 
-[ $FAIL -eq 0 ] && echo "ALL CHECKS PASSED" || echo "SOME CHECKS FAILED"
-exit $FAIL
+if [ "$FAIL" -eq 0 ] && [ "$CHECKS" -eq "$EXPECTED" ]; then
+    echo "ALL CHECKS PASSED ($CHECKS/$EXPECTED)"
+else
+    echo "SOME CHECKS FAILED ($CHECKS/$EXPECTED)"; exit 1
+fi

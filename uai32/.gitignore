@@ -4,3 +4,4 @@
 /work/
 /data/mnist*
 /data/*.gz
+__pycache__/

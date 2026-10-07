@@ -1,27 +1,29 @@
 # Sentovara µAI-32
 
-A genuinely trainable neural network, written in 216 lines of plain C, whose **executable plus saved learned
+A genuinely trainable neural network, written in plain C, whose **executable plus saved learned
 state fits in 32,768 bytes**. It learns from examples by gradient descent, changes its weights, generalises
 to examples it has never seen, saves what it learned to a file, reloads it in a fresh process and keeps
-predicting (or keeps training). Nothing is hard-coded: the same 7 KB program learns flowers, spirals and
+predicting (or keeps training). Nothing is hard-coded: the same 9 KB program learns flowers, spirals and
 handwritten digits. A numpy re-implementation (`refcheck.py`) reproduces its results and checks its gradients.
 
 | model (trained by `make measure`) | executable | model file | **combined** | held-out accuracy |
 |---|---:|---:|---:|---|
-| iris (4 features, 3 classes, 8 hidden)        | 7,732 B | 174 B    | **7,906 B**  | 96.7% on 30 unseen flowers |
-| spirals (2 features, 2 classes, 32 hidden)    | 7,732 B | 348 B    | **8,080 B**  | 99.3% on 300 unseen points |
-| rings (2 features, 3 classes, 16 hidden)      | 7,732 B | 222 B    | **7,954 B**  | 100% on 300 unseen points |
-| MNIST digits 14×14 (196 features, 10 classes, 48 hidden) | 7,732 B | 21,468 B | **29,200 B** | **97.8%** on the 10,000 unseen test digits |
+| iris (4 features, 3 classes, 8 hidden)        | 9,060 B | 174 B    | **9,234 B**  | 96.7% on 30 held-out rows; one has duplicate features in training |
+| spirals (2 features, 2 classes, 32 hidden)    | 9,060 B | 348 B    | **9,408 B**  | 99.3% on 300 unseen points |
+| rings (2 features, 3 classes, 16 hidden)      | 9,060 B | 222 B    | **9,282 B**  | 100% on 300 unseen points |
+| MNIST digits 14×14 (196 features, 10 classes, 48 hidden) | 9,060 B | 21,468 B | **30,528 B** | **9,781/10,000 = 97.81%** (printed as 97.8%) |
 
-Limit: 32,768 bytes. Worst case above leaves 3,568 bytes spare. Sizes are from `gcc 13.3 / glibc 2.39, x86-64 Linux`;
+Limit: 32,768 bytes. Worst case above leaves 2,240 bytes spare. Sizes are from `gcc 15.2 / binutils 2.46 / glibc 2.43, x86-64 Linux`;
 run `make measure` to get them on your machine. The exact files measured are committed in `dist/` with `SHA256SUMS`.
 
-## Try it (needs a C compiler, make, sh, awk, cmp; python3 + numpy only for the data scripts and `refcheck.py`)
+## Try it (C compiler, make, sh, awk, cmp, SHA-256 tools; python3 + numpy and GNU objcopy for complete verification)
 
 ```sh
-make            # builds ./uai32 (7,732 bytes) and ./uai32.elf (same binary with section headers, for nm/objdump)
-make verify     # 24 PASS/FAIL checks (23 before MNIST is trained), in about a second
-make measure    # trains the demo models into work/ and prints the size table
+make                 # builds ./uai32 (9,060 bytes) and ./uai32.elf with section headers for inspection
+python3 get_mnist.py # downloads and validates the four pinned MNIST source archives
+make dist            # trains all four models, evaluates them, checks sizes, then replaces dist/
+make test            # audit exploit regressions; requires sanitizer support in the compiler
+make verify          # exactly 28 mandatory checks; missing prerequisites cause failure
 ```
 
 The whole interface is three verbs:
@@ -64,6 +66,18 @@ For the digits: `python3 get_mnist.py` downloads MNIST (11 MB) and writes it as 
 | reproducible | two runs with the same data and seed write byte-identical model files |
 | size limit | executable + each model ≤ 32,768 bytes, numbers printed; each model file's size equals the formula computed from its own header |
 
+MNIST is mandatory for full verification: both `work/mnist14.model` and the committed `dist/mnist14.model`
+must have the documented dimensions, exact length and finite parameters. The verifier checks every
+committed artifact against `dist/SHA256SUMS` and evaluates MNIST in both the built and committed executables,
+requiring at least 9,781 correct predictions out of exactly 10,000. No missing NumPy/objcopy check is skipped:
+`ALL CHECKS PASSED (28/28)` is printed only after the fixed count succeeds. `refcheck.py` requires successful
+C evaluation and compares accuracy and finite loss (absolute tolerance 0.0001 for the four-decimal output).
+Its gradient check covers one example and the weights whose updates exceed bfloat16 rounding noise.
+
+`make test` runs isolated regressions for corrupt/missing models and checksums, numeric conversions and
+non-finite state under sanitizers, failed evaluation/loss comparison, missing/oversized distribution artifacts,
+and malformed MNIST caches/downloads. Neither failed measurement nor failed packaging replaces `dist/`.
+
 ## How it works (the whole thing is `uai32.c`)
 
 * **Model.** A multilayer perceptron with one hidden layer: `inputs → NH ReLU units → NO softmax outputs`.
@@ -91,18 +105,18 @@ For the digits: `python3 get_mnist.py` downloads MNIST (11 MB) and writes it as 
   feature count comes from the first line, the class count from the largest label. `predict` reads the
   same rows from stdin and ignores anything after the features, so a labelled file can be piped straight in.
 
-## Where the 7,732 bytes go, and why nothing else counts
+## Where the 9,060 bytes go, and why nothing else counts
 
 The executable is a normal dynamically linked ELF that uses the C library already on the machine
-(`libc.so.6`, `libm.so.6`, the dynamic loader) for file I/O, `printf`, `expf`, `logf` and `strtof` (`sqrtf` is inlined to one instruction).
+(`libc.so.6`, `libm.so.6`, the dynamic loader) for file I/O, formatting, elementary math and numeric parsing.
 Those are the "operating-system libraries already provided" that the challenge excludes, as are the source,
 the compiler and the datasets.
 
 | part | bytes | what |
 |---|---:|---|
-| code (`.text`) | ≈3,900 | forward pass, backprop, file format, data reader, CLI |
-| dynamic linking tables (`.dynsym`, `.dynstr`, `.rela.dyn`, `.dynamic`, `.got`, version info) | ≈2,000 | the 17 libc/libm symbols it imports |
-| strings (`.rodata`) | ≈750 | messages and `printf` formats |
+| code (`.text`) | measured in `uai32.elf` | forward pass, backprop, validation, file format, data reader, CLI |
+| dynamic linking tables (`.dynsym`, `.dynstr`, `.rela.dyn`, `.dynamic`, `.got`, version info) | measured in `uai32.elf` | libc/libm imports |
+| strings (`.rodata`) | measured in `uai32.elf` | messages and formats |
 | ELF + program headers, interpreter path, crt start-up code | ≈1,000 | |
 
 The `Makefile` gets there with ordinary flags, no hand-written assembly and no packer:
@@ -123,12 +137,15 @@ A default `gcc -O2 -s` build of the same source is about 18 KB.
 * MNIST (not committed, 11 MB): `get_mnist.py` downloads the four IDX files from the cvdf-datasets or
   ossci-datasets mirrors and average-pools each 28×28 image to 14×14 (196 integers 0–255), writing
   `data/mnist14_train.txt` (60,000 rows) and `data/mnist14_test.txt` (10,000 rows). `--full` keeps 28×28.
+  Cached and newly downloaded archives must match the pinned source hashes; IDX magic, 28×28 dimensions,
+  split counts, exact payload lengths, image/label agreement and labels 0..9 are checked before use.
 
 ## Honest limits
 
 * One hidden layer, plain SGD with a constant rate per run: good for tabular data and small images, not a
   language model. Learning-rate decay is done by hand with a second, lower-rate `train` run on the same file.
-* Sizes are u16, so at most 65,535 features, hidden units or classes, and at most 100 million parameters; the dataset is held in memory as floats. SEED is a 32-bit integer.
+* Sizes are u16, so at most 65,535 features, hidden units or classes, and at most 100 million parameters; the dataset is held in memory as floats. Labels are integers 0..65,534. HIDDEN is an integer 0..65,535 (0 is a continuation placeholder; a new model requires at least 1). EPOCHS is an integer 0..2,147,483,646; 0 saves initialization without training. SEED is an unsigned 32-bit decimal integer; 0 retains the original alias for seed 1. RATE must be finite, positive and at most 1,000,000.
+* Invalid numeric tokens, non-finite loaded parameters, negative normalization scales, truncated/trailing model bytes and numeric overflow fail non-zero. Continued training restores saved bfloat16 weights and reseeds its shuffle; it is not an exact interrupted float32 training resume.
 * Reproducibility is byte-exact on one machine; another libm may round `expf` differently, which changes
   low bits of the weights (not the accuracy).
 * The text data format is slow for big data (loading the 28 MB MNIST file takes about half a second), chosen because it is the simplest to audit.
@@ -138,11 +155,13 @@ A default `gcc -O2 -s` build of the same source is about 18 KB.
 
 | file | purpose |
 |---|---|
-| `uai32.c` | the program (216 lines) |
+| `uai32.c` | the program |
 | `Makefile` | `make`, `make verify`, `make measure`, `make dist`, `make clean` |
 | `refcheck.py` | numpy re-implementation of inference + gradient check of one SGD step |
 | `verify.sh` | the evidence script |
 | `measure.sh` | trains the demo models and prints the size table |
+| `check_artifacts.py` | exact model format, finite state, size, checksum and evaluation gates shared by scripts |
+| `regression_tests.py` | isolated regressions for the independently demonstrated audit exploits |
 | `gen_data.py`, `get_mnist.py` | dataset generation / download |
 | `data/` | iris, spirals, rings (train/test); MNIST text files appear here after `get_mnist.py` |
 | `dist/` | the measured deliverable: `uai32` executable, four `.model` files, `SHA256SUMS` |

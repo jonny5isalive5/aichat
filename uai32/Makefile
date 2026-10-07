@@ -40,11 +40,17 @@ verify: $(PROG) $(PROG).elf
 
 dist: $(PROG)
 	@./measure.sh > /dev/null
-	@rm -rf dist && mkdir dist && cp $(PROG) dist/
-	@for n in iris spirals rings mnist14; do [ -f work/$$n.model ] && cp work/$$n.model dist/; done; true
-	@cd dist && $(SHA256) $(PROG) *.model > SHA256SUMS && cat SHA256SUMS && wc -c $(PROG) *.model
+	@set -eu; stage=$$(mktemp -d work/dist.XXXXXX); trap 'rm -rf "$$stage"' EXIT HUP INT TERM; \
+	  cp $(PROG) "$$stage/"; \
+	  for n in iris spirals rings mnist14; do cp "work/$$n.model" "$$stage/"; done; \
+	  (cd "$$stage" && $(SHA256) uai32 iris.model mnist14.model rings.model spirals.model > SHA256SUMS); \
+	  python3 check_artifacts.py "$$stage" --manifest --data data; \
+	  rm -rf dist; mv "$$stage" dist; cat dist/SHA256SUMS; wc -c dist/uai32 dist/*.model
+
+test: all
+	python3 regression_tests.py
 
 clean:
 	rm -rf $(PROG) $(PROG).elf work dist
 
-.PHONY: all measure verify dist clean
+.PHONY: all measure verify dist test clean
