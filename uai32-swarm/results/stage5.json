@@ -5,22 +5,22 @@
   "label": "10 specialists",
   "specialists": 10,
   "per_specialist_model_bytes": 576,
-  "per_specialist_meta_bytes": 1051,
-  "index_bytes": 9848,
-  "storage_bytes": 26154,
-  "routing_seconds_per_row": 1.650896000001012e-06,
-  "load_and_predict_seconds_median": 0.0013722094998911416,
-  "load_and_predict_seconds_min": 0.001125711999975465,
-  "specialist_process_peak_rss_kb": 2244,
+  "per_specialist_meta_bytes": 1050,
+  "index_bytes": 9846,
+  "storage_bytes": 26150,
+  "routing_seconds_per_row": 1.2070420002601168e-06,
+  "load_and_predict_seconds_median": 0.001503199499893526,
+  "load_and_predict_seconds_min": 0.001180507000299258,
+  "specialist_process_peak_rss_kb": 2300,
   "true_process_peak_rss_kb": 1376,
   "specialist_working_set_bytes": 816,
-  "orchestrator_rss_kb": 53792,
+  "orchestrator_rss_kb": 52400,
   "resident_specialists_between_calls": 0
  },
  "batch": {
   "rows": 1000,
   "active_specialists_during_batch": 10,
-  "invocation_seconds": 0.03435299100010525,
+  "invocation_seconds": 0.04617370000005394,
   "processes": 230
  }
 }

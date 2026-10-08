@@ -32,7 +32,7 @@
   "unsupported": 0.018,
   "stage_a_accuracy": 0.872,
   "stage_b_accuracy": 0.85,
-  "seconds": 0.05768409400002383,
+  "seconds": 0.051835328999914054,
   "example": {
    "input_halves": [
     "s0006",
@@ -48,13 +48,13 @@
  },
  "baselines": {
   "single_brain_20-16-4": {
-   "accuracy": 0.42,
+   "accuracy": 0.424,
    "bytes": 976,
    "train_rows": 5000,
    "epochs": 100
   },
   "single_brain_20-64-4": {
-   "accuracy": 0.402,
+   "accuracy": 0.438,
    "bytes": 3376,
    "train_rows": 5000,
    "epochs": 100

@@ -48,6 +48,7 @@ class Sentinel:
         return p.stdout
     @staticmethod
     def create(model, X, y, nh=NH, seed=1):          # new brain: normalisation from X, random He-init weights, 0 epochs
+        if os.path.exists(model): os.remove(model)    # uai32 would otherwise CONTINUE training an existing file
         Sentinel.run(['train', tmpfile(rows_text(X, y)), model, str(nh), '0', '0.05', str(seed)])
     @staticmethod
     def train(model, X, y, epochs, lr=0.05, seed=1):  # continue training an EXISTING model file (HIDDEN ignored = 0)

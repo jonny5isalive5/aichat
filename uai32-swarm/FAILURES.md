@@ -54,3 +54,10 @@ Things that did not work, were wrong on the first attempt, or are weaker than ho
     provenance records, grouping rows per specialist) was 0.002 ms/row at N = 2 and 0.84 ms/row at N = 1,000
     before the memory fix, more than ten times the specialist invocation itself (about 0.06 ms/row amortised in
     batches). This is the coordination layer, not the specialists, and it is the first thing to rewrite in C.
+12. **Baseline models were not reproducible between runs.** `uai32 train` continues training when the model
+    file already exists, and `Sentinel.create()` did not delete a stale file first, so monolith and compound
+    baselines trained in an earlier run (sometimes by an earlier version of the code) were trained further in the
+    next one: the equal-storage monolith at N = 2 scored 81.0%, 83.0% and 79.0% in three consecutive runs while
+    every swarm number was identical. Found by comparing `results/stage6_superseded_*.json`. Fixed by deleting
+    the file in `create()` and by starting `run_all.sh` from an empty `work/`; all stages were rerun from scratch
+    for the reported numbers.
