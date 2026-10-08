@@ -237,6 +237,7 @@ def spawn_rss_kb(binary, args, stdin_path=os.devnull):
     reports ~50 MB for everything, even /bin/true.  The C launcher's own footprint is below the uai32 floor."""
     if not os.path.exists(MAXRSS): subprocess.run(['cc', '-O2', os.path.join(HERE, 'tools', 'maxrss.c'), '-o', MAXRSS], check=True)
     out = subprocess.run([MAXRSS, '-i', stdin_path, binary] + args, capture_output=True, text=True, check=True).stdout
+    if stdin_path.startswith(WORK + '/rows_') and os.path.exists(stdin_path): os.remove(stdin_path)
     return int(out.split('maxrss')[1].split('KB')[0])
 
 def test_set(world, domains, rng, per=100, condition='normal'):

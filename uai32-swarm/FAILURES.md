@@ -45,7 +45,7 @@ Things that did not work, were wrong on the first attempt, or are weaker than ho
    reported in the table.
 10. **The router did not scale in memory (found at N = 1,000, Stage 6).** The vectorised familiarity computation
     formed a rows × specialists × features tensor for the whole 50,000-row evaluation set: 50,000 × 1,000 × 10
-    doubles, several times over, and the orchestrator's peak RSS reached 7,896,960 KB (7.9 GB) while accuracy
+    doubles, several times over, and the orchestrator's peak RSS reached 7,896,960 KB (7.5 GiB) while accuracy
     was unaffected (84.3%, routing 98.7%). At N = 100 the same code needed 124 MB and at N = 10 42 MB, so the
     flaw was invisible below 1,000. Fixed by routing in chunks of 256 rows (peak temporary memory
     256 × N × 10 doubles). The unchunked run is preserved as `results/stage6_superseded_unchunked_router.json`
@@ -81,3 +81,8 @@ Things that did not work, were wrong on the first attempt, or are weaker than ho
     still counts metadata JSON that duplicates index.json; the one-brain composition baseline is the only
     budget-matched baseline at Stage 4. The auditor's own numbers for the fair N = 10 comparison (monolith 83.0
     to 84.6% against the swarm's 84.2%) are quoted in FINAL.md as the auditor's measurement.
+14. **Retest after remediation (auditor, fresh copy, HEAD 3f03e26).** 14 of 17 findings FIXED, 3 PARTIALLY
+    FIXED with only cosmetic residue (a README sentence still counting routing as N × 10 multiply-adds, a stale
+    `t` field in the metadata table, "7.9 GB" for 7,896,960 KB, and four temporary row files left by the RSS
+    probe); every rechecked number reproduced from a clean state and traced to the JSON. Those four items are
+    fixed in the closing commit without rerunning the experiment (none affects a measurement).

@@ -67,7 +67,7 @@ budget-matched monolith reached 65.5% against 85.4%.
   compound task from composed labels, and versus 56% for one brain given the swarm's own supervision (trained
   on every domain's device states, applied to both halves, composed through the same oracle table).
 - The cost that does not stay small is coordination: the Python orchestrator uses 39 MB at N = 2 and 489 MB
-  at N = 1,000 (after the router was chunked; it needed 7.9 GB before), and routing costs 2 µs per row at
+  at N = 1,000 (after the router was chunked; it needed 7,896,960 KB, 7.5 GiB, before), and routing costs 2 µs per row at
   N = 10 and 112 µs at N = 1,000, against 0.03 ms of uai32 subprocess time and 0.02 ms of Python bookkeeping
   per row that do not grow with N. At 1,000 specialists routing is the largest per-row cost. The specialists
   keep the Mini Sentinel advantage; the orchestrator must be engineered with the same discipline, which this

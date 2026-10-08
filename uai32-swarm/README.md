@@ -53,7 +53,7 @@ condition, plus a metadata record. Training, use and restart are all separate pr
 | `trained_on` | `{domain, condition, rows, epochs, lr, seed}` |
 | `centroid[10]`, `spread[10]`, `radius` | familiarity model: mean and standard deviation of its training inputs, and the 99th percentile of the standardised distance of those inputs |
 | `val_acc` | held-out accuracy on 100 rows of its own training distribution (its historical competence) |
-| `history` | list of `{event, sha256, t}`: train, retrain, replace, clone, branch, spawn |
+| `history` | list of `{event, sha256}`: train, retrain, replace, clone, branch, spawn, continue |
 
 The router needs only `index.json` (about 1 KB per specialist, of which 21 numbers are used for routing); model files are opened only by the uai32
 process that is about to use them.
@@ -64,7 +64,7 @@ For an input `x` and every specialist `s`: `z = (x - centroid_s) / spread_s`, re
 `rel = sqrt(mean(z²)) / radius_s` (inside the familiar region when ≤ 1), and a diagonal-Gaussian score
 `0.5·mean(z²) + mean(log spread_s)` that charges a specialist for a broad training distribution (without that
 term the expert trained on noisy data wins every input because its radius is the largest). Candidates are the
-specialists whose region contains `x`, ranked by the score. Cost: N × 10 multiply-adds per row, numpy
+specialists whose region contains `x`, ranked by the score. Cost: two operations per feature per specialist (2 × 10 × N) plus one forward pass, numpy
 vectorised: about 1 µs per row at N = 10 and 15 µs at N = 100. No specialist's own confidence
 is used for routing, only for arbitration. Routing at N = 1,000 costs about 300 µs per row in numpy.
 
