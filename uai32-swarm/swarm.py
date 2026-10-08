@@ -2,10 +2,12 @@
 """swarm.py -- the Mini Sentinel specialist swarm: a thin coordination layer over the RELEASED uai32 v1.0.0
 binary (../uai32/dist/uai32, 9,188 bytes, SHA-256 996d73cb...).
 
-Every prediction and every weight update in this project is made by that binary on a model file.  This file
-contains no learning algorithm: it generates synthetic tasks (the test generator), keeps a library of specialist
-model files with metadata, routes inputs to specialists by familiarity, arbitrates between them, composes two of
-them, and measures everything.  No larger model is involved at build time or run time.
+Every class prediction and every weight update in this project is made by that binary on a model file.  What
+this file does in numpy is fit 21 unsupervised statistics per specialist (centroid, spread, radius of its training
+inputs) and apply fixed formulas (Gaussian familiarity score, vote weight, 0.75 disagreement margin, composition
+table, 0.1 spawn-cluster threshold): a label-free nearest-centroid router, not a classifier of the task.  It also
+generates the synthetic tasks (the test generator), keeps the library, and measures.  No larger model is involved
+at build time or run time.
 
 Brain = one uai32 model file (10 inputs, 16 hidden, 4 classes = 576 bytes).  A specialist is a brain plus a JSON
 metadata record.  Specialists are never resident: each invocation is a fresh uai32 process that loads one file.
@@ -38,13 +40,15 @@ def tmpfile(text):
 class Sentinel:
     """Wrapper over the uai32 binary.  Each call is a fresh process; the process exits when done, so nothing stays
     resident.  Counters give the invocation cost."""
-    calls = 0; seconds = 0.0
+    calls = 0; seconds = 0.0; failures = 0
     @staticmethod
     def run(args, stdin=None):
         t = time.perf_counter()
         p = subprocess.run([UAI32] + args, input=stdin, capture_output=True, text=True)
         Sentinel.seconds += time.perf_counter() - t; Sentinel.calls += 1
-        if p.returncode: raise RuntimeError(f'uai32 {" ".join(args[:2])} failed: {p.stderr.strip()}')
+        for a in args:                                        # temporary row files are deleted once consumed
+            if a.startswith(WORK + '/rows_') and os.path.exists(a): os.remove(a)
+        if p.returncode: Sentinel.failures += 1; raise RuntimeError(f'uai32 {" ".join(args[:2])} failed: {p.stderr.strip()}')
         return p.stdout
     @staticmethod
     def create(model, X, y, nh=NH, seed=1):          # new brain: normalisation from X, random He-init weights, 0 epochs
@@ -109,7 +113,7 @@ class World:
 # ---------------------------------------------------------------- the specialist library (files + metadata) ----
 class Library:
     """library/<id>.model (uai32 model file) + library/<id>.json (metadata).  index.json holds every specialist's
-    metadata so routing needs only ~400 bytes per specialist in memory and never opens a model file."""
+    metadata so routing needs only 21 numbers per specialist in memory (about 1 KB of JSON) and never opens a model file."""
     def __init__(self, root):
         self.root = root; os.makedirs(root, exist_ok=True)
         self.meta = {}; ip = os.path.join(root, 'index.json')
@@ -131,8 +135,11 @@ class Library:
                               bytes=os.path.getsize(self.path(sid)), parent=parent, parent_sha256=parent_sha,
                               trained_on=trained_on, centroid=mu.tolist(), spread=sd.tolist(),
                               radius=float(np.percentile(dist, 99)), val_acc=k / n,
-                              history=self.meta.get(sid, {}).get('history', []) + [dict(event=event, sha256=sha256(self.path(sid)), t=time.time())])
+                              history=self.meta.get(sid, {}).get('history', []) + [dict(event=event, sha256=sha256(self.path(sid)))])
         self._matrix = None
+    def touch(self, sid, event):                               # after training a specialist's file in place
+        self.meta[sid]['sha256'] = sha256(self.path(sid)); self.meta[sid]['version'] += 1
+        self.meta[sid]['history'].append(dict(event=event, sha256=self.meta[sid]['sha256'])); self._matrix = None
     def remove(self, sid):
         for ext in ('.model', '.json'):
             p = os.path.join(self.root, sid + ext); os.path.exists(p) and os.remove(p)
@@ -170,17 +177,17 @@ def decide(lib, X, k=1, margin=0.75, log=None):
     k>1: arbitration by weighted vote, weight = held-out accuracy x confidence x exp(-relative distance)), expose
     disagreement, mark unsupported inputs.  Specialists are invoked in batches (one process per specialist) and
     every record carries full provenance."""
-    ids, order, rel = route(lib, X, k)
-    t0 = time.perf_counter()
+    t_start = time.perf_counter(); ids, order, rel = route(lib, X, k); t_route = time.perf_counter() - t_start
+    sub0 = Sentinel.seconds
     n = len(X); answers = np.full(n, -1); status = ['unsupported'] * n; prov = [None] * n
     jobs = {}                                                  # specialist -> list of row indices to invoke
     for i in range(n):
         for j in range(k):
             if rel[i, j] <= 1.0: jobs.setdefault(order[i, j], []).append(i)
-    votes = {}                                                 # row -> list of (specialist idx, class, conf, weight)
+    votes = {}; bad = set()                                    # row -> list of (specialist idx, class, conf, weight)
     for s, rows_ in jobs.items():
         sid = ids[s]
-        if not lib.verify(sid): continue                       # corrupt or missing file: this specialist cannot contribute
+        if not lib.verify(sid): bad.add(s); continue           # corrupt or missing file: this specialist cannot contribute
         cls, conf = Sentinel.predict(lib.path(sid), X[rows_])
         for r, c, p in zip(rows_, cls, conf):
             j = list(order[r]).index(s)
@@ -188,7 +195,7 @@ def decide(lib, X, k=1, margin=0.75, log=None):
             votes.setdefault(r, []).append((sid, int(c), float(p), w, float(rel[r, j])))
     for r in range(n):
         v = votes.get(r, [])
-        rec = dict(selected=ids[order[r, 0]] if rel[r, 0] <= 1 else None,
+        rec = dict(selected=ids[order[r, 0]] if rel[r, 0] <= 1 and order[r, 0] not in bad else None,
                    alternatives=[(ids[order[r, j]], round(float(rel[r, j]), 3)) for j in range(1, k)],
                    contributions=[dict(id=s, sha256=lib.meta[s]['sha256'][:16], cls=c, conf=p, weight=round(w, 4), rel_dist=round(d, 3)) for s, c, p, w, d in v])
         if not v:
@@ -203,7 +210,8 @@ def decide(lib, X, k=1, margin=0.75, log=None):
             else: rec['status'] = 'routed'
         status[r] = rec['status']; prov[r] = rec
         if log is not None: log.write(json.dumps(rec) + '\n')
-    return answers, status, prov, time.perf_counter() - t0
+    total = time.perf_counter() - t_start; inv = Sentinel.seconds - sub0
+    return answers, status, prov, dict(total=total, routing=t_route, invocation=inv, orchestration=total - t_route - inv)
 
 # ---------------------------------------------------------------- helpers for the stages -------------------
 def build_specialist(lib, world, d, canonical, sid, rng, condition='normal', rows=500, epochs=60, lr=0.05, seed=1, event='train'):
@@ -285,10 +293,10 @@ def build_library(name, world, domains, rng, seed, canonical, **kw):
 def stage2(seed):
     """Ten specialists, bounded competences, routing with provenance, unsupported inputs."""
     rng = np.random.default_rng(seed); world = World(13, seed); can = os.path.join(WORK, 'canonical_s2.model'); make_canonical(can, rng, seed)
-    lib, build_s = build_library('lib10', world, range(10), rng, seed, can)
+    lib, build_s = build_library('lib_s2', world, range(10), rng, seed, can)
     X, y, dom = test_set(world, range(10), rng, 100)
     with open(os.path.join(RES, 'stage2_provenance.jsonl'), 'w') as log:
-        ans, st, prov, inv = decide(lib, X, k=3, log=log)         # k=3 so alternatives are recorded
+        ans, st, prov, tm = decide(lib, X, k=3, log=log)          # k=3 so alternatives are recorded
     m = metrics(lib, ans, st, prov, y, dom)
     # unsupported inputs: three domains the swarm never saw, and uniform noise
     Xu, yu, du = test_set(world, [10, 11, 12], rng, 100); Xn = rng.uniform(-1, 1, (100, NI))
@@ -345,6 +353,14 @@ def stage4(seed):
     for nh in (16, 64, 256):                                    # a single brain trained directly on the compound task
         m = os.path.join(WORK, f'compound_{nh}.model'); Sentinel.create(m, Xtr, ytr, nh, seed); Sentinel.train(m, Xtr, ytr, 100)
         k, n = Sentinel.accuracy(m, Xte, yte); out['baselines'][f'single_brain_20-{nh}-4'] = dict(accuracy=k / n, bytes=os.path.getsize(m), train_rows=len(ytr), epochs=100)
+    # same supervision as the swarm but ONE brain: a 10-16-4 brain trained on every domain's device-state labels (the
+    # ten specialists' training rows pooled), applied to each half, composed through the same table
+    Xp, yp = [], []
+    for d in range(10): Xd, yd = world.sample(d, 500, rng); Xp.append(Xd); yp.append(yd)
+    Xp, yp = np.vstack(Xp), np.concatenate(yp); m = os.path.join(WORK, 'compound_onebrain.model'); Sentinel.create(m, Xp, yp, NH, seed); Sentinel.train(m, Xp, yp, 60)
+    pa, _ = Sentinel.predict(m, Xa); pb, _ = Sentinel.predict(m, Xb)
+    out['baselines']['one_brain_10-16-4_on_device_states_then_table'] = dict(accuracy=float(np.mean(table[pa, pb] == yte)), stage_a_accuracy=float(np.mean(pa == ya)), stage_b_accuracy=float(np.mean(pb == yb)), bytes=os.path.getsize(m), train_rows=int(len(yp)), epochs=60)
+    out['disclosure'] = 'the composition layer is given the 4x4 table (an oracle); the specialists were trained with device-state labels (intermediate supervision); the direct baselines only ever saw composed labels'
     out['single_specialist_alone'] = 'structurally impossible: a specialist takes 10 inputs, the compound input has 20'
     save('stage4', out); return out
 
@@ -360,37 +376,43 @@ def measure_library(lib, X, label):
                 index_bytes=os.path.getsize(os.path.join(root, 'index.json')), storage_bytes=storage, routing_seconds_per_row=route_s,
                 load_and_predict_seconds_median=float(np.median(times)), load_and_predict_seconds_min=float(np.min(times)),
                 specialist_process_peak_rss_kb=spawn_rss_kb(UAI32, ['predict', lib.path(ids[0])], tmpfile(rows_text(X[:1]))), true_process_peak_rss_kb=spawn_rss_kb('/bin/true', []),
-                specialist_working_set_bytes=lib.meta[ids[0]]['bytes'] + 4 * (NI + 2 * NH + 2 * NO) + 4 * NI,   # model + activations + one input row (from uai32.c)
-                orchestrator_rss_kb=resource.getrusage(resource.RUSAGE_SELF).ru_maxrss, resident_specialists_between_calls=0)
+                specialist_working_set_bytes=4 * (2 * NI + NH * (NI + 1) + NO * (NH + 1)) + 4 * (NI + 2 * NH + 2 * NO) + 4 * (NI + 1),   # float32 parameters + activations + one row, from uai32.c
+                orchestrator_rss_kb=resource.getrusage(resource.RUSAGE_SELF).ru_maxrss, resident_specialists_between_calls_by_construction=0)
 
 def stage5(seed):
     rng = np.random.default_rng(seed); world = World(10, seed); can = os.path.join(WORK, 'canonical_s5.model'); make_canonical(can, rng, seed)
-    lib, _ = build_library('lib10', world, range(10), rng, seed, can); X, y, dom = test_set(world, range(10), rng, 100)
+    lib, _ = build_library('lib_s5', world, range(10), rng, seed, can); X, y, dom = test_set(world, range(10), rng, 100)
     out = dict(stage=5, seed=seed, measurements=measure_library(lib, X, '10 specialists'))
-    ans, st, prov, inv = decide(lib, X, k=1); out['batch'] = dict(rows=len(X), active_specialists_during_batch=len(set(p['selected'] for p in prov if p['selected'])), invocation_seconds=inv, processes=Sentinel.calls)
+    ans, st, prov, tm = decide(lib, X, k=1); out['batch'] = dict(rows=len(X), active_specialists_during_batch=len(set(p['selected'] for p in prov if p['selected'])), seconds=tm, processes=Sentinel.calls)
     save('stage5', out); return out
 
 def stage6(seed, sizes=(2, 10, 100, 1000), big_cap=2048):
     out = dict(stage=6, seed=seed, levels=[])
     for N in sizes:
-        rng = np.random.default_rng(seed + N); world = World(N, seed + N); can = os.path.join(WORK, 'canonical_s6.model'); make_canonical(can, rng, seed)
-        Sentinel.calls = 0; Sentinel.seconds = 0.0
-        lib, build_s = build_library(f'lib{N}', world, range(N), rng, seed, can)
-        X, y, dom = test_set(world, range(N), rng, 50)
-        t = time.perf_counter(); ans, st, prov, inv = decide(lib, X, k=1); total_s = time.perf_counter() - t
-        lvl = dict(N=N, build_seconds=build_s, train_processes=N, **metrics(lib, ans, st, prov, y, dom), eval_rows=len(X), eval_seconds=total_s, invocation_seconds=inv,
-                   orchestration_seconds=total_s - inv, invocation_processes=Sentinel.calls, failed_invocations=0, resources=measure_library(lib, X, f'{N} specialists'))
+        rng = np.random.default_rng(seed + N); world = World(N, seed + N); can = os.path.join(WORK, f'canonical_s6_{N}.model'); make_canonical(can, rng, seed)
+        Sentinel.calls = 0; Sentinel.seconds = 0.0; Sentinel.failures = 0
+        lib, build_s = build_library(f'lib_s6_{N}', world, range(N), rng, seed, can)
+        X, y, dom = test_set(world, range(N), rng, 50); calls0 = Sentinel.calls
+        ans, st, prov, tm = decide(lib, X, k=1)
+        lvl = dict(N=N, build_seconds=build_s, train_processes=N, **metrics(lib, ans, st, prov, y, dom), eval_rows=len(X), eval_seconds=tm['total'], routing_seconds=tm['routing'],
+                   invocation_seconds=tm['invocation'], orchestration_seconds=tm['orchestration'], eval_processes=Sentinel.calls - calls0, failed_invocations=Sentinel.failures, resources=measure_library(lib, X, f'{N} specialists'))
         Xo = rng.uniform(-1, 1, (300, NI)); _, so, _, _ = decide(lib, Xo, k=1); lvl['out_of_distribution_unsupported_rate'] = float(np.mean(np.array(so) == 'unsupported'))
-        # monolith baselines on the union of every specialist's training data (same rows per domain)
+        # monolith baselines on the union of the specialists' training data: the SAME rows per domain (500) and the
+        # same epochs (60) as each specialist, except the capped equal-storage monolith at N >= 1000 (20 epochs,
+        # recorded).  "Equal storage" = N x the 576-byte model file (metadata excluded; file = 96 + 30*NH bytes).
         Xall, yall = [], []
         for d in range(N):
-            Xd, yd = world.sample(d, 400, rng); Xall.append(Xd); yall.append(yd)
+            Xd, yd = world.sample(d, 500, rng); Xall.append(Xd); yall.append(yd)
         Xall, yall = np.vstack(Xall), np.concatenate(yall)
-        for name, nh in (('mini_monolith_10-16-4', NH), ('equal_storage_monolith', min(big_cap, max(NH, (N * lib.meta[sorted(lib.meta)[0]]['bytes'] - 88) // 30)))):
-            m = os.path.join(WORK, f'mono_{N}_{nh}.model'); t = time.perf_counter(); Sentinel.create(m, Xall, yall, nh, seed); Sentinel.train(m, Xall, yall, 20 if N >= 100 else 40)
+        nh_eq = min(big_cap, max(NH, (N * lib.meta[sorted(lib.meta)[0]]['bytes'] - 96) // 30))
+        for name, nh, epochs in (('mini_monolith_10-16-4', NH, 60), ('equal_storage_monolith', nh_eq, 60 if nh_eq < big_cap else 20)):
+            m = os.path.join(WORK, f'mono_{N}_{nh}.model'); t = time.perf_counter(); Sentinel.create(m, Xall, yall, nh, seed); Sentinel.train(m, Xall, yall, epochs)
             k, n = Sentinel.accuracy(m, X, y)
-            lvl[name] = dict(hidden=int(nh), bytes=os.path.getsize(m), accuracy=k / n, train_seconds=time.perf_counter() - t, macs_per_query=int(nh * NI + NO * nh))
-        lvl['swarm_macs_per_query'] = int(N * NI + NH * NI + NO * NH); lvl['swarm_storage_bytes'] = lvl['resources']['storage_bytes']
+            lvl[name] = dict(hidden=int(nh), bytes=os.path.getsize(m), accuracy=k / n, train_rows=int(len(yall)), rows_per_domain=500, epochs=epochs, lr=0.05, capped=bool(nh_eq >= big_cap and name != 'mini_monolith_10-16-4'),
+                             train_seconds=time.perf_counter() - t, macs_per_query=int(nh * (NI + 1) + NO * (nh + 1)))
+        # swarm MACs: routing = 2 per feature per specialist (subtract and scale, square-accumulate) + one specialist forward pass
+        lvl['swarm_macs_per_query'] = int(N * 2 * NI + NH * (NI + 1) + NO * (NH + 1)); lvl['swarm_storage_bytes'] = lvl['resources']['storage_bytes']
+        lvl['swarm_model_bytes_total'] = int(N * lib.meta[sorted(lib.meta)[0]]['bytes'])
         out['levels'].append(lvl); save('stage6', out)
         print(f'  N={N}: task acc {lvl["task_acc"]:.3f} routing {lvl["routing_acc"]:.3f} unsupported {lvl["unsupported"]:.3f} | mini monolith {lvl["mini_monolith_10-16-4"]["accuracy"]:.3f} | equal-storage {lvl["equal_storage_monolith"]["accuracy"]:.3f} (NH={lvl["equal_storage_monolith"]["hidden"]})')
     return out
@@ -418,11 +440,11 @@ def stage8(seed):
     shas = {s: lib.meta[s]['sha256'] for s in lib.meta}; T3 = world.sample(3, 300, rng); T7 = world.sample(7, 300, rng)
     acc = lambda s, T: (lambda kn: kn[0] / kn[1])(Sentinel.accuracy(lib.path(s), *T))
     # (a) continued training of one specialist on new data of its own domain; nothing else changes
-    before = acc('s0003', T3); Xn, yn = world.sample(3, 200, rng); Sentinel.train(lib.path('s0003'), Xn, yn, 20); lib.meta['s0003']['sha256'] = sha256(lib.path('s0003')); lib.meta['s0003']['version'] += 1
+    before = acc('s0003', T3); Xn, yn = world.sample(3, 200, rng); Sentinel.train(lib.path('s0003'), Xn, yn, 20); lib.touch('s0003', 'continue')
     out['continued_training'] = dict(s0003_before=before, s0003_after=acc('s0003', T3), s0003_sha_changed=lib.meta['s0003']['sha256'] != shas['s0003'],
                                      others_unchanged=all(sha256(lib.path(s)) == shas[s] for s in lib.meta if s != 's0003'))
     # (b) catastrophic forgetting inside one specialist: train s0003 on domain 7's task
-    X7, y7 = world.sample(7, 400, rng); Sentinel.train(lib.path('s0003'), X7, y7, 40)
+    X7, y7 = world.sample(7, 400, rng); Sentinel.train(lib.path('s0003'), X7, y7, 40); lib.touch('s0003', 'continue-other-domain')
     out['forgetting'] = dict(s0003_on_domain3_after_learning_domain7=acc('s0003', T3), s0003_on_domain7=acc('s0003', T7), note='no replay or regularisation exists in uai32; this is the raw effect')
     # (c) retrain from the canonical brain
     build_specialist(lib, world, 3, can, 's0003', rng, seed=seed, event='retrain'); out['retrained'] = dict(s0003_on_domain3=acc('s0003', T3), version=lib.meta['s0003']['version'])
@@ -434,7 +456,7 @@ def stage8(seed):
     out['failed_expert'].update(accuracy_after_replacement=float(np.mean(a == y5)), version=lib.meta['s0005']['version'])
     # (e) clone a successful expert, (f) branch it into two differently trained descendants
     shutil.copyfile(lib.path('s0002'), os.path.join(WORK, 'clone2.model'))
-    lib.meta['s0002_clone'] = dict(lib.meta['s0002'], id='s0002_clone', parent='s0002', parent_sha256=lib.meta['s0002']['sha256'], history=[dict(event='clone', sha256=lib.meta['s0002']['sha256'], t=time.time())])
+    lib.meta['s0002_clone'] = dict(lib.meta['s0002'], id='s0002_clone', parent='s0002', parent_sha256=lib.meta['s0002']['sha256'], history=[dict(event='clone', sha256=lib.meta['s0002']['sha256'])])
     shutil.copyfile(lib.path('s0002'), lib.path('s0002_clone')); lib.save()
     T2 = world.sample(2, 300, rng); out['clone'] = dict(same_sha=sha256(lib.path('s0002_clone')) == lib.meta['s0002']['sha256'], identical_outputs=bool(np.array_equal(Sentinel.predict(lib.path('s0002'), T2[0])[0], Sentinel.predict(lib.path('s0002_clone'), T2[0])[0])))
     branches = {}

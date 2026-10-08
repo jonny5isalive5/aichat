@@ -26,20 +26,23 @@ for c, r in s['results'].items(): out.append(f"| {c} | {pc(r['single_specialist'
 out.append('')
 s = L('stage4'); out += ['## Stage 4: composition (two device readings, answer = table of both states)', '', '| system | accuracy | bytes |', '|---|---|---|',
     f"| swarm: route each half, compose (unsupported {pc(s['swarm']['unsupported'])}) | {pc(s['swarm']['accuracy'])} | 10 specialists x 576 |"]
-for k, v in s['baselines'].items(): out.append(f"| {k} trained directly on the compound task ({v['train_rows']} rows, {v['epochs']} epochs) | {pc(v['accuracy'])} | {v['bytes']} |")
-out += [f"| one specialist alone | {s['single_specialist_alone']} | |", '']
+for k, v in s['baselines'].items(): out.append(f"| {k} ({v['train_rows']} rows, {v['epochs']} epochs) | {pc(v['accuracy'])} | {v['bytes']} |")
+out += [f"| one specialist alone | {s['single_specialist_alone']} | |", '', f"Disclosure: {s['disclosure']}", '']
 s = L('stage5'); m = s['measurements']; out += ['## Stage 5: dynamic library (10 specialists)', '', '| metric | value |', '|---|---|',
     f"| per-specialist model / metadata bytes | {m['per_specialist_model_bytes']} / {m['per_specialist_meta_bytes']} |",
     f"| index bytes (all routing data) / library storage bytes | {m['index_bytes']} / {m['storage_bytes']} |",
     f"| routing time per row / load+predict one row (fresh process, median) | {m['routing_seconds_per_row'] * 1e6:.1f} us / {m['load_and_predict_seconds_median'] * 1e3:.2f} ms |",
     f"| specialist process peak RSS / /bin/true floor / specialist working set | {m['specialist_process_peak_rss_kb']} KB / {m['true_process_peak_rss_kb']} KB / {m['specialist_working_set_bytes']} B |",
     f"| orchestrator (python+numpy) RSS | {m['orchestrator_rss_kb']} KB |",
-    f"| resident specialists between calls / active during a 1000-row batch | {m['resident_specialists_between_calls']} / {s['batch']['active_specialists_during_batch']} |", '']
-s = L('stage6'); out += ['## Stage 6: scale', '', '| N | task acc | routing acc | unsupported | OOD unsupported | mini monolith 10-16-4 | equal-storage monolith (NH) | swarm storage B | routing us/row | invocation ms/row | orchestration ms/row | build s |', '|---|---|---|---|---|---|---|---|---|---|---|---|']
+    f"| resident specialists between calls (by construction) / active during a 1000-row batch | {m['resident_specialists_between_calls_by_construction']} / {s['batch']['active_specialists_during_batch']} |",
+    f"| 1000-row batch: routing / pure uai32 subprocess time / python orchestration | {s['batch']['seconds']['routing'] * 1e3:.1f} ms / {s['batch']['seconds']['invocation'] * 1e3:.1f} ms / {s['batch']['seconds']['orchestration'] * 1e3:.1f} ms |", '']
+s = L('stage6'); out += ['## Stage 6: scale', '', 'Monoliths are trained on the same 500 rows per domain and 60 epochs as each specialist (the capped equal-storage monolith at N >= 1000: 20 epochs, marked). "Equal storage" = N x 576-byte model files, metadata excluded; the swarm storage column includes metadata.', '',
+    '| N | task acc | routing acc | unsupported | OOD unsupported | mini monolith 10-16-4 | equal model-storage monolith (NH, bytes, epochs) | swarm model B / storage B | routing us/row | uai32 subprocess ms/row | orchestration ms/row | build s |', '|---|---|---|---|---|---|---|---|---|---|---|---|']
 for l in s['levels']:
-    out.append(f"| {l['N']} | {pc(l['task_acc'])} | {pc(l['routing_acc'])} | {pc(l['unsupported'])} | {pc(l['out_of_distribution_unsupported_rate'])} | {pc(l['mini_monolith_10-16-4']['accuracy'])} | {pc(l['equal_storage_monolith']['accuracy'])} ({l['equal_storage_monolith']['hidden']}, {l['equal_storage_monolith']['bytes']} B) | {l['swarm_storage_bytes']} | {l['resources']['routing_seconds_per_row'] * 1e6:.1f} | {l['invocation_seconds'] / l['eval_rows'] * 1e3:.3f} | {l['orchestration_seconds'] / l['eval_rows'] * 1e3:.3f} | {l['build_seconds']:.1f} |")
-out += ['', '| N | swarm MACs/query | equal-storage monolith MACs/query | mini monolith MACs/query | failed invocations |', '|---|---|---|---|---|']
-for l in s['levels']: out.append(f"| {l['N']} | {l['swarm_macs_per_query']} | {l['equal_storage_monolith']['macs_per_query']} | {l['mini_monolith_10-16-4']['macs_per_query']} | {l['failed_invocations']} |")
+    e = l['equal_storage_monolith']
+    out.append(f"| {l['N']} | {pc(l['task_acc'])} | {pc(l['routing_acc'])} | {pc(l['unsupported'])} | {pc(l['out_of_distribution_unsupported_rate'])} | {pc(l['mini_monolith_10-16-4']['accuracy'])} | {pc(e['accuracy'])} ({e['hidden']}, {e['bytes']} B, {e['epochs']} ep{', capped' if e['capped'] else ''}) | {l['swarm_model_bytes_total']} / {l['swarm_storage_bytes']} | {l['routing_seconds'] / l['eval_rows'] * 1e6:.1f} | {l['invocation_seconds'] / l['eval_rows'] * 1e3:.3f} | {l['orchestration_seconds'] / l['eval_rows'] * 1e3:.3f} | {l['build_seconds']:.1f} |")
+out += ['', '| N | swarm MACs/query (routing 2 per feature per specialist + one forward) | equal-storage monolith MACs/query | mini monolith MACs/query | eval processes | failed invocations (counted) | orchestrator RSS KB | specialist process RSS KB |', '|---|---|---|---|---|---|---|---|']
+for l in s['levels']: out.append(f"| {l['N']} | {l['swarm_macs_per_query']} | {l['equal_storage_monolith']['macs_per_query']} | {l['mini_monolith_10-16-4']['macs_per_query']} | {l['eval_processes']} | {l['failed_invocations']} | {l['resources']['orchestrator_rss_kb']} | {l['resources']['specialist_process_peak_rss_kb']} |")
 out.append('')
 s = L('stage7'); out += ['## Stage 7: populations (five experts for one domain, five test conditions)', '', '| test condition | ' + ' | '.join(k.replace('expert_', '') for k in s['matrix']['normal']) + ' | swarm k=1 (selected) | swarm k=3 | oracle best |', '|---|' + '---|' * (len(s['matrix']['normal']) + 3)]
 for c, row in s['matrix'].items():

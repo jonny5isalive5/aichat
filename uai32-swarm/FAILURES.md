@@ -50,14 +50,34 @@ Things that did not work, were wrong on the first attempt, or are weaker than ho
     flaw was invisible below 1,000. Fixed by routing in chunks of 256 rows (peak temporary memory
     256 × N × 10 doubles). The unchunked run is preserved as `results/stage6_superseded_unchunked_router.json`
     / `.log`; the reported Stage 6 numbers come from the rerun with the chunked router.
-11. **Orchestration overhead grows with N even after the fix.** Per-row Python work in `decide()` (building
-    provenance records, grouping rows per specialist) was 0.002 ms/row at N = 2 and 0.84 ms/row at N = 1,000
-    before the memory fix, more than ten times the specialist invocation itself (about 0.06 ms/row amortised in
-    batches). This is the coordination layer, not the specialists, and it is the first thing to rewrite in C.
+11. **Timing labels were swapped until the audit.** `decide()` started its clock after `route()`, so the value
+    reported as "invocation" contained the per-row Python bookkeeping and the value reported as
+    "orchestration" was only the routing tensor. The 0.84 ms/row "orchestration" at N = 1,000 before the memory
+    fix was the unchunked router. Since the remediation the JSON records routing time, pure uai32 subprocess time
+    (`Sentinel.seconds`) and the Python remainder separately; the conclusion that coordination, not the
+    specialists, dominates at N = 1,000 stands, and the numbers in FINAL.md are the corrected ones.
 12. **Baseline models were not reproducible between runs.** `uai32 train` continues training when the model
     file already exists, and `Sentinel.create()` did not delete a stale file first, so monolith and compound
     baselines trained in an earlier run (sometimes by an earlier version of the code) were trained further in the
-    next one: the equal-storage monolith at N = 2 scored 81.0%, 83.0% and 79.0% in three consecutive runs while
-    every swarm number was identical. Found by comparing `results/stage6_superseded_*.json`. Fixed by deleting
-    the file in `create()` and by starting `run_all.sh` from an empty `work/`; all stages were rerun from scratch
-    for the reported numbers.
+    next one: the equal-storage monolith at N = 2 scored 81.0%, 83.0% and 79.0% in three consecutive runs. The
+    audit showed the swarm was affected too: the stale `canonical_s6.model` was continued instead of recreated per
+    level, so swarm task accuracy drifted slightly across runs (N = 10: 83.6%, 83.6%, 83.2%; N = 100: 84.9%,
+    84.9%, 85.1%) while routing accuracy stayed identical. Found by comparing `results/stage6_superseded_*.json`.
+    Fixed by deleting the file in `create()`, per-level canonical files, and starting `run_all.sh` from an empty
+    `work/`; the fixed code is reproducible to the byte (auditor: two clean runs identical apart from timings).
+13. **Independent audit (one pass, zero BLOCKERs, eleven IMPORTANT, six LATER) and the single remediation.**
+    Fixed in code: monolith baselines now get the specialists' budget (500 rows per domain, 60 epochs; the
+    capped N = 1,000 equal-storage monolith 20 epochs, marked) and record rows/epochs; "equal storage" is
+    labelled as model-file storage with metadata excluded, and the swarm's model-only bytes are reported next
+    to its total; routing, pure subprocess and orchestration times are recorded separately; the specialist
+    working set is 4 bytes per float32 parameter plus activations plus a row (1,300 B, not 816 B); routing
+    MACs count two operations per feature per specialist; failed invocations are counted, not assumed;
+    a specialist that fails its hash check is no longer reported as "selected"; per-stage library names and
+    per-level canonical files; temporary row files are deleted; history has no timestamps; continued training
+    updates history. Added: a composition baseline with the swarm's own supervision (one brain trained on all
+    device states, applied to both halves, then the table): 56.0% against the swarm's 76.4%. Reworded: "no
+    learning algorithm" to the precise statement of what numpy fits; criteria 4 and 9 qualified with "domain
+    identity explicit in the input"; numbers that did not trace exactly. Recorded, not fixed: the storage column
+    still counts metadata JSON that duplicates index.json; the one-brain composition baseline is the only
+    budget-matched baseline at Stage 4. The auditor's own numbers for the fair N = 10 comparison (monolith 83.0
+    to 84.6% against the swarm's 84.2%) are quoted in FINAL.md as the auditor's measurement.

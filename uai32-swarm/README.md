@@ -3,10 +3,12 @@
 An experiment on whether many independently trained copies of one tiny brain, coordinated by a lightweight
 layer, give useful broad capability at a resource cost far below one monolithic model. The brain is the
 released µAI-32 v1.0.0 binary (`../uai32/dist/uai32`, 9,188 bytes, SHA-256 `996d73cb…`, tag `uai32-v1.0.0`),
-unmodified. Every prediction and every weight update in this directory is made by that binary on a 576-byte
-model file. The coordination layer (`swarm.py`, Python + numpy) contains no learning algorithm and no larger
-model is used anywhere, at build time or at run time; the synthetic task generator in the same file is the
-"test generator" the challenge allows.
+unmodified. Every class prediction and every weight update in this directory is made by that binary on a
+576-byte model file. The coordination layer (`swarm.py`, Python + numpy) fits 21 unsupervised statistics per
+specialist (centroid, spread and radius of its training inputs) and applies fixed formulas (Gaussian familiarity
+score, vote weight, disagreement margin, composition table, spawn-cluster threshold): a label-free
+nearest-centroid router, not a classifier of the task. No larger model is used anywhere, at build time or at
+run time; the synthetic task generator in the same file is the "test generator" the challenge allows.
 
 Measured results are in `results/REPORT.md` (generated from `results/*.json`); the final determination is in
 `FINAL.md`; what did not work is in `FAILURES.md`.
@@ -53,7 +55,7 @@ condition, plus a metadata record. Training, use and restart are all separate pr
 | `val_acc` | held-out accuracy on 100 rows of its own training distribution (its historical competence) |
 | `history` | list of `{event, sha256, t}`: train, retrain, replace, clone, branch, spawn |
 
-The router needs only `index.json` (about 1 KB per specialist); model files are opened only by the uai32
+The router needs only `index.json` (about 1 KB per specialist, of which 21 numbers are used for routing); model files are opened only by the uai32
 process that is about to use them.
 
 ## Router
@@ -63,8 +65,8 @@ For an input `x` and every specialist `s`: `z = (x - centroid_s) / spread_s`, re
 `0.5·mean(z²) + mean(log spread_s)` that charges a specialist for a broad training distribution (without that
 term the expert trained on noisy data wins every input because its radius is the largest). Candidates are the
 specialists whose region contains `x`, ranked by the score. Cost: N × 10 multiply-adds per row, numpy
-vectorised: about 1 µs per row at N = 10 and under 100 µs per row at N = 1,000. No specialist's own confidence
-is used for routing, only for arbitration.
+vectorised: about 1 µs per row at N = 10 and 15 µs at N = 100. No specialist's own confidence
+is used for routing, only for arbitration. Routing at N = 1,000 costs about 300 µs per row in numpy.
 
 ## Arbitration (k > 1)
 
@@ -114,8 +116,10 @@ is seeded; rerunning reproduces the JSON files apart from timings.
 ## Honest limits of the setup
 
 - Tasks are synthetic: random nonlinear teachers over a 6-dimensional condition space, one per domain, with
-  domains identified by four noisy coordinates. They were chosen so that each specialist's job is small and
-  the monolith's job grows with N; real workloads may not partition this cleanly.
+  domains identified by four noisy coordinates (centres at least 0.15 apart, noise 0.03: five standard
+  deviations). Domain identity is therefore explicit in the input and routing is a trivially separable
+  nearest-centroid problem; the hard part of the experiment is the capacity comparison, not the routing. Real
+  workloads may not partition this cleanly.
 - The orchestrator is Python and spawns one process per specialist batch; its own memory (about 50 MB,
   numpy) and the ~1.4 ms process start dominate the per-query cost. A C orchestrator would remove most of it;
   the measured numbers are reported as they are.

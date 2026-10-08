@@ -32,7 +32,7 @@
   "unsupported": 0.018,
   "stage_a_accuracy": 0.872,
   "stage_b_accuracy": 0.85,
-  "seconds": 0.051835328999914054,
+  "seconds": 0.045813663999979326,
   "example": {
    "input_halves": [
     "s0006",
@@ -64,7 +64,16 @@
    "bytes": 12976,
    "train_rows": 5000,
    "epochs": 100
+  },
+  "one_brain_10-16-4_on_device_states_then_table": {
+   "accuracy": 0.56,
+   "stage_a_accuracy": 0.69,
+   "stage_b_accuracy": 0.662,
+   "bytes": 576,
+   "train_rows": 5000,
+   "epochs": 60
   }
  },
+ "disclosure": "the composition layer is given the 4x4 table (an oracle); the specialists were trained with device-state labels (intermediate supervision); the direct baselines only ever saw composed labels",
  "single_specialist_alone": "structurally impossible: a specialist takes 10 inputs, the compound input has 20"
 }
