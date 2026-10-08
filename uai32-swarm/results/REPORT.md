@@ -37,37 +37,43 @@ Provenance records: `results/stage2_provenance.jsonl` (selected specialist, alte
 | system | accuracy | bytes |
 |---|---|---|
 | swarm: route each half, compose (unsupported 1.8%) | 76.4% | 10 specialists x 576 |
-| single_brain_20-16-4 trained directly on the compound task (5000 rows, 100 epochs) | 42.4% | 976 |
-| single_brain_20-64-4 trained directly on the compound task (5000 rows, 100 epochs) | 43.8% | 3376 |
-| single_brain_20-256-4 trained directly on the compound task (5000 rows, 100 epochs) | 44.8% | 12976 |
+| single_brain_20-16-4 (5000 rows, 100 epochs) | 42.4% | 976 |
+| single_brain_20-64-4 (5000 rows, 100 epochs) | 43.8% | 3376 |
+| single_brain_20-256-4 (5000 rows, 100 epochs) | 44.8% | 12976 |
+| one_brain_10-16-4_on_device_states_then_table (5000 rows, 60 epochs) | 56.0% | 576 |
 | one specialist alone | structurally impossible: a specialist takes 10 inputs, the compound input has 20 | |
+
+Disclosure: the composition layer is given the 4x4 table (an oracle); the specialists were trained with device-state labels (intermediate supervision); the direct baselines only ever saw composed labels
 
 ## Stage 5: dynamic library (10 specialists)
 
 | metric | value |
 |---|---|
-| per-specialist model / metadata bytes | 576 / 1050 |
-| index bytes (all routing data) / library storage bytes | 9846 / 26150 |
-| routing time per row / load+predict one row (fresh process, median) | 1.2 us / 1.50 ms |
-| specialist process peak RSS / /bin/true floor / specialist working set | 2300 KB / 1376 KB / 816 B |
-| orchestrator (python+numpy) RSS | 52400 KB |
-| resident specialists between calls / active during a 1000-row batch | 0 / 10 |
+| per-specialist model / metadata bytes | 576 / 1023 |
+| index bytes (all routing data) / library storage bytes | 9599 / 25626 |
+| routing time per row / load+predict one row (fresh process, median) | 1.1 us / 1.36 ms |
+| specialist process peak RSS / /bin/true floor / specialist working set | 2292 KB / 1376 KB / 1300 B |
+| orchestrator (python+numpy) RSS | 52904 KB |
+| resident specialists between calls (by construction) / active during a 1000-row batch | 0 / 10 |
+| 1000-row batch: routing / pure uai32 subprocess time / python orchestration | 1.3 ms / 17.5 ms / 16.2 ms |
 
 ## Stage 6: scale
 
-| N | task acc | routing acc | unsupported | OOD unsupported | mini monolith 10-16-4 | equal-storage monolith (NH) | swarm storage B | routing us/row | invocation ms/row | orchestration ms/row | build s |
-|---|---|---|---|---|---|---|---|---|---|---|---|
-| 2 | 84.0% | 100.0% | 0.0% | 100.0% | 81.0% | 81.0% (35, 1146 B) | 5236 | 2.1 | 0.063 | 0.003 | 0.1 |
-| 10 | 83.2% | 97.8% | 2.2% | 99.3% | 65.8% | 79.2% (189, 5766 B) | 26170 | 1.8 | 0.047 | 0.002 | 0.4 |
-| 100 | 85.1% | 99.0% | 1.0% | 99.3% | 31.8% | 56.7% (1917, 57606 B) | 261846 | 16.8 | 0.056 | 0.014 | 3.8 |
-| 1000 | 84.3% | 98.7% | 1.2% | 94.0% | 25.9% | 31.3% (2048, 61536 B) | 2619348 | 300.8 | 0.051 | 0.121 | 35.0 |
+Monoliths are trained on the same 500 rows per domain and 60 epochs as each specialist (the capped equal-storage monolith at N >= 1000: 20 epochs, marked). "Equal storage" = N x 576-byte model files, metadata excluded; the swarm storage column includes metadata.
 
-| N | swarm MACs/query | equal-storage monolith MACs/query | mini monolith MACs/query | failed invocations |
-|---|---|---|---|---|
-| 2 | 244 | 490 | 224 | 0 |
-| 10 | 324 | 2646 | 224 | 0 |
-| 100 | 1224 | 26838 | 224 | 0 |
-| 1000 | 10224 | 28672 | 224 | 0 |
+| N | task acc | routing acc | unsupported | OOD unsupported | mini monolith 10-16-4 | equal model-storage monolith (NH, bytes, epochs) | swarm model B / storage B | routing us/row | uai32 subprocess ms/row | orchestration ms/row | build s |
+|---|---|---|---|---|---|---|---|---|---|---|---|
+| 2 | 84.0% | 100.0% | 0.0% | 100.0% | 80.0% | 81.0% (35, 1146 B, 60 ep) | 1152 / 5130 | 2.0 | 0.027 | 0.019 | 0.1 |
+| 10 | 83.2% | 97.8% | 2.2% | 99.3% | 70.0% | 79.0% (188, 5736 B, 60 ep) | 5760 / 25642 | 2.0 | 0.028 | 0.020 | 0.3 |
+| 100 | 85.1% | 99.0% | 1.0% | 99.3% | 33.5% | 63.5% (1916, 57576 B, 60 ep) | 57600 / 256596 | 12.0 | 0.030 | 0.017 | 3.1 |
+| 1000 | 84.3% | 98.7% | 1.2% | 94.0% | 26.0% | 30.2% (2048, 61536 B, 20 ep, capped) | 576000 / 2566894 | 111.8 | 0.031 | 0.019 | 31.6 |
+
+| N | swarm MACs/query (routing 2 per feature per specialist + one forward) | equal-storage monolith MACs/query | mini monolith MACs/query | eval processes | failed invocations (counted) | orchestrator RSS KB | specialist process RSS KB |
+|---|---|---|---|---|---|---|---|
+| 2 | 284 | 529 | 244 | 2 | 0 | 40048 | 2240 |
+| 10 | 444 | 2824 | 244 | 10 | 0 | 42012 | 2244 |
+| 100 | 2244 | 28744 | 244 | 100 | 0 | 57068 | 2244 |
+| 1000 | 20244 | 30724 | 244 | 1000 | 0 | 500820 | 2244 |
 
 ## Stage 7: populations (five experts for one domain, five test conditions)
 
@@ -85,7 +91,7 @@ Provenance records: `results/stage2_provenance.jsonl` (selected specialist, alte
 |---|---|
 | continue training s0003 on new own-domain data: accuracy before / after; its hash changed; the other 9 files unchanged | 89.3% / 86.7%; True; True |
 | catastrophic forgetting: s0003 then trained on domain 7: accuracy on domain 3 / on domain 7 | 32.7% / 82.7% |
-| retrain s0003 from the canonical brain: accuracy on domain 3 (version) | 85.7% (v3) |
+| retrain s0003 from the canonical brain: accuracy on domain 3 (version) | 85.7% (v4) |
 | corrupted s0005 detected by hash; its rows unsupported while corrupt; accuracy after replacement | True; 100.0%; 96.0% |
 | clone of s0002: same hash, identical outputs | True, True |
 | branch s0002 into noisy and shifted descendants: all three hashes distinct | True |

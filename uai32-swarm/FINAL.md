@@ -1,7 +1,9 @@
 # Final determination
 
-*Numbers below are from `results/REPORT.md` (seed 1, gcc 13.3 / glibc 2.39 x86-64, released uai32 v1.0.0).
-The Stage 6 table is from the rerun with the chunked router; see FAILURES.md items 10 and 11.*
+*Numbers below are from `results/REPORT.md` (seed 1, gcc 13.3 / glibc 2.39 x86-64, released uai32 v1.0.0),
+after the independent audit and the single remediation pass (FAILURES.md items 10 to 13). Monolith baselines
+are trained with the same 500 rows per domain and 60 epochs as each specialist, except the capped N = 1,000
+equal-storage monolith (20 epochs). "Equal storage" means N × the 576-byte model file; metadata is excluded.*
 
 ## What was proven
 
@@ -16,7 +18,7 @@ The Stage 6 table is from the rerun with the chunked router; see FAILURES.md ite
 | 7. The system says when no suitable expert exists | Stage 2: 100% of inputs from three never-seen domains and 100% of uniform noise marked unsupported; Stage 6: 94 to 100% of out-of-distribution inputs unsupported at every N, 0 to 2.2% of in-domain inputs wrongly refused | proven |
 | 8. Add, replace, retrain, clone, remove independently | Stage 8: all six operations performed and verified by hash and accuracy; branching one expert into two gives three distinct hashes and condition-specific behaviour | proven |
 | 9. Scales materially beyond a handful | Stage 6: 1,000 specialists, 2.6 MB of storage (576 KB of model files), task accuracy 84.3%, routing 98.7%, every invocation counted and none failed; run-to-run reproducible | proven on a task whose domain identity is explicit in the input, with one flaw found and fixed (router memory) |
-| 10. Total resource cost keeps the Mini Sentinel advantage | per specialist 576 B model + ~1 KB metadata; a specialist runs in a 2.2 MB process (1.4 MB of which is glibc floor) with an 816-byte working set; 1,000 specialists cost 10,224 multiply-adds per query including routing | proven for the specialists; the Python orchestrator is the expensive part (see boundary) |
+| 10. Total resource cost keeps the Mini Sentinel advantage | per specialist 576 B model + about 1 KB metadata (21 numbers used for routing); a specialist runs in a 2.2 MB process (1.4 MB of which is glibc floor) with a 1,300-byte working set (float32 parameters, activations, one row); 1,000 specialists cost 20,244 multiply-adds per query including routing, against 30,724 for the capped monolith | proven for the specialists; the Python orchestrator is the expensive part (see boundary) |
 
 ## What remains unproven or failed
 
@@ -29,8 +31,9 @@ The Stage 6 table is from the rerun with the chunked router; see FAILURES.md ite
 - **Spawning works but clusters crudely**: two unseen domains arriving together produced three specialists,
   one of them mixed; the niche ended at 60% and 88% accuracy (stretch).
 - **The equal-storage comparison at N = 1,000 is capped.** The fair monolith would need about 19,000 hidden
-  units; the trained one has 2,048 (62 KB, the storage of about 107 specialists) and reaches 31.3%. At N = 100,
-  where the fair monolith (1,917 units, 57.6 KB) was trained, it reaches 56.7% against the swarm's 85.1%.
+  units; the trained one has 2,048 (62 KB, the storage of about 107 specialists) trained for 20 epochs and
+  reaches 30.2%. At N = 100, where the fair monolith (1,916 units, 57.6 KB, 60 epochs) was trained, it reaches
+  63.5% against the swarm's 85.1%. Storage comparisons exclude the swarm's metadata (about 4.5 × its model bytes).
 - **Real workloads were not tested.** All domains are synthetic random teachers chosen to partition cleanly.
 
 ## The final question
@@ -44,25 +47,33 @@ not the specialists.**
 
 Quantified, on this workload (N domains, each a different nonlinear 4-class rule on 6 condition features):
 
-| N | swarm accuracy | same-size monolith (576 B) | equal-storage monolith | swarm storage | swarm MACs/query | monolith MACs/query |
+| N | swarm accuracy | same-size monolith (576 B, same budget) | equal model-storage monolith (same budget) | swarm model bytes / with metadata | swarm MACs/query (routing + one forward) | monolith MACs/query |
 |---|---|---|---|---|---|---|
-| 2 | 84.0% | 81.0% | 81.0% (1.1 KB) | 5.2 KB | 244 | 490 |
-| 10 | 83.2% | 65.8% | 79.2% (5.8 KB) | 26 KB | 324 | 2,646 |
-| 100 | 85.1% | 31.8% | 56.7% (57.6 KB) | 262 KB | 1,224 | 26,838 |
-| 1,000 | 84.3% | 25.9% | 31.3% (61.5 KB, capped) | 2.6 MB | 10,224 | 28,672 |
+| 2 | 84.0% | 80.0% | 81.0% (NH 35, 1.1 KB) | 1.2 KB / 5.1 KB | 284 | 529 |
+| 10 | 83.2% | 70.0% | 79.0% (NH 188, 5.7 KB) | 5.8 KB / 26 KB | 444 | 2,824 |
+| 100 | 85.1% | 33.5% | 63.5% (NH 1,916, 57.6 KB) | 58 KB / 257 KB | 2,244 | 28,744 |
+| 1,000 | 84.3% | 26.0% | 30.2% (NH 2,048, 61.5 KB, capped, 20 epochs) | 576 KB / 2.6 MB | 20,244 | 30,724 |
+
+The auditor's own budget-matched runs at N = 10 gave the equal-storage monolith 83.0% (NH 189) and a monolith
+sized to the swarm's *total* storage including metadata (NH 869, 26 KB) 84.6%, against the swarm's 84.2% on
+its test draw: at ten domains a fairly trained monolith is as good as the swarm. At N = 100 the auditor's
+budget-matched monolith reached 65.5% against 85.4%.
 
 - The swarm's accuracy is flat in N; both monoliths fall with N. At 100 domains the swarm beats a monolith of
-  the same total storage by 28 points while using 22 times fewer multiply-adds per query, and beats the
-  same-size monolith by 53 points.
+  the same model storage and training budget by 22 points while using 13 times fewer multiply-adds per query,
+  and beats the same-size monolith by 52 points. At 1,000 domains the comparison is capped (a fair monolith
+  would need about 19,000 hidden units); the trend from 10 to 100 is the evidence.
 - Composition adds capability no single brain has: 76% versus at most 45% for brains trained directly on the
-  compound task with the same data.
-- The cost that does not stay small is coordination: the Python orchestrator uses 38 MB at N = 2 and 487 MB
-  at N = 1,000 (after the router was chunked; it needed 7.9 GB before), routing costs 2 µs per row at N = 10
-  and 301 µs at N = 1,000, and per-row orchestration overhead (0.12 ms at N = 1,000) is twice the specialist
-  invocation itself (0.05 ms, amortised in batches). The specialists keep the Mini Sentinel advantage; the
-  orchestrator must be engineered with the same discipline, which this Python implementation does not.
-- Below about 10 domains the advantage is small (84.0% vs 81.0% at N = 2); the architecture earns its keep
-  when the workload is wide.
+  compound task from composed labels, and versus 56% for one brain given the swarm's own supervision (trained
+  on every domain's device states, applied to both halves, composed through the same oracle table).
+- The cost that does not stay small is coordination: the Python orchestrator uses 39 MB at N = 2 and 489 MB
+  at N = 1,000 (after the router was chunked; it needed 7.9 GB before), and routing costs 2 µs per row at
+  N = 10 and 112 µs at N = 1,000, against 0.03 ms of uai32 subprocess time and 0.02 ms of Python bookkeeping
+  per row that do not grow with N. At 1,000 specialists routing is the largest per-row cost. The specialists
+  keep the Mini Sentinel advantage; the orchestrator must be engineered with the same discipline, which this
+  Python implementation does not.
+- Up to about 10 domains there is no advantage: a fairly trained monolith matches the swarm (auditor: 84.6%
+  vs 84.2% at N = 10). The architecture earns its keep when the workload is wide.
 
 Where it fails: when the domain cannot be recognised from the input (populations under noise, edge or
 adversarial conditions), the router has no signal and the swarm degrades to voting; and when a specialist
