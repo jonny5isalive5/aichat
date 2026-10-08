@@ -5,7 +5,7 @@
 set -eu
 cd "$(dirname "$0")"
 SEED=${SEED:-1}
-rm -rf work results/stage*.json results/stretch.json results/stage2_provenance.jsonl   # start clean: uai32 train continues an existing model file
+rm -rf work results/stage[1-8].json results/stretch.json results/stage2_provenance.jsonl   # start clean: uai32 train continues an existing model file
 python3 swarm.py 1 2 3 4 5 7 8 stretch --seed "$SEED"
 python3 swarm.py 6 --seed "$SEED" --sizes "${SIZES:-2,10,100,1000}"
 python3 report.py

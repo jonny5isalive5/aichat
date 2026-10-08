@@ -37,8 +37,8 @@ Provenance records: `results/stage2_provenance.jsonl` (selected specialist, alte
 | system | accuracy | bytes |
 |---|---|---|
 | swarm: route each half, compose (unsupported 1.8%) | 76.4% | 10 specialists x 576 |
-| single_brain_20-16-4 trained directly on the compound task (5000 rows, 100 epochs) | 42.0% | 976 |
-| single_brain_20-64-4 trained directly on the compound task (5000 rows, 100 epochs) | 40.2% | 3376 |
+| single_brain_20-16-4 trained directly on the compound task (5000 rows, 100 epochs) | 42.4% | 976 |
+| single_brain_20-64-4 trained directly on the compound task (5000 rows, 100 epochs) | 43.8% | 3376 |
 | single_brain_20-256-4 trained directly on the compound task (5000 rows, 100 epochs) | 44.8% | 12976 |
 | one specialist alone | structurally impossible: a specialist takes 10 inputs, the compound input has 20 | |
 
@@ -46,21 +46,21 @@ Provenance records: `results/stage2_provenance.jsonl` (selected specialist, alte
 
 | metric | value |
 |---|---|
-| per-specialist model / metadata bytes | 576 / 1051 |
-| index bytes (all routing data) / library storage bytes | 9848 / 26154 |
-| routing time per row / load+predict one row (fresh process, median) | 1.7 us / 1.37 ms |
-| specialist process peak RSS / /bin/true floor / specialist working set | 2244 KB / 1376 KB / 816 B |
-| orchestrator (python+numpy) RSS | 53792 KB |
+| per-specialist model / metadata bytes | 576 / 1050 |
+| index bytes (all routing data) / library storage bytes | 9846 / 26150 |
+| routing time per row / load+predict one row (fresh process, median) | 1.2 us / 1.50 ms |
+| specialist process peak RSS / /bin/true floor / specialist working set | 2300 KB / 1376 KB / 816 B |
+| orchestrator (python+numpy) RSS | 52400 KB |
 | resident specialists between calls / active during a 1000-row batch | 0 / 10 |
 
 ## Stage 6: scale
 
 | N | task acc | routing acc | unsupported | OOD unsupported | mini monolith 10-16-4 | equal-storage monolith (NH) | swarm storage B | routing us/row | invocation ms/row | orchestration ms/row | build s |
 |---|---|---|---|---|---|---|---|---|---|---|---|
-| 2 | 84.0% | 100.0% | 0.0% | 100.0% | 81.0% | 79.0% (35, 1146 B) | 5236 | 3.2 | 0.071 | 0.003 | 0.1 |
-| 10 | 83.6% | 97.8% | 2.2% | 99.3% | 70.8% | 81.0% (189, 5766 B) | 26168 | 1.2 | 0.048 | 0.002 | 0.3 |
-| 100 | 84.9% | 99.0% | 1.0% | 99.3% | 31.4% | 63.4% (1917, 57606 B) | 261842 | 15.9 | 0.055 | 0.014 | 3.4 |
-| 1000 | 84.3% | 98.7% | 1.2% | 94.0% | 25.9% | 32.6% (2048, 61536 B) | 2619334 | 314.5 | 0.056 | 0.138 | 34.2 |
+| 2 | 84.0% | 100.0% | 0.0% | 100.0% | 81.0% | 81.0% (35, 1146 B) | 5236 | 2.1 | 0.063 | 0.003 | 0.1 |
+| 10 | 83.2% | 97.8% | 2.2% | 99.3% | 65.8% | 79.2% (189, 5766 B) | 26170 | 1.8 | 0.047 | 0.002 | 0.4 |
+| 100 | 85.1% | 99.0% | 1.0% | 99.3% | 31.8% | 56.7% (1917, 57606 B) | 261846 | 16.8 | 0.056 | 0.014 | 3.8 |
+| 1000 | 84.3% | 98.7% | 1.2% | 94.0% | 25.9% | 31.3% (2048, 61536 B) | 2619348 | 300.8 | 0.051 | 0.121 | 35.0 |
 
 | N | swarm MACs/query | equal-storage monolith MACs/query | mini monolith MACs/query | failed invocations |
 |---|---|---|---|---|
