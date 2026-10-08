@@ -1,0 +1,234 @@
+band centres (Hz): 214 344 493 663 857 1079 1332 1622 1953 2331 2763 3256 3820 4464 5199 6040
+band edges   (Hz): 100 214 344 493 663 857 1079 1332 1622 1953 2331 2763 3256 3820 4464 5199 6040 7000
+ok   silence/biquad: merged `feat` output identical to standalone
+ok   silence/biquad: 192 features
+ok   silence/biquad: vs numpy reference  max|diff| above floor 0.0000 (n=0), near floor 0.0001 (n=192)
+ok   silence/biquad: all 192 features == ln(1e-7) = -16.118
+ok   silence/fft: merged `feat` output identical to standalone
+ok   silence/fft: 192 features
+ok   silence/fft: vs numpy reference  max|diff| above floor 0.0000 (n=0), near floor 0.0001 (n=192)
+ok   silence/fft: all 192 features == ln(1e-7) = -16.118
+
+per-band log energy (last segment) for a 0.5-amplitude tone at each band centre; peak marked *
+-- biquad
+            0      1      2      3      4      5      6      7      8      9     10     11     12     13     14     15
+ok   tone_c00/biquad: merged `feat` output identical to standalone
+ok   tone_c00/biquad: 192 features
+ok   tone_c00/biquad: vs numpy reference  max|diff| above floor 0.0005 (n=156), near floor 0.0005 (n=36)
+  214  -1.39* -3.33  -4.93  -6.04  -6.89  -7.60  -8.22  -8.78  -9.30  -9.79 -10.28 -10.76 -11.26 -11.81 -12.45 -13.28 
+ok   tone_c01/biquad: merged `feat` output identical to standalone
+ok   tone_c01/biquad: 192 features
+ok   tone_c01/biquad: vs numpy reference  max|diff| above floor 0.0005 (n=180), near floor 0.0004 (n=12)
+  344  -2.77  -1.39* -3.21  -4.71  -5.73  -6.52  -7.19  -7.78  -8.31  -8.82  -9.31  -9.80 -10.31 -10.86 -11.51 -12.36 
+ok   tone_c02/biquad: merged `feat` output identical to standalone
+ok   tone_c02/biquad: 192 features
+ok   tone_c02/biquad: vs numpy reference  max|diff| above floor 0.0005 (n=180), near floor 0.0005 (n=12)
+  493  -3.86  -2.85  -1.38* -3.16  -4.59  -5.57  -6.32  -6.96  -7.53  -8.06  -8.56  -9.06  -9.58 -10.14 -10.79 -11.65 
+ok   tone_c03/biquad: merged `feat` output identical to standalone
+ok   tone_c03/biquad: 192 features
+ok   tone_c03/biquad: vs numpy reference  max|diff| above floor 0.0005 (n=192), near floor 0.0000 (n=0)
+  663  -4.60  -3.97  -2.89  -1.39* -3.13  -4.53  -5.47  -6.21  -6.83  -7.39  -7.92  -8.43  -8.96  -9.53 -10.19 -11.05 
+ok   tone_c04/biquad: merged `feat` output identical to standalone
+ok   tone_c04/biquad: 192 features
+ok   tone_c04/biquad: vs numpy reference  max|diff| above floor 0.0005 (n=192), near floor 0.0000 (n=0)
+  857  -5.20  -4.72  -4.04  -2.93  -1.39* -3.12  -4.49  -5.42  -6.15  -6.77  -7.33  -7.87  -8.41  -8.99  -9.66 -10.53 
+ok   tone_c05/biquad: merged `feat` output identical to standalone
+ok   tone_c05/biquad: 192 features
+ok   tone_c05/biquad: vs numpy reference  max|diff| above floor 0.0005 (n=192), near floor 0.0000 (n=0)
+ 1079  -5.71  -5.32  -4.81  -4.11  -2.96  -1.39* -3.13  -4.49  -5.41  -6.13  -6.75  -7.33  -7.90  -8.50  -9.18 -10.06 
+ok   tone_c06/biquad: merged `feat` output identical to standalone
+ok   tone_c06/biquad: 192 features
+ok   tone_c06/biquad: vs numpy reference  max|diff| above floor 0.0005 (n=192), near floor 0.0000 (n=0)
+ 1332  -6.17  -5.82  -5.41  -4.89  -4.16  -3.00  -1.39* -3.15  -4.50  -5.42  -6.15  -6.79  -7.40  -8.02  -8.72  -9.61 
+ok   tone_c07/biquad: merged `feat` output identical to standalone
+ok   tone_c07/biquad: 192 features
+ok   tone_c07/biquad: vs numpy reference  max|diff| above floor 0.0005 (n=192), near floor 0.0000 (n=0)
+ 1622  -6.60  -6.28  -5.92  -5.49  -4.96  -4.22  -3.04  -1.39* -3.18  -4.54  -5.47  -6.22  -6.89  -7.55  -8.28  -9.18 
+ok   tone_c08/biquad: merged `feat` output identical to standalone
+ok   tone_c08/biquad: 192 features
+ok   tone_c08/biquad: vs numpy reference  max|diff| above floor 0.0005 (n=192), near floor 0.0000 (n=0)
+ 1953  -7.01  -6.71  -6.38  -6.01  -5.57  -5.03  -4.28  -3.09  -1.39* -3.23  -4.62  -5.56  -6.34  -7.07  -7.83  -8.76 
+ok   tone_c09/biquad: merged `feat` output identical to standalone
+ok   tone_c09/biquad: 192 features
+ok   tone_c09/biquad: vs numpy reference  max|diff| above floor 0.0005 (n=192), near floor 0.0000 (n=0)
+ 2331  -7.42  -7.13  -6.82  -6.48  -6.10  -5.66  -5.11  -4.36  -3.16  -1.39* -3.32  -4.73  -5.71  -6.54  -7.37  -8.34 
+ok   tone_c10/biquad: merged `feat` output identical to standalone
+ok   tone_c10/biquad: 192 features
+ok   tone_c10/biquad: vs numpy reference  max|diff| above floor 0.0005 (n=192), near floor 0.0000 (n=0)
+ 2763  -7.83  -7.54  -7.25  -6.93  -6.59  -6.21  -5.76  -5.21  -4.46  -3.25  -1.39* -3.44  -4.89  -5.93  -6.86  -7.89 
+ok   tone_c11/biquad: merged `feat` output identical to standalone
+ok   tone_c11/biquad: 192 features
+ok   tone_c11/biquad: vs numpy reference  max|diff| above floor 0.0005 (n=192), near floor 0.0000 (n=0)
+ 3256  -8.25  -7.97  -7.68  -7.38  -7.07  -6.72  -6.34  -5.89  -5.34  -4.60  -3.38  -1.39* -3.61  -5.14  -6.27  -7.41 
+ok   tone_c12/biquad: merged `feat` output identical to standalone
+ok   tone_c12/biquad: 192 features
+ok   tone_c12/biquad: vs numpy reference  max|diff| above floor 0.0005 (n=192), near floor 0.0000 (n=0)
+ 3820  -8.70  -8.43  -8.15  -7.86  -7.55  -7.24  -6.89  -6.51  -6.07  -5.52  -4.78  -3.57  -1.39* -3.87  -5.51  -6.84 
+ok   tone_c13/biquad: merged `feat` output identical to standalone
+ok   tone_c13/biquad: 192 features
+ok   tone_c13/biquad: vs numpy reference  max|diff| above floor 0.0005 (n=192), near floor 0.0000 (n=0)
+ 4464  -9.21  -8.94  -8.66  -8.38  -8.09  -7.79  -7.47  -7.13  -6.75  -6.31  -5.77  -5.04  -3.83  -1.39* -4.27  -6.10 
+ok   tone_c14/biquad: merged `feat` output identical to standalone
+ok   tone_c14/biquad: 192 features
+ok   tone_c14/biquad: vs numpy reference  max|diff| above floor 0.0005 (n=192), near floor 0.0000 (n=0)
+ 5199  -9.82  -9.55  -9.28  -9.00  -8.72  -8.43  -8.13  -7.81  -7.47  -7.09  -6.66  -6.14  -5.42  -4.23  -1.39* -4.90 
+ok   tone_c15/biquad: merged `feat` output identical to standalone
+ok   tone_c15/biquad: 192 features
+ok   tone_c15/biquad: vs numpy reference  max|diff| above floor 0.0005 (n=192), near floor 0.0000 (n=0)
+ 6040 -10.65 -10.38 -10.11  -9.84  -9.56  -9.28  -8.99  -8.69  -8.37  -8.03  -7.66  -7.24  -6.72  -6.03  -4.87  -1.39*
+ok   biquad: argmax band == tone band for all 16 centre tones
+ok   biquad: peak level within 0.05 nat of ln(A^2) = -1.386 (measured -1.387..-1.384)
+-- fft
+            0      1      2      3      4      5      6      7      8      9     10     11     12     13     14     15
+ok   tone_c00/fft: merged `feat` output identical to standalone
+ok   tone_c00/fft: 192 features
+ok   tone_c00/fft: vs numpy reference  max|diff| above floor 0.0005 (n=36), near floor 0.0005 (n=156)
+  214  -1.30* -3.04 -10.26 -13.87 -15.46 -15.96 -16.08 -16.11 -16.11 -16.12 -16.12 -16.12 -16.12 -16.12 -16.12 -16.12 
+ok   tone_c01/fft: merged `feat` output identical to standalone
+ok   tone_c01/fft: 192 features
+ok   tone_c01/fft: vs numpy reference  max|diff| above floor 0.0005 (n=48), near floor 0.0005 (n=144)
+  344  -3.03  -1.26* -3.16 -10.99 -14.33 -15.70 -16.03 -16.10 -16.11 -16.12 -16.12 -16.12 -16.12 -16.12 -16.12 -16.12 
+ok   tone_c02/fft: merged `feat` output identical to standalone
+ok   tone_c02/fft: 192 features
+ok   tone_c02/fft: vs numpy reference  max|diff| above floor 0.0004 (n=36), near floor 0.0005 (n=156)
+  493 -12.84  -3.44  -1.16* -3.58 -13.67 -15.86 -16.09 -16.11 -16.12 -16.12 -16.12 -16.12 -16.12 -16.12 -16.12 -16.12 
+ok   tone_c03/fft: merged `feat` output identical to standalone
+ok   tone_c03/fft: 192 features
+ok   tone_c03/fft: vs numpy reference  max|diff| above floor 0.0002 (n=36), near floor 0.0005 (n=156)
+  663 -14.32 -11.83  -3.31  -1.18* -3.44 -12.45 -15.38 -16.01 -16.10 -16.11 -16.12 -16.12 -16.12 -16.12 -16.12 -16.12 
+ok   tone_c04/fft: merged `feat` output identical to standalone
+ok   tone_c04/fft: 192 features
+ok   tone_c04/fft: vs numpy reference  max|diff| above floor 0.0005 (n=36), near floor 0.0005 (n=156)
+  857 -15.83 -15.16 -12.67  -3.51  -1.14* -3.64 -13.57 -15.79 -16.08 -16.11 -16.12 -16.12 -16.12 -16.12 -16.12 -16.12 
+ok   tone_c05/fft: merged `feat` output identical to standalone
+ok   tone_c05/fft: 192 features
+ok   tone_c05/fft: vs numpy reference  max|diff| above floor 0.0005 (n=36), near floor 0.0005 (n=156)
+ 1079 -16.07 -15.99 -15.54 -13.49  -3.66  -1.12* -3.79 -14.26 -15.96 -16.10 -16.11 -16.12 -16.12 -16.12 -16.12 -16.12 
+ok   tone_c06/fft: merged `feat` output identical to standalone
+ok   tone_c06/fft: 192 features
+ok   tone_c06/fft: vs numpy reference  max|diff| above floor 0.0002 (n=36), near floor 0.0005 (n=156)
+ 1332 -16.10 -16.09 -16.02 -15.71 -13.82  -3.75  -1.11* -3.88 -14.64 -16.01 -16.11 -16.12 -16.12 -16.12 -16.12 -16.12 
+ok   tone_c07/fft: merged `feat` output identical to standalone
+ok   tone_c07/fft: 192 features
+ok   tone_c07/fft: vs numpy reference  max|diff| above floor 0.0005 (n=36), near floor 0.0005 (n=156)
+ 1622 -16.12 -16.12 -16.12 -16.12 -16.11 -15.99  -4.22  -1.06* -4.35 -16.06 -16.12 -16.12 -16.12 -16.12 -16.12 -16.12 
+ok   tone_c08/fft: merged `feat` output identical to standalone
+ok   tone_c08/fft: 192 features
+ok   tone_c08/fft: vs numpy reference  max|diff| above floor 0.0004 (n=36), near floor 0.0005 (n=156)
+ 1953 -16.12 -16.12 -16.12 -16.11 -16.10 -16.03 -15.24  -4.08  -1.07* -4.21 -15.63 -16.10 -16.12 -16.12 -16.12 -16.12 
+ok   tone_c09/fft: merged `feat` output identical to standalone
+ok   tone_c09/fft: 192 features
+ok   tone_c09/fft: vs numpy reference  max|diff| above floor 0.0005 (n=36), near floor 0.0005 (n=156)
+ 2331 -16.12 -16.12 -16.12 -16.12 -16.11 -16.11 -16.06 -15.42  -4.17  -1.06* -4.30 -15.77 -16.10 -16.12 -16.12 -16.12 
+ok   tone_c10/fft: merged `feat` output identical to standalone
+ok   tone_c10/fft: 192 features
+ok   tone_c10/fft: vs numpy reference  max|diff| above floor 0.0002 (n=36), near floor 0.0005 (n=156)
+ 2763 -16.12 -16.12 -16.12 -16.12 -16.12 -16.12 -16.11 -16.10 -15.87  -4.39  -1.04* -4.52 -16.01 -16.11 -16.12 -16.12 
+ok   tone_c11/fft: merged `feat` output identical to standalone
+ok   tone_c11/fft: 192 features
+ok   tone_c11/fft: vs numpy reference  max|diff| above floor 0.0004 (n=36), near floor 0.0005 (n=156)
+ 3256 -16.12 -16.12 -16.12 -16.12 -16.12 -16.12 -16.12 -16.12 -16.12 -16.08  -4.67  -1.03* -4.80 -16.10 -16.12 -16.12 
+ok   tone_c12/fft: merged `feat` output identical to standalone
+ok   tone_c12/fft: 192 features
+ok   tone_c12/fft: vs numpy reference  max|diff| above floor 0.0003 (n=36), near floor 0.0005 (n=156)
+ 3820 -16.12 -16.12 -16.12 -16.12 -16.12 -16.12 -16.12 -16.12 -16.12 -16.12 -16.09  -4.77  -1.02* -4.91 -16.11 -16.12 
+ok   tone_c13/fft: merged `feat` output identical to standalone
+ok   tone_c13/fft: 192 features
+ok   tone_c13/fft: vs numpy reference  max|diff| above floor 0.0004 (n=36), near floor 0.0005 (n=156)
+ 4464 -16.12 -16.12 -16.12 -16.12 -16.12 -16.12 -16.12 -16.12 -16.12 -16.12 -16.11 -16.02  -4.63  -1.03* -4.77 -16.08 
+ok   tone_c14/fft: merged `feat` output identical to standalone
+ok   tone_c14/fft: 192 features
+ok   tone_c14/fft: vs numpy reference  max|diff| above floor 0.0004 (n=36), near floor 0.0003 (n=156)
+ 5199 -16.12 -16.12 -16.12 -16.12 -16.12 -16.12 -16.12 -16.12 -16.12 -16.12 -16.12 -16.12 -16.10  -4.94  -1.02* -5.07 
+ok   tone_c15/fft: merged `feat` output identical to standalone
+ok   tone_c15/fft: 192 features
+ok   tone_c15/fft: vs numpy reference  max|diff| above floor 0.0001 (n=24), near floor 0.0005 (n=168)
+ 6040 -16.12 -16.12 -16.12 -16.12 -16.12 -16.12 -16.12 -16.12 -16.12 -16.12 -16.12 -16.12 -16.12 -16.09  -4.92  -1.02*
+ok   fft: argmax band == tone band for all 16 centre tones
+ok   fft: peak level within 0.60 nat of ln(A^2) = -1.386 (measured -1.302..-1.017)
+ok   tone_440/biquad: merged `feat` output identical to standalone
+ok   tone_440/biquad: 192 features
+ok   tone_440/biquad: vs numpy reference  max|diff| above floor 0.0005 (n=168), near floor 0.0005 (n=24)
+ok   tone  440 Hz/biquad: argmax band 2 == analytic band 2 (centre 493 Hz)
+ok   tone_440/fft: merged `feat` output identical to standalone
+ok   tone_440/fft: 192 features
+ok   tone_440/fft: vs numpy reference  max|diff| above floor 0.0005 (n=36), near floor 0.0005 (n=156)
+ok   tone  440 Hz/fft: argmax band 2 == analytic band 2 (centre 493 Hz)
+ok   tone_1000/biquad: merged `feat` output identical to standalone
+ok   tone_1000/biquad: 192 features
+ok   tone_1000/biquad: vs numpy reference  max|diff| above floor 0.0005 (n=192), near floor 0.0000 (n=0)
+ok   tone 1000 Hz/biquad: argmax band 5 == analytic band 5 (centre 1079 Hz)
+ok   tone_1000/fft: merged `feat` output identical to standalone
+ok   tone_1000/fft: 192 features
+ok   tone_1000/fft: vs numpy reference  max|diff| above floor 0.0004 (n=24), near floor 0.0001 (n=168)
+ok   tone 1000 Hz/fft: argmax band 5 == analytic band 5 (centre 1079 Hz)
+ok   tone_3000/biquad: merged `feat` output identical to standalone
+ok   tone_3000/biquad: 192 features
+ok   tone_3000/biquad: vs numpy reference  max|diff| above floor 0.0005 (n=192), near floor 0.0000 (n=0)
+ok   tone 3000 Hz/biquad: argmax band 10 == analytic band 10 (centre 2763 Hz)
+ok   tone_3000/fft: merged `feat` output identical to standalone
+ok   tone_3000/fft: 192 features
+ok   tone_3000/fft: vs numpy reference  max|diff| above floor 0.0004 (n=24), near floor 0.0001 (n=168)
+ok   tone 3000 Hz/fft: argmax band 10 == analytic band 10 (centre 2763 Hz)
+ok   onset/biquad: merged `feat` output identical to standalone
+ok   onset/biquad: 192 features
+ok   onset/biquad: vs numpy reference  max|diff| above floor 0.0005 (n=90), near floor 0.0003 (n=102)
+ok   onset/biquad: segments 0..5 all at the floor
+ok   onset/biquad: segments 7..11 steady in band 5 (-1.795..-1.795)
+ok   onset/fft: merged `feat` output identical to standalone
+ok   onset/fft: 192 features
+ok   onset/fft: vs numpy reference  max|diff| above floor 0.0004 (n=12), near floor 0.0005 (n=180)
+ok   onset/fft: segments 0..5 all at the floor
+ok   onset/fft: segments 7..11 steady in band 5 (-1.421..-1.421)
+ok   noise/biquad: merged `feat` output identical to standalone
+ok   noise/biquad: 192 features
+ok   noise/biquad: vs numpy reference  max|diff| above floor 0.0005 (n=192), near floor 0.0000 (n=0)
+ok   noise/biquad: all bands above floor (min -8.14, max -6.38)
+noise/biquad band means: -7.8 -7.6 -7.5 -7.4 -7.3 -7.1 -7.0 -6.9 -6.8 -6.7 -6.6 -6.6 -6.5 -6.5 -6.7 -7.0
+ok   noise/fft: merged `feat` output identical to standalone
+ok   noise/fft: 192 features
+ok   noise/fft: vs numpy reference  max|diff| above floor 0.0005 (n=192), near floor 0.0000 (n=0)
+ok   noise/fft: all bands above floor (min -8.64, max -5.60)
+noise/fft band means: -8.0 -7.8 -7.6 -7.6 -7.4 -7.2 -7.0 -6.9 -6.8 -6.6 -6.5 -6.3 -6.1 -6.0 -5.9 -5.7
+ok   short/biquad: merged `feat` output identical to standalone
+ok   short/biquad: 192 features
+ok   short/biquad: vs numpy reference  max|diff| above floor 0.0005 (n=96), near floor 0.0005 (n=96)
+ok   short/biquad: second half at floor, first half lit
+ok   long/biquad: 2 s input gives the same row as its first second
+ok   wav/biquad: WAV and WAV+LIST chunk give the same row as raw
+ok   wav/biquad: same row from stdin
+ok   wav/biquad: stereo WAV refused (vfe: need 16 kHz 16-bit mono)
+ok   wav/biquad: 8k WAV refused (vfe: need 16 kHz 16-bit mono)
+ok   wav/biquad: 8bit WAV refused (vfe: need 16 kHz 16-bit mono)
+ok   io/biquad: missing file refused (vfe: cannot open audio file)
+ok   noise_norm/biquad: merged `feat` output identical to standalone
+ok   noise_norm/biquad: 192 features
+ok   noise_norm/biquad: vs numpy reference  max|diff| above floor 0.0005 (n=192), near floor 0.0000 (n=0)
+ok   -n/biquad: per-band means over time |.| < 0.002 (max 0.0002)
+ok   label/biquad: FILE LABEL -> 193 tokens, last "2"
+ok   label/biquad: -n - LABEL from stdin
+ok   short/fft: merged `feat` output identical to standalone
+ok   short/fft: 192 features
+ok   short/fft: vs numpy reference  max|diff| above floor 0.0004 (n=12), near floor 0.0005 (n=180)
+ok   short/fft: second half at floor, first half lit
+ok   long/fft: 2 s input gives the same row as its first second
+ok   wav/fft: WAV and WAV+LIST chunk give the same row as raw
+ok   wav/fft: same row from stdin
+ok   wav/fft: stereo WAV refused (vfe: need 16 kHz 16-bit mono)
+ok   wav/fft: 8k WAV refused (vfe: need 16 kHz 16-bit mono)
+ok   wav/fft: 8bit WAV refused (vfe: need 16 kHz 16-bit mono)
+ok   io/fft: missing file refused (vfe: cannot open audio file)
+ok   noise_norm/fft: merged `feat` output identical to standalone
+ok   noise_norm/fft: 192 features
+ok   noise_norm/fft: vs numpy reference  max|diff| above floor 0.0005 (n=192), near floor 0.0000 (n=0)
+ok   -n/fft: per-band means over time |.| < 0.002 (max 0.0002)
+ok   label/fft: FILE LABEL -> 193 tokens, last "2"
+ok   label/fft: -n - LABEL from stdin
+
+end-to-end: 4 classes x 20 train / 10 test through `uai32_X feat` -> `uai32_X train/test`
+ok   e2e/biquad: train ok: new model: 192 inputs, 16 hidden, 4 classes, 3540 parameters ... epoch 40/40  train loss 0.0014  accuracy 80/80 = 100.0%
+ok   e2e/biquad (>=90% required): test loss 0.0456  accuracy 39/40 = 97.5% (model 7856 bytes, exe 10892 bytes, combined 18748)
+ok   e2e/fft: train ok: new model: 192 inputs, 16 hidden, 4 classes, 3540 parameters ... epoch 40/40  train loss 0.0008  accuracy 80/80 = 100.0%
+ok   e2e/fft (>=90% required): test loss 0.0026  accuracy 40/40 = 100.0% (model 7856 bytes, exe 11412 bytes, combined 19268)
+
+ALL CHECKS PASSED

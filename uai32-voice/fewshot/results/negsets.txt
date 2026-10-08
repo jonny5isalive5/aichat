@@ -1,0 +1,22 @@
+
+yes/no/stop: recall at per-draw <=1% FA threshold | negatives = all five other words  vs  excluding go+up
+  A_proto_cos_min    all: recall 0.122±0.035 FA 0.0112 | excl go+up: recall 0.116±0.030 FA 0.0123
+  A_proto_cos_ratio  all: recall 0.106±0.034 FA 0.0108 | excl go+up: recall 0.099±0.035 FA 0.0115
+  A_1nn_cos_min      all: recall 0.148±0.036 FA 0.0125 | excl go+up: recall 0.159±0.042 FA 0.0138
+  B_dtw_min          all: recall 0.059±0.045 FA 0.0111 | excl go+up: recall 0.091±0.059 FA 0.0127
+  B_dtw_margin       all: recall 0.146±0.078 FA 0.0113 | excl go+up: recall 0.133±0.082 FA 0.0108
+  C0_mlp_plain       all: recall 0.032±0.027 FA 0.0090 | excl go+up: recall 0.038±0.027 FA 0.0108
+  C1_mlp_aug         all: recall 0.044±0.020 FA 0.0102 | excl go+up: recall 0.059±0.025 FA 0.0102
+  C2_mlp_neg         all: recall 0.037±0.028 FA 0.0106 | excl go+up: recall 0.043±0.031 FA 0.0109
+  C3_mlp_aug_neg     all: recall 0.043±0.034 FA 0.0088 | excl go+up: recall 0.068±0.036 FA 0.0097
+
+up/down/go: recall at per-draw <=1% FA threshold | negatives = all five other words  vs  excluding no+stop
+  A_proto_cos_min    all: recall 0.039±0.014 FA 0.0107 | excl no+stop: recall 0.115±0.036 FA 0.0133
+  A_proto_cos_ratio  all: recall 0.033±0.019 FA 0.0111 | excl no+stop: recall 0.062±0.038 FA 0.0126
+  A_1nn_cos_min      all: recall 0.031±0.016 FA 0.0113 | excl no+stop: recall 0.087±0.060 FA 0.0127
+  B_dtw_min          all: recall 0.092±0.039 FA 0.0102 | excl no+stop: recall 0.219±0.086 FA 0.0145
+  B_dtw_margin       all: recall 0.029±0.023 FA 0.0106 | excl no+stop: recall 0.024±0.016 FA 0.0102
+  C0_mlp_plain       all: recall 0.004±0.006 FA 0.0070 | excl no+stop: recall 0.006±0.010 FA 0.0074
+  C1_mlp_aug         all: recall 0.011±0.011 FA 0.0088 | excl no+stop: recall 0.014±0.013 FA 0.0087
+  C2_mlp_neg         all: recall 0.011±0.008 FA 0.0078 | excl no+stop: recall 0.019±0.015 FA 0.0108
+  C3_mlp_aug_neg     all: recall 0.005±0.008 FA 0.0056 | excl no+stop: recall 0.011±0.012 FA 0.0066

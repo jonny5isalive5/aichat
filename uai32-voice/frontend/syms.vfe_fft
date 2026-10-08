@@ -1,0 +1,14 @@
+__gmon_start__
+__libc_start_main@GLIBC_2.34
+calloc@GLIBC_2.2.5
+exit@GLIBC_2.2.5
+expf@GLIBC_2.27
+fopen@GLIBC_2.2.5
+fprintf@GLIBC_2.2.5
+getc@GLIBC_2.2.5
+logf@GLIBC_2.27
+printf@GLIBC_2.2.5
+putchar@GLIBC_2.2.5
+sincosf@GLIBC_2.2.5
+sinf@GLIBC_2.2.5
+strcmp@GLIBC_2.2.5

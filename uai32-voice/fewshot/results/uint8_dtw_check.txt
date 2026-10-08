@@ -1,0 +1,3 @@
+DTW-margin templates float32  closed-set 0.920  recall@1%devFA 0.120  testFA 0.0109
+DTW-margin templates uint8    closed-set 0.920  recall@1%devFA 0.120  testFA 0.0111
+max |quantisation error| in template values: 0.025 (CMVN units; value range about -4..+4)

@@ -1,0 +1,24 @@
+# measure.sh 2026-10-08T07:19:12Z, x86_64, cc (Ubuntu 13.3.0-6ubuntu2~24.04.1) 13.3.0
+# wc -c of every file that counts
+ 7416 dtwapp
+ 9152 dtwapp.elf
+11500 netapp
+13304 netapp.elf
+19548 validation/pilot.state
+ 5936 validation/model4.bin
+ 5970 validation/model5.bin
+ 9188 ../../uai32/uai32
+82014 total
+# formulas
+dtw state = 8 + 977 * N: N = 20 -> 19548 (real file: 19548)
+model = 8 + 8*NI + 2*(NH*(NI+1) + NO*(NH+1)): NI=144 NH=16 NO=4 -> 5936 (real file: 5936); NO=5 -> 5970 (real file: 5970)
+# totals against 32768
+dtwapp + state(20) = 7416 + 19548 = 26964; spare 5804
+netapp + model(NO=4) = 11500 + 5936 = 17436; spare 15332
+netapp + model(NO=5) = 11500 + 5970 = 17470; spare 15298
+# sections (readelf -S on the .elf twins)
+dtwapp: .init=0x00001b .text=0x000ccb .fini=0x00000d .rodata=0x0003c8 .eh_frame=0x000044 .init_array=0x000008 .fini_array=0x000008 .dynamic=0x0001c0 .got=0x0000c0 .got.plt=0x000018 .bss=0x000070 .comment=0x00002d .shstrtab=0x0000d5 
+netapp: .init=0x00001b .text=0x001b2b .fini=0x00000d .rodata=0x000510 .eh_frame=0x000044 .init_array=0x000008 .fini_array=0x000008 .dynamic=0x0001c0 .got=0x0000c8 .got.plt=0x000018 .data=0x000004 .bss=0x0000d8 .comment=0x00002d .shstrtab=0x0000db 
+# libc/libm imports (nm -D --undefined-only)
+dtwapp: __errno_location __gmon_start__ __libc_start_main calloc cosf exit expf fclose fflush fopen fprintf fread fseek ftell fwrite getc logf memmove printf putc rewind sincosf strcmp strtoul 
+netapp: __errno_location __gmon_start__ __libc_start_main calloc cosf exit expf fclose fopen fprintf fseek ftell getc getline logf memmove printf putc puts realloc sincosf strcmp strtod strtof strtoul 

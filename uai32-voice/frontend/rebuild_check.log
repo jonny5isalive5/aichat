@@ -1,0 +1,31 @@
+== binaries: sha256 of the rebuilt file vs bin/SHA256SUMS
+IDENTICAL  uai32_fft  11412 bytes  5c50909dae5ed0e21c21cca993afab6c74afea054cbb117a29b57434b3e13ac6
+IDENTICAL  uai32_biquad  10892 bytes  e5af435df2aca77f923956fa162a9040f2b656ff7c0f54318fbfefb47d0e9495
+IDENTICAL  uai32_fft_sinonly  11340 bytes  06be3c74bbbc82d1fb8b6e0a6fb7293085e032a499d9578bfda390cbcecd7276
+IDENTICAL  vfe_fft  4896 bytes  3bde81bd32d25bd43f73e7041428261206ddf622516a1b767b8f82c4c76a36ae
+IDENTICAL  vfe_biquad  4688 bytes  3ae99c92bc29aff4f6a65d16cf5a6a7f3f36f5ad6b127ef6b80c2e97377fbac3
+IDENTICAL  uai32_fft.elf  13216 bytes  ece39fc4ef7733bdc2b932fbee849e7d4dbcc2598f3162fc52eadd0971fdf8d2
+IDENTICAL  uai32_biquad.elf  12696 bytes  bb0302fa08df9b73f4aeb7f10b06313b7f7878eb5c415c4e2ce2cb4eb34d0ced
+== generated merged sources
+IDENTICAL  uai32_fft.c
+IDENTICAL  uai32_biquad.c
+== import lists
+IDENTICAL  syms.base
+IDENTICAL  syms.uai32_biquad
+IDENTICAL  syms.uai32_fft
+IDENTICAL  syms.uai32_fft_sinonly
+IDENTICAL  syms.vfe_biquad
+IDENTICAL  syms.vfe_fft
+IDENTICAL  syms.vfe_fft_sinonly
+== measurements.txt without the 'bench' timing lines
+IDENTICAL  measurements.txt (all non-timing lines)
+== tests.log: last line
+ALL CHECKS PASSED
+== timing lines of this run
+bench biquad  200 runs: 0.886 ms per second of audio (check 0.216768)
+bench biquad  200 runs: 0.903 ms per second of audio (check 0.216768)
+bench biquad  200 runs: 1.039 ms per second of audio (check 0.216768)
+bench fft     200 runs: 0.920 ms per second of audio (check 0.25559)
+bench fft     200 runs: 0.944 ms per second of audio (check 0.25559)
+bench fft     200 runs: 0.920 ms per second of audio (check 0.25559)
+REBUILD CHECK PASSED

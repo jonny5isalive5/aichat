@@ -1,0 +1,39 @@
+## record.py status (before import)
+enrol    0/ 20 recorded (0 positives, 0 negatives), 0 with QA warnings
+dev      0/140 recorded (0 positives, 0 negatives), 0 with QA warnings
+test     0/420 recorded (0 positives, 0 negatives), 0 with QA warnings
+speaker standin-speaker-independent, seed 7, commands ['yes', 'no', 'stop', 'go'], held back: go
+## record.py import (host-side centring of every stand-in capture; QA warnings are expected on crowd-sourced clips)
+imported 580 captures; 0 items still without a capture
+## record.py status (after import)
+enrol   20/ 20 recorded (20 positives, 0 negatives), 10 with QA warnings
+dev    140/140 recorded (40 positives, 100 negatives), 47 with QA warnings
+test   420/420 recorded (120 positives, 300 negatives), 161 with QA warnings
+speaker standin-speaker-independent, seed 7, commands ['yes', 'no', 'stop', 'go'], held back: go
+## record.py centre on one stand-in capture
+{"centre_sample": 9760, "active_first_ms": 370, "active_last_ms": 850, "active_ms": 480, "peak_dbfs": -1.1, "floor_db": -100.0, "peak_db": -8.5, "edge": false, "window_start_sample": 1760, "padded_samples": 0}
+32000
+## record.py init of a second, pre-registered manifest (the real pilot's shape) and the manual-recording instructions
+sealed manifest /tmp/claude-0/-home-user-aichat/809e473e-6ead-51f0-b725-4e01dff2b821/scratchpad/pilot-dryrun3/rec-smoke/manifest.json: speaker spk01, seed 11, 580 items (enrol 20, dev 140, test 420); sha256 241e0641e369d0f7ab166a76a91073ece8598d9b10d42be802c900fb8ab983ad
+commands ['stop', 'go', 'left', 'right'] (the 4th, 'right', is held back until the fourth-command step); confusables ['top', 'shop', 'stock', 'no', 'so', 'goat', 'lift', 'let', 'laughed', 'write', 'light', 'ride']; unrelated ['apple', 'window', 'seven', 'coffee', 'river', 'paper', 'yellow', 'music', 'table', 'garden', 'pencil', 'orange', 'summer', 'bottle', 'jacket', 'silver', 'candle', 'button', 'ladder', 'rocket']
+phase enrol: 20 items, 0 recorded, 20 to do
+backend: manual 
+No capture backend (python module sounddevice, arecord, sox/rec) is available.  Record by hand:
+  1. For each id below, record ONE 1.5 s WAV: 16,000 Hz, mono, 16-bit PCM, named incoming/<id>.wav under /tmp/claude-0/-home-user-aichat/809e473e-6ead-51f0-b725-4e01dff2b821/scratchpad/pilot-dryrun3/rec-smoke
+     e.g.  arecord -f S16_LE -r 16000 -c 1 -d 2 incoming/<id>.wav   (any length >= 1.5 s is accepted; only the
+     first 1.5 s is used).  Same microphone, same room, same distance, AGC/noise suppression OFF for every clip.
+  2. Prompt yourself in EXACTLY this order and say only the word shown, once, after a beep or count-in:
+     942996130a22  STOP
+     07f25754c12c  RIGHT
+     ... (20 prompts)
+## error paths (each must refuse)
+arecord is not installed: use --backend auto (picks what exists) or manual
+sox is not installed: use --backend auto (picks what exists) or manual
+PHASE is one of enrol, dev, test
+/tmp/claude-0/-home-user-aichat/809e473e-6ead-51f0-b725-4e01dff2b821/scratchpad/pilot-dryrun3/rec-smoke/manifest.json exists; a sealed manifest is never overwritten (choose another directory)
+exactly 4 commands: three enrolled first and the fourth held back
+manifest hash f818076b6b74deb2 does not match SEALED.sha256 241e0641e369d0f7: the label manifest was edited after sealing
+## one-shot rule: a second test stage on the same directory must be refused
+the test stage already ran on /tmp/claude-0/-home-user-aichat/809e473e-6ead-51f0-b725-4e01dff2b821/scratchpad/pilot-dryrun3/run at 2026-10-08T07:52:36Z: the one-shot rule forbids a second run (--force-rerun labels it POST-HOC)
+## recipe change after the freeze must be refused
+seed=2 differs from the frozen recipe 1

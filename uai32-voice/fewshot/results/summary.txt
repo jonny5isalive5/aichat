@@ -1,0 +1,110 @@
+# Few-shot spoken-command recognition on mini_speech_commands (speaker-independent): summary
+Enrolment = 5 recordings per command from random speakers; all dev/test recordings come from OTHER speakers (harder than the challenge's enrolled-speaker setting).
+Per draw: 100 fresh test recordings per command, 1000 dev + 1000 test unfamiliar recordings (200 per other word).  Threshold policy: accept if score > thr;
+per-draw thr = the value that admits <=1% of that draw's dev negatives; fixed thr = median per-draw dev threshold over SEPARATE dev seeds (101-110), frozen before testing.
+Recall = accepted AND correct command.  Wilson 95% intervals are on counts pooled over draws (draws share recordings, so they are optimistic; the ±sd across draws is also given).
+
+### MAIN RESULT   (commands yes/no/stop; test seeds 1-20, 20 draws; 5 enrolment recordings per command)
+method             closed    AUC    EER | per-draw-thr recall per cmd           mean  minCmd | per-draw test FA [Wilson95]  fixed-thr rec  | fixed-thr FA [Wilson95]   
+A_proto_cos_min   79.3%   0.657  0.392 | yes 0.25±0.08 no 0.01±0.02 stop 0.10±0.07  12.2%    1.4% |  1.12%±0.47 [0.98,1.28] 224/20000 |  12.1% (min  1.8%) |  1.13% [0.99,1.29] thr=-0.2941
+A_proto_cos_ratio  79.3%   0.656  0.389 | yes 0.25±0.08 no 0.01±0.01 stop 0.06±0.05  10.6%    1.3% |  1.08%±0.41 [0.95,1.23] 216/20000 |  12.2% (min  2.6%) |  1.54% [1.37,1.71] thr=3.334
+A_1nn_cos_min     80.1%   0.715  0.341 | yes 0.27±0.09 no 0.03±0.02 stop 0.15±0.07  14.8%    2.7% |  1.25%±0.45 [1.11,1.41] 250/20000 |  15.1% (min  2.7%) |  1.34% [1.19,1.51] thr=-0.2667
+B_dtw_min         91.1%   0.639  0.393 | yes 0.05±0.08 no 0.07±0.04 stop 0.05±0.06   5.9%    5.2% |  1.10%±0.54 [0.97,1.26] 221/20000 |   4.3% (min  2.2%) |  1.54% [1.38,1.73] thr=-0.6084
+B_dtw_margin      91.1%   0.739  0.318 | yes 0.22±0.13 no 0.05±0.06 stop 0.16±0.13  14.6%    5.3% |  1.13%±0.40 [0.99,1.29] 226/20000 |   9.8% (min  3.3%) |  0.89% [0.76,1.02] thr=0.5722
+C0_mlp_plain      65.0%   0.577  0.448 | yes 0.05±0.05 no 0.01±0.02 stop 0.04±0.05   3.2%    1.3% |  0.91%±0.57 [0.78,1.05] 181/20000 |   1.0% (min  0.3%) |  0.46% [0.37,0.56] thr=0.999
+C1_mlp_aug        70.2%   0.594  0.437 | yes 0.07±0.04 no 0.02±0.02 stop 0.04±0.04   4.4%    1.8% |  1.02%±0.39 [0.89,1.17] 204/20000 |   3.0% (min  1.2%) |  0.71% [0.60,0.84] thr=0.996
+C2_mlp_neg        64.7%   0.749  0.330 | yes 0.06±0.05 no 0.02±0.02 stop 0.04±0.03   3.7%    1.9% |  1.06%±0.64 [0.93,1.21] 212/20000 |   2.5% (min  1.6%) |  1.04% [0.91,1.20] thr=0.9945
+C3_mlp_aug_neg    68.5%   0.804  0.278 | yes 0.06±0.06 no 0.02±0.03 stop 0.05±0.05   4.3%    2.1% |  0.88%±0.60 [0.76,1.01] 175/20000 |   4.4% (min  2.2%) |  1.50% [1.35,1.68] thr=0.9985
+   MLP settings: H=16 hidden, lr=0.01, epochs plain 300 / aug 5 / aug+neg 20, 30 augmented copies per example; state bytes {"A_proto": 1728, "A_1nn": 8640, "B_dtw_float32": 58560, "B_dtw_uint8": 14640, "C0_mlp_plain": 5902, "C1_mlp_aug": 5902, "C2_mlp_neg": 5936, "C3_mlp_aug_neg": 5936}
+
+### MAIN RESULT   (commands up/down/go; test seeds 1-20, 20 draws; 5 enrolment recordings per command)
+method             closed    AUC    EER | per-draw-thr recall per cmd           mean  minCmd | per-draw test FA [Wilson95]  fixed-thr rec  | fixed-thr FA [Wilson95]   
+A_proto_cos_min   50.0%   0.691  0.361 | up 0.02±0.02 down 0.06±0.04 go 0.04±0.03   3.9%    2.3% |  1.07%±0.38 [0.94,1.22] 214/20000 |   3.6% (min  1.5%) |  1.18% [1.03,1.33] thr=-0.3429
+A_proto_cos_ratio  50.0%   0.571  0.450 | up 0.03±0.03 down 0.04±0.05 go 0.02±0.03   3.3%    2.3% |  1.11%±0.54 [0.97,1.26] 222/20000 |   1.4% (min  0.8%) |  0.97% [0.84,1.11] thr=2.282
+A_1nn_cos_min     49.1%   0.669  0.372 | up 0.02±0.02 down 0.03±0.03 go 0.04±0.02   3.1%    2.4% |  1.13%±0.42 [0.99,1.29] 226/20000 |   2.6% (min  1.9%) |  1.18% [1.03,1.33] thr=-0.2635
+B_dtw_min         67.3%   0.755  0.286 | up 0.15±0.08 down 0.04±0.06 go 0.08±0.06   9.2%    4.2% |  1.01%±0.56 [0.89,1.16] 203/20000 |   9.5% (min  2.9%) |  1.29% [1.14,1.45] thr=-0.602
+B_dtw_margin      67.3%   0.577  0.446 | up 0.06±0.07 down 0.01±0.01 go 0.01±0.01   2.9%    1.1% |  1.06%±0.38 [0.93,1.21] 212/20000 |   1.7% (min  0.7%) |  0.71% [0.60,0.84] thr=0.4523
+C0_mlp_plain      47.2%   0.506  0.497 | up 0.01±0.01 down 0.00±0.01 go 0.00±0.01   0.4%    0.2% |  0.69%±0.43 [0.59,0.82] 139/20000 |   0.6% (min  0.3%) |  0.97% [0.84,1.12] thr=0.9995
+C1_mlp_aug        55.5%   0.523  0.483 | up 0.01±0.02 down 0.01±0.02 go 0.01±0.02   1.1%    0.8% |  0.88%±0.43 [0.76,1.01] 175/20000 |   0.4% (min  0.1%) |  0.36% [0.29,0.45] thr=0.997
+C2_mlp_neg        47.7%   0.748  0.337 | up 0.01±0.02 down 0.01±0.01 go 0.01±0.01   1.1%    0.9% |  0.78%±0.35 [0.67,0.91] 156/20000 |   1.2% (min  0.8%) |  1.33% [1.19,1.50] thr=0.9925
+C3_mlp_aug_neg    54.5%   0.704  0.370 | up 0.00±0.00 down 0.01±0.01 go 0.01±0.02   0.6%    0.2% |  0.56%±0.47 [0.46,0.67] 111/20000 |   0.0% (min  0.0%) |  0.00% [0.00,0.02] thr=1
+   MLP settings: H=16 hidden, lr=0.01, epochs plain 300 / aug 5 / aug+neg 20, 30 augmented copies per example; state bytes {"A_proto": 1728, "A_1nn": 8640, "B_dtw_float32": 58560, "B_dtw_uint8": 14640, "C0_mlp_plain": 5902, "C1_mlp_aug": 5902, "C2_mlp_neg": 5936, "C3_mlp_aug_neg": 5936}
+
+### MAIN RESULT   (commands yes/no/stop/go; test seeds 1-10, 10 draws; 5 enrolment recordings per command)
+method             closed    AUC    EER | per-draw-thr recall per cmd           mean  minCmd | per-draw test FA [Wilson95]  fixed-thr rec  | fixed-thr FA [Wilson95]   
+A_proto_cos_min   61.3%   0.638  0.407 | yes 0.23±0.09 no 0.01±0.01 stop 0.10±0.06 go 0.02±0.02   9.1%    0.9% |  1.32%±0.46 [1.10,1.60] 106/8000 |  10.5% (min  1.4%) |  1.74% [1.47,2.05] thr=-0.2978
+A_proto_cos_ratio  61.3%   0.599  0.436 | yes 0.28±0.05 no 0.01±0.01 stop 0.07±0.06 go 0.00±0.00   8.8%    0.1% |  1.05%±0.44 [0.85,1.30] 84/8000 |   9.8% (min  0.1%) |  1.69% [1.43,1.99] thr=3.046
+A_1nn_cos_min     63.0%   0.693  0.360 | yes 0.23±0.05 no 0.02±0.01 stop 0.16±0.08 go 0.02±0.02  10.9%    2.3% |  1.07%±0.33 [0.87,1.33] 86/8000 |  11.2% (min  2.4%) |  1.29% [1.06,1.56] thr=-0.2603
+B_dtw_min         74.9%   0.649  0.383 | yes 0.01±0.02 no 0.06±0.06 stop 0.02±0.03 go 0.07±0.05   4.1%    1.1% |  1.12%±0.44 [0.92,1.38] 90/8000 |   4.0% (min  1.5%) |  1.46% [1.22,1.75] thr=-0.5776
+B_dtw_margin      74.9%   0.657  0.393 | yes 0.26±0.14 no 0.00±0.00 stop 0.10±0.11 go 0.01±0.01   9.4%    0.1% |  1.16%±0.45 [0.95,1.42] 93/8000 |   6.2% (min  0.1%) |  0.78% [0.61,0.99] thr=0.4786
+C0_mlp_plain      52.2%   0.592  0.438 | yes 0.06±0.04 no 0.01±0.02 stop 0.06±0.06 go 0.01±0.02   3.5%    1.0% |  0.83%±0.45 [0.65,1.05] 66/8000 |   2.3% (min  0.4%) |  0.59% [0.44,0.78] thr=0.997
+C1_mlp_aug        55.8%   0.603  0.433 | yes 0.10±0.06 no 0.01±0.01 stop 0.07±0.05 go 0.01±0.02   4.6%    0.7% |  0.73%±0.38 [0.56,0.94] 58/8000 |   3.6% (min  0.5%) |  0.51% [0.38,0.69] thr=0.991
+C2_mlp_neg        51.6%   0.784  0.312 | yes 0.06±0.04 no 0.03±0.02 stop 0.07±0.05 go 0.02±0.02   4.4%    2.2% |  0.86%±0.40 [0.68,1.09] 69/8000 |   4.0% (min  2.2%) |  0.92% [0.74,1.16] thr=0.983
+C3_mlp_aug_neg    55.5%   0.847  0.215 | yes 0.09±0.08 no 0.03±0.03 stop 0.06±0.06 go 0.03±0.02   5.2%    2.6% |  0.94%±0.42 [0.75,1.17] 75/8000 |   5.5% (min  2.4%) |  1.12% [0.92,1.38] thr=0.995
+   MLP settings: H=16 hidden, lr=0.01, epochs plain 300 / aug 5 / aug+neg 20, 30 augmented copies per example; state bytes {"A_proto": 2304, "A_1nn": 11520, "B_dtw_float32": 78080, "B_dtw_uint8": 19520, "C0_mlp_plain": 5936, "C1_mlp_aug": 5936, "C2_mlp_neg": 5970, "C3_mlp_aug_neg": 5970}
+
+### CONTROL: example-level shuffled enrolment labels (chance closed-set = 33%)   (commands yes/no/stop; test seeds 1-10, 10 draws; 5 enrolment recordings per command)
+method             closed    AUC    EER | per-draw-thr recall per cmd           mean  minCmd | per-draw test FA [Wilson95]  fixed-thr rec  | fixed-thr FA [Wilson95]   
+A_proto_cos_min   36.9%   0.630  0.407 | yes 0.04±0.07 no 0.00±0.00 stop 0.06±0.08   3.2%    0.2% |  1.03%±0.49 [0.85,1.25] 103/10000 | n/a            | n/a
+A_proto_cos_ratio  36.9%   0.592  0.438 | yes 0.01±0.02 no 0.00±0.00 stop 0.06±0.09   2.4%    0.1% |  1.00%±0.36 [0.82,1.21] 100/10000 | n/a            | n/a
+A_1nn_cos_min     39.0%   0.718  0.339 | yes 0.13±0.09 no 0.01±0.01 stop 0.08±0.07   7.1%    0.8% |  1.22%±0.44 [1.02,1.45] 122/10000 | n/a            | n/a
+B_dtw_min         38.8%   0.633  0.399 | yes 0.01±0.02 no 0.02±0.04 stop 0.02±0.03   1.9%    1.3% |  1.06%±0.41 [0.88,1.28] 106/10000 | n/a            | n/a
+B_dtw_margin      38.8%   0.564  0.456 | yes 0.00±0.01 no 0.01±0.02 stop 0.04±0.06   1.6%    0.3% |  1.09%±0.31 [0.90,1.31] 109/10000 | n/a            | n/a
+C0_mlp_plain      36.2%   0.527  0.482 | yes 0.00±0.01 no 0.00±0.01 stop 0.01±0.02   0.6%    0.2% |  0.92%±0.49 [0.75,1.13] 92/10000 | n/a            | n/a
+C1_mlp_aug        37.0%   0.548  0.468 | yes 0.00±0.00 no 0.01±0.01 stop 0.02±0.04   1.0%    0.2% |  0.85%±0.42 [0.69,1.05] 85/10000 | n/a            | n/a
+C2_mlp_neg        37.2%   0.734  0.338 | yes 0.01±0.01 no 0.01±0.01 stop 0.01±0.02   0.7%    0.5% |  0.97%±0.60 [0.80,1.18] 97/10000 | n/a            | n/a
+C3_mlp_aug_neg    36.3%   0.782  0.288 | yes 0.01±0.03 no 0.00±0.00 stop 0.03±0.04   1.4%    0.1% |  0.60%±0.44 [0.47,0.77] 60/10000 | n/a            | n/a
+
+### ENROLMENT-SIZE SWEEP: 10 recordings per command (templates only)   (commands yes/no/stop; test seeds 1-10, 10 draws; 10 enrolment recordings per command)
+method             closed    AUC    EER | per-draw-thr recall per cmd           mean  minCmd | per-draw test FA [Wilson95]  fixed-thr rec  | fixed-thr FA [Wilson95]   
+A_proto_cos_min   81.3%   0.672  0.379 | yes 0.24±0.07 no 0.01±0.01 stop 0.13±0.07  12.5%    0.9% |  1.06%±0.33 [0.88,1.28] 106/10000 | n/a            | n/a
+A_proto_cos_ratio  81.3%   0.675  0.373 | yes 0.25±0.05 no 0.01±0.01 stop 0.08±0.06  11.5%    1.4% |  1.16%±0.37 [0.97,1.39] 116/10000 | n/a            | n/a
+A_1nn_cos_min     82.4%   0.752  0.311 | yes 0.31±0.07 no 0.03±0.02 stop 0.22±0.08  18.6%    2.7% |  1.30%±0.52 [1.10,1.54] 130/10000 | n/a            | n/a
+B_dtw_min         91.8%   0.660  0.378 | yes 0.02±0.03 no 0.09±0.04 stop 0.03±0.04   5.0%    2.4% |  1.14%±0.41 [0.95,1.37] 114/10000 | n/a            | n/a
+B_dtw_margin      91.8%   0.754  0.315 | yes 0.21±0.12 no 0.08±0.05 stop 0.17±0.15  15.5%    8.4% |  1.14%±0.47 [0.95,1.37] 114/10000 | n/a            | n/a
+
+### ENROLMENT-SIZE SWEEP: 20 recordings per command (templates only)   (commands yes/no/stop; test seeds 1-10, 10 draws; 20 enrolment recordings per command)
+method             closed    AUC    EER | per-draw-thr recall per cmd           mean  minCmd | per-draw test FA [Wilson95]  fixed-thr rec  | fixed-thr FA [Wilson95]   
+A_proto_cos_min   82.7%   0.684  0.367 | yes 0.28±0.04 no 0.02±0.01 stop 0.11±0.05  13.7%    2.4% |  1.15%±0.29 [0.96,1.38] 115/10000 | n/a            | n/a
+A_proto_cos_ratio  82.7%   0.670  0.378 | yes 0.28±0.05 no 0.03±0.01 stop 0.08±0.04  12.8%    3.2% |  1.19%±0.40 [1.00,1.42] 119/10000 | n/a            | n/a
+A_1nn_cos_min     89.1%   0.781  0.285 | yes 0.39±0.09 no 0.03±0.02 stop 0.20±0.06  20.8%    3.2% |  1.04%±0.41 [0.86,1.26] 104/10000 | n/a            | n/a
+B_dtw_min         94.7%   0.680  0.360 | yes 0.02±0.02 no 0.06±0.05 stop 0.01±0.01   3.0%    1.4% |  0.73%±0.35 [0.58,0.92] 73/10000 | n/a            | n/a
+B_dtw_margin      94.7%   0.797  0.267 | yes 0.37±0.08 no 0.08±0.06 stop 0.21±0.12  21.8%    8.0% |  0.83%±0.25 [0.67,1.03] 83/10000 | n/a            | n/a
+
+### ENROLMENT-SIZE SWEEP: 50 recordings per command (templates only)   (commands yes/no/stop; test seeds 1-10, 10 draws; 50 enrolment recordings per command)
+method             closed    AUC    EER | per-draw-thr recall per cmd           mean  minCmd | per-draw test FA [Wilson95]  fixed-thr rec  | fixed-thr FA [Wilson95]   
+A_proto_cos_min   83.1%   0.694  0.359 | yes 0.26±0.06 no 0.03±0.01 stop 0.14±0.06  14.3%    3.5% |  1.14%±0.46 [0.95,1.37] 114/10000 | n/a            | n/a
+A_proto_cos_ratio  83.1%   0.695  0.359 | yes 0.28±0.05 no 0.04±0.02 stop 0.08±0.03  13.5%    4.5% |  0.99%±0.37 [0.81,1.20] 99/10000 | n/a            | n/a
+A_1nn_cos_min     89.4%   0.810  0.266 | yes 0.45±0.07 no 0.05±0.02 stop 0.34±0.10  28.1%    5.3% |  1.33%±0.68 [1.12,1.57] 133/10000 | n/a            | n/a
+B_dtw_min         94.6%   0.687  0.355 | yes 0.03±0.02 no 0.08±0.04 stop 0.03±0.02   4.4%    2.6% |  1.04%±0.29 [0.86,1.26] 104/10000 | n/a            | n/a
+B_dtw_margin      94.6%   0.816  0.255 | yes 0.38±0.14 no 0.09±0.05 stop 0.27±0.08  24.9%    9.4% |  0.99%±0.43 [0.81,1.20] 99/10000 | n/a            | n/a
+
+### ENROLMENT-SIZE SWEEP: 20 recordings per command, all methods (MLP aug x8)   (commands yes/no/stop; test seeds 1-10, 10 draws; 20 enrolment recordings per command)
+method             closed    AUC    EER | per-draw-thr recall per cmd           mean  minCmd | per-draw test FA [Wilson95]  fixed-thr rec  | fixed-thr FA [Wilson95]   
+A_proto_cos_min   82.7%   0.684  0.367 | yes 0.28±0.04 no 0.02±0.01 stop 0.11±0.05  13.7%    2.4% |  1.15%±0.29 [0.96,1.38] 115/10000 | n/a            | n/a
+A_proto_cos_ratio  82.7%   0.670  0.378 | yes 0.28±0.05 no 0.03±0.01 stop 0.08±0.04  12.8%    3.2% |  1.19%±0.40 [1.00,1.42] 119/10000 | n/a            | n/a
+A_1nn_cos_min     89.1%   0.781  0.285 | yes 0.39±0.09 no 0.03±0.02 stop 0.20±0.06  20.8%    3.2% |  1.04%±0.41 [0.86,1.26] 104/10000 | n/a            | n/a
+B_dtw_min         94.7%   0.680  0.360 | yes 0.02±0.02 no 0.06±0.05 stop 0.01±0.01   3.0%    1.4% |  0.73%±0.35 [0.58,0.92] 73/10000 | n/a            | n/a
+B_dtw_margin      94.7%   0.797  0.267 | yes 0.37±0.08 no 0.08±0.06 stop 0.21±0.12  21.8%    8.0% |  0.83%±0.25 [0.67,1.03] 83/10000 | n/a            | n/a
+C0_mlp_plain      79.0%   0.660  0.391 | yes 0.00±0.00 no 0.00±0.00 stop 0.00±0.00   0.0%    0.0% |  0.00%±0.00 [0.00,0.04] 0/10000 | n/a            | n/a
+C1_mlp_aug        80.6%   0.667  0.382 | yes 0.14±0.10 no 0.01±0.01 stop 0.09±0.06   8.2%    1.4% |  0.94%±0.56 [0.77,1.15] 94/10000 | n/a            | n/a
+C2_mlp_neg        78.0%   0.724  0.400 | yes 0.00±0.00 no 0.00±0.00 stop 0.00±0.00   0.0%    0.0% |  0.00%±0.00 [0.00,0.04] 0/10000 | n/a            | n/a
+C3_mlp_aug_neg    78.6%   0.782  0.353 | yes 0.11±0.07 no 0.01±0.01 stop 0.14±0.05   8.7%    1.3% |  0.99%±0.39 [0.81,1.20] 99/10000 | n/a            | n/a
+
+### STATE / CODE BYTES (feature vector 144 float32 = 12 segments x 12 MFCC; DTW template 61 frames x 16 bands)
+item                                             3 cmds     4 cmds   note
+uai32 executable (as shipped)                     9,188      9,188   trainer + inference, dynamic ELF
+C front end: log-mel+MFCC+pooling (.text)         2,006      2,006   frontend.c built with the uai32 flags; standalone ELF 4,680 B
+C DTW (.text)                                       546        546   dtw.c, same flags
+A prototypes, float32 (k x 144 x 4)               1,728      2,304   + 1 threshold
+A prototypes, bfloat16                              864      1,152   
+A 1-NN: all enrolment vectors float32 (5k x 144 x 4)      8,640     11,520   also what re-training the MLP for a 4th command needs if raw audio is not kept
+B DTW templates float32 (5k x 61 x 16 x 4)       58,560     78,080   OVER the 32,768 B budget even alone
+B DTW templates uint8 (5k x 61 x 16)             14,640     19,520   e.g. 0.05 steps of the CMVN value, clipped to +-6
+B DTW templates uint8, 48-frame crop             11,520     15,360   templates cropped like the pooled vector
+C uai32 model, 144-16-k (k cmds, no unknown)      5,902      5,936   8 + 8*144 + 2*(16*145 + k*17)
+C uai32 model, 144-16-(k+1) (with unknown class)      5,936      5,970   the only variant whose rejection score was calibrated
+C uai32 model, 144-32-(k+1)                      10,704     10,770   
+TOTAL C: uai32 + front end ELF + model 144-16-(k+1)     19,804     19,838   front end as a separate ELF; merged into uai32.c it would add ~2-2.5 KB instead of 4,680
+TOTAL B: front end+DTW ELF + uint8 templates     20,120     25,000   no trainer needed; 4th command = 5 more templates
+TOTAL A: front end ELF + float32 prototypes       6,408      6,984   smallest; 4th command = one more mean

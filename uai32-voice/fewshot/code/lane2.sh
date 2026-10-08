@@ -1,0 +1,7 @@
+#!/bin/sh
+cd /tmp/claude-0/-home-user-aichat/809e473e-6ead-51f0-b725-4e01dff2b821/scratchpad/voice-fewshot-accuracy/code
+python3 -I run_main.py up,down,go 1-20 /tmp/claude-0/-home-user-aichat/809e473e-6ead-51f0-b725-4e01dff2b821/scratchpad/voice-fewshot-accuracy/results/full_up_down_go_test.npz > /tmp/claude-0/-home-user-aichat/809e473e-6ead-51f0-b725-4e01dff2b821/scratchpad/voice-fewshot-accuracy/work/full_t2_test.log 2>&1
+python3 -I run_main.py up,down,go 101-110 /tmp/claude-0/-home-user-aichat/809e473e-6ead-51f0-b725-4e01dff2b821/scratchpad/voice-fewshot-accuracy/results/full_up_down_go_dev.npz > /tmp/claude-0/-home-user-aichat/809e473e-6ead-51f0-b725-4e01dff2b821/scratchpad/voice-fewshot-accuracy/work/full_t2_dev.log 2>&1
+for n in 10 20 50; do python3 -I run_main.py yes,no,stop 1-10 /tmp/claude-0/-home-user-aichat/809e473e-6ead-51f0-b725-4e01dff2b821/scratchpad/voice-fewshot-accuracy/results/enrol${n}_yes_no_stop_test.npz --n_enrol $n --mlp none > /tmp/claude-0/-home-user-aichat/809e473e-6ead-51f0-b725-4e01dff2b821/scratchpad/voice-fewshot-accuracy/work/enrol${n}_t1.log 2>&1; done
+python3 -I run_main.py yes,no,stop 1-10 /tmp/claude-0/-home-user-aichat/809e473e-6ead-51f0-b725-4e01dff2b821/scratchpad/voice-fewshot-accuracy/results/enrol20mlp_yes_no_stop_test.npz --n_enrol 20 --aug 8 > /tmp/claude-0/-home-user-aichat/809e473e-6ead-51f0-b725-4e01dff2b821/scratchpad/voice-fewshot-accuracy/work/enrol20mlp_t1.log 2>&1
+echo LANE2 DONE > /tmp/claude-0/-home-user-aichat/809e473e-6ead-51f0-b725-4e01dff2b821/scratchpad/voice-fewshot-accuracy/work/lane2.done

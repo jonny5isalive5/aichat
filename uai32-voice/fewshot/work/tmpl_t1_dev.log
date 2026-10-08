@@ -1,0 +1,11 @@
+seed 101 done in 3s
+seed 102 done in 3s
+seed 103 done in 3s
+seed 104 done in 3s
+seed 105 done in 3s
+seed 106 done in 3s
+seed 107 done in 3s
+seed 108 done in 3s
+seed 109 done in 3s
+seed 110 done in 3s
+saved /tmp/claude-0/-home-user-aichat/809e473e-6ead-51f0-b725-4e01dff2b821/scratchpad/voice-fewshot-accuracy/results/templates_yes_no_stop_dev.npz total 29s {"A_proto": 1728, "A_1nn": 8640, "B_dtw_float32": 58560, "B_dtw_uint8": 14640}

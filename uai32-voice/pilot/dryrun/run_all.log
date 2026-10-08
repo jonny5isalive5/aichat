@@ -1,0 +1,72 @@
+# run_pilot.py dev 2026-10-08T07:52:31Z  argv: all /tmp/claude-0/-home-user-aichat/809e473e-6ead-51f0-b725-4e01dff2b821/scratchpad/pilot-dryrun3/data/manifest.json /tmp/claude-0/-home-user-aichat/809e473e-6ead-51f0-b725-4e01dff2b821/scratchpad/pilot-dryrun3/run --seed 1
+clips: 580 verified against recordings.json (32,000 bytes each, sha256 equal)
+executables: dtwapp c3cc4fc9a55f2591 (7416 bytes), netapp 4e575f757b6f5683 (11500 bytes); manifest seal 819cc21ef7dc325b; speaker standin-speaker-independent; commands ['yes', 'no', 'stop', 'go'] (held back: go)
+
+== P1: enrol commands 1-3 from 15 clips (yes, no, stop) ==
+dtwapp: state A 14663 bytes, sha256 5c93f6a95f63b1f3 (0.06 s); info: templates 15, file bytes 14663 = 8 + 977 * 15, per label: 0:5 1:5 2:5
+training set A: 15 enrol + 450 augmented + 232 synthetic waveforms + 77 segment-shuffled rows = 774 rows (2.8 s)
+netapp: model A 5936 bytes, sha256 4d83f381eb2c58d5 (0.11 s): new model: 144 inputs, 16 hidden, 4 classes, 2676 parameters; epoch 20/20  train loss 0.0873  accuracy 762/774 = 98.4%
+
+== dev phase: 30 positives (commands 1-3), 100 own-voice negatives, 10 clips of the held-back command (go) ==
+dtw/margin DET on dev: recall at FA <=0%: 2/30, <=1%: 2/30, <=2%: 3/30, <=5%: 14/30, <=10%: 18/30  (dev_det_dtw_margin.csv)
+dtw/min DET on dev: recall at FA <=0%: 7/30, <=1%: 8/30, <=2%: 8/30, <=5%: 10/30, <=10%: 16/30  (dev_det_dtw_min.csv)
+dtw: FROZEN threshold 0.530625 on score margin -> dev false accepts 1/100, dev recall 2/30 (yes 1/10, no 0/10, stop 1/10), held-back command accepted 0/10
+net/prob DET on dev: recall at FA <=0%: 0/30, <=1%: 1/30, <=2%: 2/30, <=5%: 2/30, <=10%: 3/30  (dev_det_net_prob.csv)
+net/margin DET on dev: recall at FA <=0%: 0/30, <=1%: 0/30, <=2%: 1/30, <=5%: 2/30, <=10%: 3/30  (dev_det_net_margin.csv)
+net: FROZEN threshold 0.995762 on score prob -> dev false accepts 1/100, dev recall 1/30 (yes 1/10, no 0/10, stop 0/10), held-back command accepted 0/10
+thresholds frozen in /tmp/claude-0/-home-user-aichat/809e473e-6ead-51f0-b725-4e01dff2b821/scratchpad/pilot-dryrun3/run/thresholds.json (sha256 91ee4de76e66d329)
+# run_pilot.py test 2026-10-08T07:52:36Z  argv: all /tmp/claude-0/-home-user-aichat/809e473e-6ead-51f0-b725-4e01dff2b821/scratchpad/pilot-dryrun3/data/manifest.json /tmp/claude-0/-home-user-aichat/809e473e-6ead-51f0-b725-4e01dff2b821/scratchpad/pilot-dryrun3/run --seed 1
+clips: 580 verified against recordings.json (32,000 bytes each, sha256 equal)
+executables: dtwapp c3cc4fc9a55f2591 (7416 bytes), netapp 4e575f757b6f5683 (11500 bytes); manifest seal 819cc21ef7dc325b; speaker standin-speaker-independent; commands ['yes', 'no', 'stop', 'go'] (held back: go)
+
+== TEST (one shot): thresholds dtw 0.530625 (margin), net 0.995762 (prob) frozen 2026-10-08T07:52:34Z ==
+
+== P2: state A on 90 positives (commands 1-3), 300 negatives, 30 clips of the held-back 'go'; run twice ==
+dtw P2 run 1: 420 decisions in 2.2 s (one fresh process per clip), raw output sha256 1b43be863dca21de
+dtw P2 run 2: 420 decisions in 2.2 s (one fresh process per clip), raw output sha256 1b43be863dca21de
+dtw restart test: outputs byte-identical, state unchanged
+net P2 run 1: 420 decisions in 1.5 s (feat in one fresh process per clip, predict in one), raw output sha256 633f8b7a74b4e26f
+net P2 run 2: 420 decisions in 1.6 s (feat in one fresh process per clip, re-extracted, predict in one), raw output sha256 633f8b7a74b4e26f
+net restart test: outputs byte-identical, state unchanged
+
+== P3: enrol the 4th command 'go' from 5 clips (fresh process from state A) ==
+dtwapp: state B 19548 bytes, sha256 359660e865ae02d5; templates 20, file bytes 19548 = 8 + 977 * 20, per label: 0:5 1:5 2:5 3:5
+training set B: 20 enrol + 600 augmented + 310 synthetic waveforms + 103 segment-shuffled rows = 1033 rows (3.6 s)
+netapp: model B 5970 bytes, sha256 329fd6bc8214c3aa (retrained from the retained enrolment audio, capacity 4 commands + unknown): new model: 144 inputs, 16 hidden, 5 classes, 2693 parameters; epoch 20/20  train loss 0.0924  accuracy 1016/1033 = 98.4%
+
+== P4: state B on 120 positives (4 commands) and 300 negatives ==
+dtw P4: 420 decisions in 2.4 s
+net P4: 420 decisions in 0.0 s
+
+== controls (H5) ==
+untrained network: 0 epochs on the P1 rows (new model: 144 inputs, 16 hidden, 4 classes, 2676 parameters), 5936 bytes
+untrained dtw: accuracy 0/90, closed-set (label of the best, ignoring the threshold) 0/90, false accepts 0/300
+untrained net: accuracy 0/90, closed-set (label of the best, ignoring the threshold) 34/90, false accepts 0/300
+constrained permutation 0 (112002122110020, 14 draws): dtw accuracy 1/90 closed 13/90 FA 1/300; net accuracy 2/90 closed 31/90 FA 11/300
+constrained permutation 1 (220011022102110, 44 draws): dtw accuracy 1/90 closed 26/90 FA 1/300; net accuracy 0/90 closed 24/90 FA 8/300
+constrained permutation 2 (120210020201121, 30 draws): dtw accuracy 0/90 closed 12/90 FA 1/300; net accuracy 1/90 closed 27/90 FA 10/300
+constrained permutation 3 (221002012110102, 46 draws): dtw accuracy 1/90 closed 21/90 FA 2/300; net accuracy 0/90 closed 19/90 FA 3/300
+constrained permutation 4 (212001202210011, 13 draws): dtw accuracy 1/90 closed 33/90 FA 1/300; net accuracy 3/90 closed 30/90 FA 12/300
+unconstrained permutation 0 (010100202211212, 1 draws): dtw accuracy 1/90 closed 2/90 FA 1/300; net accuracy 0/90 closed 10/90 FA 8/300
+unconstrained permutation 1 (020201121102012, 1 draws): dtw accuracy 0/90 closed 39/90 FA 1/300; net accuracy 1/90 closed 29/90 FA 9/300
+unconstrained permutation 2 (221021010101202, 1 draws): dtw accuracy 0/90 closed 58/90 FA 1/300; net accuracy 0/90 closed 26/90 FA 6/300
+unconstrained permutation 3 (101102122010220, 1 draws): dtw accuracy 1/90 closed 13/90 FA 1/300; net accuracy 1/90 closed 31/90 FA 8/300
+unconstrained permutation 4 (020001112122102, 1 draws): dtw accuracy 1/90 closed 43/90 FA 1/300; net accuracy 1/90 closed 29/90 FA 3/300
+unconstrained permutation 5 (111200222210001, 1 draws): dtw accuracy 1/90 closed 30/90 FA 1/300; net accuracy 1/90 closed 36/90 FA 10/300
+unconstrained permutation 6 (202201122001101, 1 draws): dtw accuracy 1/90 closed 61/90 FA 1/300; net accuracy 4/90 closed 64/90 FA 10/300
+unconstrained permutation 7 (000020212121121, 1 draws): dtw accuracy 1/90 closed 33/90 FA 1/300; net accuracy 1/90 closed 28/90 FA 4/300
+unconstrained permutation 8 (102020011222101, 1 draws): dtw accuracy 0/90 closed 49/90 FA 2/300; net accuracy 2/90 closed 35/90 FA 9/300
+unconstrained permutation 9 (100001022211122, 1 draws): dtw accuracy 1/90 closed 35/90 FA 1/300; net accuracy 0/90 closed 23/90 FA 6/300
+unconstrained permutation 10 (102112000012221, 1 draws): dtw accuracy 0/90 closed 16/90 FA 1/300; net accuracy 0/90 closed 30/90 FA 9/300
+unconstrained permutation 11 (120120002202111, 1 draws): dtw accuracy 1/90 closed 19/90 FA 1/300; net accuracy 0/90 closed 27/90 FA 10/300
+unconstrained permutation 12 (112002102210012, 1 draws): dtw accuracy 1/90 closed 12/90 FA 1/300; net accuracy 1/90 closed 28/90 FA 9/300
+unconstrained permutation 13 (211122001012002, 1 draws): dtw accuracy 0/90 closed 34/90 FA 1/300; net accuracy 1/90 closed 30/90 FA 6/300
+unconstrained permutation 14 (200222211101010, 1 draws): dtw accuracy 0/90 closed 47/90 FA 1/300; net accuracy 2/90 closed 51/90 FA 3/300
+unconstrained permutation 15 (002212201101210, 1 draws): dtw accuracy 0/90 closed 26/90 FA 1/300; net accuracy 4/90 closed 26/90 FA 10/300
+unconstrained permutation 16 (011000011122222, 1 draws): dtw accuracy 0/90 closed 7/90 FA 1/300; net accuracy 0/90 closed 16/90 FA 7/300
+unconstrained permutation 17 (220000111221210, 1 draws): dtw accuracy 0/90 closed 6/90 FA 1/300; net accuracy 0/90 closed 30/90 FA 6/300
+unconstrained permutation 18 (010202210012211, 1 draws): dtw accuracy 0/90 closed 15/90 FA 2/300; net accuracy 3/90 closed 30/90 FA 9/300
+unconstrained permutation 19 (102210201100221, 1 draws): dtw accuracy 0/90 closed 27/90 FA 1/300; net accuracy 1/90 closed 37/90 FA 8/300
+strace dtw: files opened: /etc/ld.so.cache, dtwapp, /lib/x86_64-linux-gnu/libc.so.6, /lib/x86_64-linux-gnu/libm.so.6, stateB.dtw
+strace net: files opened: /etc/ld.so.cache, netapp, /lib/x86_64-linux-gnu/libc.so.6, /lib/x86_64-linux-gnu/libm.so.6, modelB.bin
+report: /tmp/claude-0/-home-user-aichat/809e473e-6ead-51f0-b725-4e01dff2b821/scratchpad/pilot-dryrun3/run/RESULTS.md

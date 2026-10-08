@@ -1,0 +1,40 @@
+maxrss.c built with: cc -O2 -Wall -Wextra maxrss.c -o maxrss   (cc (Ubuntu 13.3.0-6ubuntu2~24.04.1) 13.3.0; Intel(R) Xeon(R) Processor @ 2.10GHz)
+peak RSS (ru_maxrss KB) and whole-process wall time (ms) via posix_spawn; input tests/noise_fft.raw (1 s, 32,000 bytes); 5 runs each
+/bin/true: maxrss 1376 KB, wall 1.02 ms, exit 0
+/bin/true: maxrss 1376 KB, wall 0.98 ms, exit 0
+/bin/true: maxrss 1376 KB, wall 1.13 ms, exit 0
+/bin/true: maxrss 1376 KB, wall 1.14 ms, exit 0
+/bin/true: maxrss 1376 KB, wall 1.11 ms, exit 0
+/home/user/aichat/uai32-voice/frontend/bin/uai32_fft: maxrss 2300 KB, wall 2.49 ms, exit 0
+/home/user/aichat/uai32-voice/frontend/bin/uai32_fft: maxrss 2376 KB, wall 2.80 ms, exit 0
+/home/user/aichat/uai32-voice/frontend/bin/uai32_fft: maxrss 2272 KB, wall 2.21 ms, exit 0
+/home/user/aichat/uai32-voice/frontend/bin/uai32_fft: maxrss 2280 KB, wall 2.16 ms, exit 0
+/home/user/aichat/uai32-voice/frontend/bin/uai32_fft: maxrss 2332 KB, wall 2.05 ms, exit 0
+/home/user/aichat/uai32-voice/frontend/bin/uai32_biquad: maxrss 2292 KB, wall 2.03 ms, exit 0
+/home/user/aichat/uai32-voice/frontend/bin/uai32_biquad: maxrss 2280 KB, wall 2.51 ms, exit 0
+/home/user/aichat/uai32-voice/frontend/bin/uai32_biquad: maxrss 2300 KB, wall 2.24 ms, exit 0
+/home/user/aichat/uai32-voice/frontend/bin/uai32_biquad: maxrss 2292 KB, wall 3.30 ms, exit 0
+/home/user/aichat/uai32-voice/frontend/bin/uai32_biquad: maxrss 2280 KB, wall 2.36 ms, exit 0
+/home/user/aichat/uai32-voice/frontend/bin/vfe_fft: maxrss 2360 KB, wall 2.56 ms, exit 0
+/home/user/aichat/uai32-voice/frontend/bin/vfe_fft: maxrss 2276 KB, wall 2.42 ms, exit 0
+/home/user/aichat/uai32-voice/frontend/bin/vfe_fft: maxrss 2276 KB, wall 3.41 ms, exit 0
+/home/user/aichat/uai32-voice/frontend/bin/vfe_biquad: maxrss 2268 KB, wall 2.37 ms, exit 0
+/home/user/aichat/uai32-voice/frontend/bin/vfe_biquad: maxrss 2356 KB, wall 2.20 ms, exit 0
+/home/user/aichat/uai32-voice/frontend/bin/vfe_biquad: maxrss 2324 KB, wall 2.70 ms, exit 0
+/home/user/aichat/uai32/uai32: maxrss 2328 KB, wall 1.70 ms, exit 0
+/home/user/aichat/uai32/uai32: maxrss 2204 KB, wall 1.60 ms, exit 0
+/home/user/aichat/uai32/uai32: maxrss 2284 KB, wall 1.31 ms, exit 0
+/home/user/aichat/uai32/uai32: maxrss 2260 KB, wall 1.72 ms, exit 0
+/home/user/aichat/uai32/uai32: maxrss 2316 KB, wall 1.87 ms, exit 0
+/home/user/aichat/uai32/uai32: maxrss 2296 KB, wall 1.77 ms, exit 0
+pipeline feat | predict (192-44-6), 3 runs: wall ms of the pair
+  4640 us
+  4239 us
+  5463 us
+in-process analysis time (vfe_*_bench, 200 reps, rebuilt 2026-10-08):
+bench biquad  200 runs: 0.886 ms per second of audio (check 0.216768)
+bench biquad  200 runs: 0.903 ms per second of audio (check 0.216768)
+bench biquad  200 runs: 1.039 ms per second of audio (check 0.216768)
+bench fft     200 runs: 0.920 ms per second of audio (check 0.25559)
+bench fft     200 runs: 0.944 ms per second of audio (check 0.25559)
+bench fft     200 runs: 0.920 ms per second of audio (check 0.25559)

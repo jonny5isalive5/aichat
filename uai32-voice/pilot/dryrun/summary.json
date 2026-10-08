@@ -1,0 +1,1862 @@
+{
+ "thresholds": {
+  "frozen": "2026-10-08T07:52:34Z",
+  "target_fa": 0.01,
+  "manifest_seal": "819cc21ef7dc325bf0d217d44761b9e7756d8c7eccad8988173c81807f48f343",
+  "speaker": "standin-speaker-independent",
+  "executables": {
+   "dtwapp": "c3cc4fc9a55f259183072a09392c73b35efc36942d9e6978daacbf0317f1674d",
+   "netapp": "4e575f757b6f5683b24b7cef3db0bfdf2eabfeda64a2cc356b3e513cddaf50b5"
+  },
+  "k": 3,
+  "held_back": 3,
+  "stateA": {
+   "bytes": 14663,
+   "sha256": "5c93f6a95f63b1f34c73c624d45fc925e44553dedacb9b3ca7cac40f065595ad"
+  },
+  "modelA": {
+   "bytes": 5936,
+   "sha256": "4d83f381eb2c58d5459be1219e2899773a367ae7eb8ae0252e129e073750c941"
+  },
+  "recipe": {
+   "hidden": 16,
+   "epochs": 20,
+   "lr": 0.01,
+   "aug": 30,
+   "seed": 1,
+   "dtw_score": "margin",
+   "net_score": "prob"
+  },
+  "arms": {
+   "dtw": {
+    "score": "margin",
+    "threshold": 0.530625,
+    "dev_false_accepts": [
+     1,
+     100
+    ],
+    "dev_recall": [
+     2,
+     30
+    ],
+    "dev_per_command": {
+     "yes": "1/10",
+     "no": "0/10",
+     "stop": "1/10"
+    },
+    "dev_closed_set": [
+     27,
+     30
+    ],
+    "dev_held_back_accepted": [
+     0,
+     10
+    ]
+   },
+   "net": {
+    "score": "prob",
+    "threshold": 0.995762,
+    "dev_false_accepts": [
+     1,
+     100
+    ],
+    "dev_recall": [
+     1,
+     30
+    ],
+    "dev_per_command": {
+     "yes": "1/10",
+     "no": "0/10",
+     "stop": "0/10"
+    },
+    "dev_closed_set": [
+     17,
+     30
+    ],
+    "dev_held_back_accepted": [
+     0,
+     10
+    ]
+   }
+  },
+  "train_A": {
+   "rows": 774,
+   "n_enrol": 15,
+   "n_aug": 450,
+   "n_synth_wave": 232,
+   "n_synth_vec": 77,
+   "log": "new model: 144 inputs, 16 hidden, 4 classes, 2676 parameters; epoch 20/20  train loss 0.0873  accuracy 762/774 = 98.4%"
+  },
+  "dev_decisions_sha256": "5fafd2db6c8811ea873528f98071e4668a2016c649fc01faa3360efa22c36c82"
+ },
+ "posthoc": 0,
+ "restart_dtw": {
+  "identical": true,
+  "sha256": "1b43be863dca21de36f5e2bcf02167995d85f24ef6fea3117ba6fd11ea5befc0",
+  "state_unchanged": true
+ },
+ "restart_net": {
+  "identical": true,
+  "sha256": "633f8b7a74b4e26f329345ffbf48d4ad0e46c2e72da8864ba736a0cc35168c91",
+  "state_unchanged": true
+ },
+ "train_B": {
+  "rows": 1033,
+  "n_enrol": 20,
+  "n_aug": 600,
+  "n_synth_wave": 310,
+  "n_synth_vec": 103,
+  "log": "new model: 144 inputs, 16 hidden, 5 classes, 2693 parameters; epoch 20/20  train loss 0.0924  accuracy 1016/1033 = 98.4%"
+ },
+ "controls": {
+  "untrained_dtw": {
+   "acc": [
+    0,
+    90
+   ],
+   "closed": [
+    0,
+    90
+   ],
+   "fa": [
+    0,
+    300
+   ],
+   "note": "every decision REJECT (dtwapp refuses to score with no templates)"
+  },
+  "untrained_net": {
+   "acc": [
+    0,
+    90
+   ],
+   "closed": [
+    34,
+    90
+   ],
+   "fa": [
+    0,
+    300
+   ],
+   "note": "0-epoch model: data normalisation plus He-uniform random weights"
+  },
+  "constrained": [
+   {
+    "seed": 0,
+    "perm": [
+     1,
+     1,
+     2,
+     0,
+     0,
+     2,
+     1,
+     2,
+     2,
+     1,
+     1,
+     0,
+     0,
+     2,
+     0
+    ],
+    "tries": 14,
+    "dtw": {
+     "acc": [
+      1,
+      90
+     ],
+     "closed": [
+      13,
+      90
+     ],
+     "fa": [
+      1,
+      300
+     ],
+     "acc_pos": [
+      1,
+      90
+     ]
+    },
+    "net": {
+     "acc": [
+      2,
+      90
+     ],
+     "closed": [
+      31,
+      90
+     ],
+     "fa": [
+      11,
+      300
+     ],
+     "acc_pos": [
+      3,
+      90
+     ]
+    }
+   },
+   {
+    "seed": 1,
+    "perm": [
+     2,
+     2,
+     0,
+     0,
+     1,
+     1,
+     0,
+     2,
+     2,
+     1,
+     0,
+     2,
+     1,
+     1,
+     0
+    ],
+    "tries": 44,
+    "dtw": {
+     "acc": [
+      1,
+      90
+     ],
+     "closed": [
+      26,
+      90
+     ],
+     "fa": [
+      1,
+      300
+     ],
+     "acc_pos": [
+      1,
+      90
+     ]
+    },
+    "net": {
+     "acc": [
+      0,
+      90
+     ],
+     "closed": [
+      24,
+      90
+     ],
+     "fa": [
+      8,
+      300
+     ],
+     "acc_pos": [
+      3,
+      90
+     ]
+    }
+   },
+   {
+    "seed": 2,
+    "perm": [
+     1,
+     2,
+     0,
+     2,
+     1,
+     0,
+     0,
+     2,
+     0,
+     2,
+     0,
+     1,
+     1,
+     2,
+     1
+    ],
+    "tries": 30,
+    "dtw": {
+     "acc": [
+      0,
+      90
+     ],
+     "closed": [
+      12,
+      90
+     ],
+     "fa": [
+      1,
+      300
+     ],
+     "acc_pos": [
+      1,
+      90
+     ]
+    },
+    "net": {
+     "acc": [
+      1,
+      90
+     ],
+     "closed": [
+      27,
+      90
+     ],
+     "fa": [
+      10,
+      300
+     ],
+     "acc_pos": [
+      5,
+      90
+     ]
+    }
+   },
+   {
+    "seed": 3,
+    "perm": [
+     2,
+     2,
+     1,
+     0,
+     0,
+     2,
+     0,
+     1,
+     2,
+     1,
+     1,
+     0,
+     1,
+     0,
+     2
+    ],
+    "tries": 46,
+    "dtw": {
+     "acc": [
+      1,
+      90
+     ],
+     "closed": [
+      21,
+      90
+     ],
+     "fa": [
+      2,
+      300
+     ],
+     "acc_pos": [
+      1,
+      90
+     ]
+    },
+    "net": {
+     "acc": [
+      0,
+      90
+     ],
+     "closed": [
+      19,
+      90
+     ],
+     "fa": [
+      3,
+      300
+     ],
+     "acc_pos": [
+      0,
+      90
+     ]
+    }
+   },
+   {
+    "seed": 4,
+    "perm": [
+     2,
+     1,
+     2,
+     0,
+     0,
+     1,
+     2,
+     0,
+     2,
+     2,
+     1,
+     0,
+     0,
+     1,
+     1
+    ],
+    "tries": 13,
+    "dtw": {
+     "acc": [
+      1,
+      90
+     ],
+     "closed": [
+      33,
+      90
+     ],
+     "fa": [
+      1,
+      300
+     ],
+     "acc_pos": [
+      1,
+      90
+     ]
+    },
+    "net": {
+     "acc": [
+      3,
+      90
+     ],
+     "closed": [
+      30,
+      90
+     ],
+     "fa": [
+      12,
+      300
+     ],
+     "acc_pos": [
+      4,
+      90
+     ]
+    }
+   }
+  ],
+  "unconstrained": [
+   {
+    "seed": 0,
+    "perm": [
+     0,
+     1,
+     0,
+     1,
+     0,
+     0,
+     2,
+     0,
+     2,
+     2,
+     1,
+     1,
+     2,
+     1,
+     2
+    ],
+    "tries": 1,
+    "dtw": {
+     "acc": [
+      1,
+      90
+     ],
+     "closed": [
+      2,
+      90
+     ],
+     "fa": [
+      1,
+      300
+     ],
+     "acc_pos": [
+      2,
+      90
+     ]
+    },
+    "net": {
+     "acc": [
+      0,
+      90
+     ],
+     "closed": [
+      10,
+      90
+     ],
+     "fa": [
+      8,
+      300
+     ],
+     "acc_pos": [
+      3,
+      90
+     ]
+    }
+   },
+   {
+    "seed": 1,
+    "perm": [
+     0,
+     2,
+     0,
+     2,
+     0,
+     1,
+     1,
+     2,
+     1,
+     1,
+     0,
+     2,
+     0,
+     1,
+     2
+    ],
+    "tries": 1,
+    "dtw": {
+     "acc": [
+      0,
+      90
+     ],
+     "closed": [
+      39,
+      90
+     ],
+     "fa": [
+      1,
+      300
+     ],
+     "acc_pos": [
+      1,
+      90
+     ]
+    },
+    "net": {
+     "acc": [
+      1,
+      90
+     ],
+     "closed": [
+      29,
+      90
+     ],
+     "fa": [
+      9,
+      300
+     ],
+     "acc_pos": [
+      2,
+      90
+     ]
+    }
+   },
+   {
+    "seed": 2,
+    "perm": [
+     2,
+     2,
+     1,
+     0,
+     2,
+     1,
+     0,
+     1,
+     0,
+     1,
+     0,
+     1,
+     2,
+     0,
+     2
+    ],
+    "tries": 1,
+    "dtw": {
+     "acc": [
+      0,
+      90
+     ],
+     "closed": [
+      58,
+      90
+     ],
+     "fa": [
+      1,
+      300
+     ],
+     "acc_pos": [
+      1,
+      90
+     ]
+    },
+    "net": {
+     "acc": [
+      0,
+      90
+     ],
+     "closed": [
+      26,
+      90
+     ],
+     "fa": [
+      6,
+      300
+     ],
+     "acc_pos": [
+      5,
+      90
+     ]
+    }
+   },
+   {
+    "seed": 3,
+    "perm": [
+     1,
+     0,
+     1,
+     1,
+     0,
+     2,
+     1,
+     2,
+     2,
+     0,
+     1,
+     0,
+     2,
+     2,
+     0
+    ],
+    "tries": 1,
+    "dtw": {
+     "acc": [
+      1,
+      90
+     ],
+     "closed": [
+      13,
+      90
+     ],
+     "fa": [
+      1,
+      300
+     ],
+     "acc_pos": [
+      1,
+      90
+     ]
+    },
+    "net": {
+     "acc": [
+      1,
+      90
+     ],
+     "closed": [
+      31,
+      90
+     ],
+     "fa": [
+      8,
+      300
+     ],
+     "acc_pos": [
+      3,
+      90
+     ]
+    }
+   },
+   {
+    "seed": 4,
+    "perm": [
+     0,
+     2,
+     0,
+     0,
+     0,
+     1,
+     1,
+     1,
+     2,
+     1,
+     2,
+     2,
+     1,
+     0,
+     2
+    ],
+    "tries": 1,
+    "dtw": {
+     "acc": [
+      1,
+      90
+     ],
+     "closed": [
+      43,
+      90
+     ],
+     "fa": [
+      1,
+      300
+     ],
+     "acc_pos": [
+      2,
+      90
+     ]
+    },
+    "net": {
+     "acc": [
+      1,
+      90
+     ],
+     "closed": [
+      29,
+      90
+     ],
+     "fa": [
+      3,
+      300
+     ],
+     "acc_pos": [
+      3,
+      90
+     ]
+    }
+   },
+   {
+    "seed": 5,
+    "perm": [
+     1,
+     1,
+     1,
+     2,
+     0,
+     0,
+     2,
+     2,
+     2,
+     2,
+     1,
+     0,
+     0,
+     0,
+     1
+    ],
+    "tries": 1,
+    "dtw": {
+     "acc": [
+      1,
+      90
+     ],
+     "closed": [
+      30,
+      90
+     ],
+     "fa": [
+      1,
+      300
+     ],
+     "acc_pos": [
+      1,
+      90
+     ]
+    },
+    "net": {
+     "acc": [
+      1,
+      90
+     ],
+     "closed": [
+      36,
+      90
+     ],
+     "fa": [
+      10,
+      300
+     ],
+     "acc_pos": [
+      3,
+      90
+     ]
+    }
+   },
+   {
+    "seed": 6,
+    "perm": [
+     2,
+     0,
+     2,
+     2,
+     0,
+     1,
+     1,
+     2,
+     2,
+     0,
+     0,
+     1,
+     1,
+     0,
+     1
+    ],
+    "tries": 1,
+    "dtw": {
+     "acc": [
+      1,
+      90
+     ],
+     "closed": [
+      61,
+      90
+     ],
+     "fa": [
+      1,
+      300
+     ],
+     "acc_pos": [
+      1,
+      90
+     ]
+    },
+    "net": {
+     "acc": [
+      4,
+      90
+     ],
+     "closed": [
+      64,
+      90
+     ],
+     "fa": [
+      10,
+      300
+     ],
+     "acc_pos": [
+      4,
+      90
+     ]
+    }
+   },
+   {
+    "seed": 7,
+    "perm": [
+     0,
+     0,
+     0,
+     0,
+     2,
+     0,
+     2,
+     1,
+     2,
+     1,
+     2,
+     1,
+     1,
+     2,
+     1
+    ],
+    "tries": 1,
+    "dtw": {
+     "acc": [
+      1,
+      90
+     ],
+     "closed": [
+      33,
+      90
+     ],
+     "fa": [
+      1,
+      300
+     ],
+     "acc_pos": [
+      1,
+      90
+     ]
+    },
+    "net": {
+     "acc": [
+      1,
+      90
+     ],
+     "closed": [
+      28,
+      90
+     ],
+     "fa": [
+      4,
+      300
+     ],
+     "acc_pos": [
+      3,
+      90
+     ]
+    }
+   },
+   {
+    "seed": 8,
+    "perm": [
+     1,
+     0,
+     2,
+     0,
+     2,
+     0,
+     0,
+     1,
+     1,
+     2,
+     2,
+     2,
+     1,
+     0,
+     1
+    ],
+    "tries": 1,
+    "dtw": {
+     "acc": [
+      0,
+      90
+     ],
+     "closed": [
+      49,
+      90
+     ],
+     "fa": [
+      2,
+      300
+     ],
+     "acc_pos": [
+      1,
+      90
+     ]
+    },
+    "net": {
+     "acc": [
+      2,
+      90
+     ],
+     "closed": [
+      35,
+      90
+     ],
+     "fa": [
+      9,
+      300
+     ],
+     "acc_pos": [
+      3,
+      90
+     ]
+    }
+   },
+   {
+    "seed": 9,
+    "perm": [
+     1,
+     0,
+     0,
+     0,
+     0,
+     1,
+     0,
+     2,
+     2,
+     2,
+     1,
+     1,
+     1,
+     2,
+     2
+    ],
+    "tries": 1,
+    "dtw": {
+     "acc": [
+      1,
+      90
+     ],
+     "closed": [
+      35,
+      90
+     ],
+     "fa": [
+      1,
+      300
+     ],
+     "acc_pos": [
+      2,
+      90
+     ]
+    },
+    "net": {
+     "acc": [
+      0,
+      90
+     ],
+     "closed": [
+      23,
+      90
+     ],
+     "fa": [
+      6,
+      300
+     ],
+     "acc_pos": [
+      5,
+      90
+     ]
+    }
+   },
+   {
+    "seed": 10,
+    "perm": [
+     1,
+     0,
+     2,
+     1,
+     1,
+     2,
+     0,
+     0,
+     0,
+     0,
+     1,
+     2,
+     2,
+     2,
+     1
+    ],
+    "tries": 1,
+    "dtw": {
+     "acc": [
+      0,
+      90
+     ],
+     "closed": [
+      16,
+      90
+     ],
+     "fa": [
+      1,
+      300
+     ],
+     "acc_pos": [
+      1,
+      90
+     ]
+    },
+    "net": {
+     "acc": [
+      0,
+      90
+     ],
+     "closed": [
+      30,
+      90
+     ],
+     "fa": [
+      9,
+      300
+     ],
+     "acc_pos": [
+      2,
+      90
+     ]
+    }
+   },
+   {
+    "seed": 11,
+    "perm": [
+     1,
+     2,
+     0,
+     1,
+     2,
+     0,
+     0,
+     0,
+     2,
+     2,
+     0,
+     2,
+     1,
+     1,
+     1
+    ],
+    "tries": 1,
+    "dtw": {
+     "acc": [
+      1,
+      90
+     ],
+     "closed": [
+      19,
+      90
+     ],
+     "fa": [
+      1,
+      300
+     ],
+     "acc_pos": [
+      1,
+      90
+     ]
+    },
+    "net": {
+     "acc": [
+      0,
+      90
+     ],
+     "closed": [
+      27,
+      90
+     ],
+     "fa": [
+      10,
+      300
+     ],
+     "acc_pos": [
+      1,
+      90
+     ]
+    }
+   },
+   {
+    "seed": 12,
+    "perm": [
+     1,
+     1,
+     2,
+     0,
+     0,
+     2,
+     1,
+     0,
+     2,
+     2,
+     1,
+     0,
+     0,
+     1,
+     2
+    ],
+    "tries": 1,
+    "dtw": {
+     "acc": [
+      1,
+      90
+     ],
+     "closed": [
+      12,
+      90
+     ],
+     "fa": [
+      1,
+      300
+     ],
+     "acc_pos": [
+      1,
+      90
+     ]
+    },
+    "net": {
+     "acc": [
+      1,
+      90
+     ],
+     "closed": [
+      28,
+      90
+     ],
+     "fa": [
+      9,
+      300
+     ],
+     "acc_pos": [
+      2,
+      90
+     ]
+    }
+   },
+   {
+    "seed": 13,
+    "perm": [
+     2,
+     1,
+     1,
+     1,
+     2,
+     2,
+     0,
+     0,
+     1,
+     0,
+     1,
+     2,
+     0,
+     0,
+     2
+    ],
+    "tries": 1,
+    "dtw": {
+     "acc": [
+      0,
+      90
+     ],
+     "closed": [
+      34,
+      90
+     ],
+     "fa": [
+      1,
+      300
+     ],
+     "acc_pos": [
+      1,
+      90
+     ]
+    },
+    "net": {
+     "acc": [
+      1,
+      90
+     ],
+     "closed": [
+      30,
+      90
+     ],
+     "fa": [
+      6,
+      300
+     ],
+     "acc_pos": [
+      3,
+      90
+     ]
+    }
+   },
+   {
+    "seed": 14,
+    "perm": [
+     2,
+     0,
+     0,
+     2,
+     2,
+     2,
+     2,
+     1,
+     1,
+     1,
+     0,
+     1,
+     0,
+     1,
+     0
+    ],
+    "tries": 1,
+    "dtw": {
+     "acc": [
+      0,
+      90
+     ],
+     "closed": [
+      47,
+      90
+     ],
+     "fa": [
+      1,
+      300
+     ],
+     "acc_pos": [
+      1,
+      90
+     ]
+    },
+    "net": {
+     "acc": [
+      2,
+      90
+     ],
+     "closed": [
+      51,
+      90
+     ],
+     "fa": [
+      3,
+      300
+     ],
+     "acc_pos": [
+      2,
+      90
+     ]
+    }
+   },
+   {
+    "seed": 15,
+    "perm": [
+     0,
+     0,
+     2,
+     2,
+     1,
+     2,
+     2,
+     0,
+     1,
+     1,
+     0,
+     1,
+     2,
+     1,
+     0
+    ],
+    "tries": 1,
+    "dtw": {
+     "acc": [
+      0,
+      90
+     ],
+     "closed": [
+      26,
+      90
+     ],
+     "fa": [
+      1,
+      300
+     ],
+     "acc_pos": [
+      1,
+      90
+     ]
+    },
+    "net": {
+     "acc": [
+      4,
+      90
+     ],
+     "closed": [
+      26,
+      90
+     ],
+     "fa": [
+      10,
+      300
+     ],
+     "acc_pos": [
+      4,
+      90
+     ]
+    }
+   },
+   {
+    "seed": 16,
+    "perm": [
+     0,
+     1,
+     1,
+     0,
+     0,
+     0,
+     0,
+     1,
+     1,
+     1,
+     2,
+     2,
+     2,
+     2,
+     2
+    ],
+    "tries": 1,
+    "dtw": {
+     "acc": [
+      0,
+      90
+     ],
+     "closed": [
+      7,
+      90
+     ],
+     "fa": [
+      1,
+      300
+     ],
+     "acc_pos": [
+      1,
+      90
+     ]
+    },
+    "net": {
+     "acc": [
+      0,
+      90
+     ],
+     "closed": [
+      16,
+      90
+     ],
+     "fa": [
+      7,
+      300
+     ],
+     "acc_pos": [
+      3,
+      90
+     ]
+    }
+   },
+   {
+    "seed": 17,
+    "perm": [
+     2,
+     2,
+     0,
+     0,
+     0,
+     0,
+     1,
+     1,
+     1,
+     2,
+     2,
+     1,
+     2,
+     1,
+     0
+    ],
+    "tries": 1,
+    "dtw": {
+     "acc": [
+      0,
+      90
+     ],
+     "closed": [
+      6,
+      90
+     ],
+     "fa": [
+      1,
+      300
+     ],
+     "acc_pos": [
+      7,
+      90
+     ]
+    },
+    "net": {
+     "acc": [
+      0,
+      90
+     ],
+     "closed": [
+      30,
+      90
+     ],
+     "fa": [
+      6,
+      300
+     ],
+     "acc_pos": [
+      4,
+      90
+     ]
+    }
+   },
+   {
+    "seed": 18,
+    "perm": [
+     0,
+     1,
+     0,
+     2,
+     0,
+     2,
+     2,
+     1,
+     0,
+     0,
+     1,
+     2,
+     2,
+     1,
+     1
+    ],
+    "tries": 1,
+    "dtw": {
+     "acc": [
+      0,
+      90
+     ],
+     "closed": [
+      15,
+      90
+     ],
+     "fa": [
+      2,
+      300
+     ],
+     "acc_pos": [
+      1,
+      90
+     ]
+    },
+    "net": {
+     "acc": [
+      3,
+      90
+     ],
+     "closed": [
+      30,
+      90
+     ],
+     "fa": [
+      9,
+      300
+     ],
+     "acc_pos": [
+      9,
+      90
+     ]
+    }
+   },
+   {
+    "seed": 19,
+    "perm": [
+     1,
+     0,
+     2,
+     2,
+     1,
+     0,
+     2,
+     0,
+     1,
+     1,
+     0,
+     0,
+     2,
+     2,
+     1
+    ],
+    "tries": 1,
+    "dtw": {
+     "acc": [
+      0,
+      90
+     ],
+     "closed": [
+      27,
+      90
+     ],
+     "fa": [
+      1,
+      300
+     ],
+     "acc_pos": [
+      1,
+      90
+     ]
+    },
+    "net": {
+     "acc": [
+      1,
+      90
+     ],
+     "closed": [
+      37,
+      90
+     ],
+     "fa": [
+      8,
+      300
+     ],
+     "acc_pos": [
+      3,
+      90
+     ]
+    }
+   }
+  ]
+ },
+ "strace": {
+  "dtw": [
+   "/etc/ld.so.cache",
+   "/home/user/aichat/uai32-voice/pilot/dtwapp",
+   "/lib/x86_64-linux-gnu/libc.so.6",
+   "/lib/x86_64-linux-gnu/libm.so.6",
+   "/tmp/claude-0/-home-user-aichat/809e473e-6ead-51f0-b725-4e01dff2b821/scratchpad/pilot-dryrun3/run/stateB.dtw"
+  ],
+  "net": [
+   "/etc/ld.so.cache",
+   "/home/user/aichat/uai32-voice/pilot/netapp",
+   "/lib/x86_64-linux-gnu/libc.so.6",
+   "/lib/x86_64-linux-gnu/libm.so.6",
+   "/tmp/claude-0/-home-user-aichat/809e473e-6ead-51f0-b725-4e01dff2b821/scratchpad/pilot-dryrun3/run/modelB.bin"
+  ]
+ },
+ "sizes": {
+  "dtwapp": 7416,
+  "netapp": 11500,
+  "stateA": 14663,
+  "stateB": 19548,
+  "modelA": 5936,
+  "modelB": 5970,
+  "enrol_rows_B_text": 24592,
+  "enrol_rows_B_float32": 11520,
+  "enrol_audio_B": 640000,
+  "sha": {
+   "stateA": "5c93f6a95f63b1f34c73c624d45fc925e44553dedacb9b3ca7cac40f065595ad",
+   "stateB": "359660e865ae02d59443e4c49f3ee5608a4ca67057d834f75fd06ec364717570",
+   "modelA": "4d83f381eb2c58d5459be1219e2899773a367ae7eb8ae0252e129e073750c941",
+   "modelB": "329fd6bc8214c3aa296b544f945afc69eb7ba13edea5171fd40b63ec3442fb4a"
+  }
+ },
+ "P2": {
+  "dtw": {
+   "per_command": {
+    "yes": {
+     "correct": 9,
+     "closed": 30,
+     "substituted": 0,
+     "rejected": 21,
+     "n": 30
+    },
+    "no": {
+     "correct": 2,
+     "closed": 28,
+     "substituted": 0,
+     "rejected": 28,
+     "n": 30
+    },
+    "stop": {
+     "correct": 5,
+     "closed": 28,
+     "substituted": 1,
+     "rejected": 24,
+     "n": 30
+    }
+   },
+   "strata": {
+    "confusable": {
+     "accepts": 2,
+     "n": 180
+    },
+    "unrelated": {
+     "accepts": 1,
+     "n": 120
+    },
+    "all own-voice negatives": {
+     "accepts": 3,
+     "n": 300
+    }
+   },
+   "c4": {
+    "accepts": 0,
+    "n": 30
+   },
+   "pooled": {
+    "correct": 16,
+    "closed": 86,
+    "substituted": 1,
+    "rejected": 73,
+    "n": 90
+   }
+  },
+  "net": {
+   "per_command": {
+    "yes": {
+     "correct": 3,
+     "closed": 26,
+     "substituted": 0,
+     "rejected": 27,
+     "n": 30
+    },
+    "no": {
+     "correct": 0,
+     "closed": 24,
+     "substituted": 0,
+     "rejected": 30,
+     "n": 30
+    },
+    "stop": {
+     "correct": 0,
+     "closed": 14,
+     "substituted": 0,
+     "rejected": 30,
+     "n": 30
+    }
+   },
+   "strata": {
+    "confusable": {
+     "accepts": 9,
+     "n": 180
+    },
+    "unrelated": {
+     "accepts": 0,
+     "n": 120
+    },
+    "all own-voice negatives": {
+     "accepts": 9,
+     "n": 300
+    }
+   },
+   "c4": {
+    "accepts": 0,
+    "n": 30
+   },
+   "pooled": {
+    "correct": 3,
+    "closed": 64,
+    "substituted": 0,
+    "rejected": 87,
+    "n": 90
+   }
+  }
+ },
+ "P4": {
+  "dtw": {
+   "per_command": {
+    "yes": {
+     "correct": 9,
+     "closed": 30,
+     "substituted": 0,
+     "rejected": 21,
+     "n": 30
+    },
+    "no": {
+     "correct": 0,
+     "closed": 12,
+     "substituted": 0,
+     "rejected": 30,
+     "n": 30
+    },
+    "stop": {
+     "correct": 1,
+     "closed": 25,
+     "substituted": 1,
+     "rejected": 28,
+     "n": 30
+    },
+    "go": {
+     "correct": 0,
+     "closed": 21,
+     "substituted": 0,
+     "rejected": 30,
+     "n": 30
+    }
+   },
+   "strata": {
+    "confusable": {
+     "accepts": 1,
+     "n": 180
+    },
+    "unrelated": {
+     "accepts": 0,
+     "n": 120
+    },
+    "all own-voice negatives": {
+     "accepts": 1,
+     "n": 300
+    }
+   },
+   "c4": null,
+   "pooled": {
+    "correct": 10,
+    "closed": 88,
+    "substituted": 1,
+    "rejected": 109,
+    "n": 120
+   }
+  },
+  "net": {
+   "per_command": {
+    "yes": {
+     "correct": 1,
+     "closed": 22,
+     "substituted": 0,
+     "rejected": 29,
+     "n": 30
+    },
+    "no": {
+     "correct": 0,
+     "closed": 7,
+     "substituted": 2,
+     "rejected": 28,
+     "n": 30
+    },
+    "stop": {
+     "correct": 1,
+     "closed": 15,
+     "substituted": 0,
+     "rejected": 29,
+     "n": 30
+    },
+    "go": {
+     "correct": 0,
+     "closed": 17,
+     "substituted": 0,
+     "rejected": 30,
+     "n": 30
+    }
+   },
+   "strata": {
+    "confusable": {
+     "accepts": 3,
+     "n": 180
+    },
+    "unrelated": {
+     "accepts": 2,
+     "n": 120
+    },
+    "all own-voice negatives": {
+     "accepts": 5,
+     "n": 300
+    }
+   },
+   "c4": null,
+   "pooled": {
+    "correct": 2,
+    "closed": 61,
+    "substituted": 2,
+    "rejected": 116,
+    "n": 120
+   }
+  }
+ },
+ "forgetting": {
+  "dtw": {
+   "n": 90,
+   "errors_before": 74,
+   "errors_after": 80,
+   "became_wrong": 6,
+   "became_right": 0,
+   "net": 6,
+   "p_one_sided": 0.015624999999998446,
+   "p_two_sided": 0.031250000000000014
+  },
+  "net": {
+   "n": 90,
+   "errors_before": 87,
+   "errors_after": 88,
+   "became_wrong": 3,
+   "became_right": 2,
+   "net": 1,
+   "p_one_sided": 0.49999999999999956,
+   "p_two_sided": 1.0
+  }
+ },
+ "paired": {
+  "P2": {
+   "n": 90,
+   "dtw_correct": 16,
+   "net_correct": 3,
+   "dtw_only": 15,
+   "net_only": 2,
+   "p_two_sided": 0.002349853515625004
+  },
+  "P4": {
+   "n": 120,
+   "dtw_correct": 10,
+   "net_correct": 2,
+   "dtw_only": 9,
+   "net_only": 1,
+   "p_two_sided": 0.02148437500000002
+  }
+ },
+ "chance_bound": {
+  "P2": 45,
+  "n": 90,
+  "k": 3
+ }
+}

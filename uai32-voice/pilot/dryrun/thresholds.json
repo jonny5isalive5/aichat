@@ -1,0 +1,90 @@
+{
+ "frozen": "2026-10-08T07:52:34Z",
+ "target_fa": 0.01,
+ "manifest_seal": "819cc21ef7dc325bf0d217d44761b9e7756d8c7eccad8988173c81807f48f343",
+ "speaker": "standin-speaker-independent",
+ "executables": {
+  "dtwapp": "c3cc4fc9a55f259183072a09392c73b35efc36942d9e6978daacbf0317f1674d",
+  "netapp": "4e575f757b6f5683b24b7cef3db0bfdf2eabfeda64a2cc356b3e513cddaf50b5"
+ },
+ "k": 3,
+ "held_back": 3,
+ "stateA": {
+  "bytes": 14663,
+  "sha256": "5c93f6a95f63b1f34c73c624d45fc925e44553dedacb9b3ca7cac40f065595ad"
+ },
+ "modelA": {
+  "bytes": 5936,
+  "sha256": "4d83f381eb2c58d5459be1219e2899773a367ae7eb8ae0252e129e073750c941"
+ },
+ "recipe": {
+  "hidden": 16,
+  "epochs": 20,
+  "lr": 0.01,
+  "aug": 30,
+  "seed": 1,
+  "dtw_score": "margin",
+  "net_score": "prob"
+ },
+ "arms": {
+  "dtw": {
+   "score": "margin",
+   "threshold": 0.530625,
+   "dev_false_accepts": [
+    1,
+    100
+   ],
+   "dev_recall": [
+    2,
+    30
+   ],
+   "dev_per_command": {
+    "yes": "1/10",
+    "no": "0/10",
+    "stop": "1/10"
+   },
+   "dev_closed_set": [
+    27,
+    30
+   ],
+   "dev_held_back_accepted": [
+    0,
+    10
+   ]
+  },
+  "net": {
+   "score": "prob",
+   "threshold": 0.995762,
+   "dev_false_accepts": [
+    1,
+    100
+   ],
+   "dev_recall": [
+    1,
+    30
+   ],
+   "dev_per_command": {
+    "yes": "1/10",
+    "no": "0/10",
+    "stop": "0/10"
+   },
+   "dev_closed_set": [
+    17,
+    30
+   ],
+   "dev_held_back_accepted": [
+    0,
+    10
+   ]
+  }
+ },
+ "train_A": {
+  "rows": 774,
+  "n_enrol": 15,
+  "n_aug": 450,
+  "n_synth_wave": 232,
+  "n_synth_vec": 77,
+  "log": "new model: 144 inputs, 16 hidden, 4 classes, 2676 parameters; epoch 20/20  train loss 0.0873  accuracy 762/774 = 98.4%"
+ },
+ "dev_decisions_sha256": "5fafd2db6c8811ea873528f98071e4668a2016c649fc01faa3360efa22c36c82"
+}
