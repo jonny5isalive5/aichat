@@ -1,0 +1,17 @@
+proto negmargin            rec@1% 0.004  rec@5% 0.048  rec@10% 0.081  rec@20% 0.163  AUC 0.504  EER 0.494  acc 0.784  rec@dev 0.007  FAdev 0.012  thr 0.832  sat 0.001 
+proto negratio             rec@1% 0.007  rec@5% 0.060  rec@10% 0.140  rec@20% 0.266  AUC 0.541  EER 0.468  acc 0.784  rec@dev 0.010  FAdev 0.011  thr 3.873  sat 0.001 
+proto 4class-ratio         rec@1% 0.008  rec@5% 0.064  rec@10% 0.147  rec@20% 0.282  AUC 0.550  EER 0.465  acc 0.784  rec@dev 0.010  FAdev 0.012  thr 3.759  sat 0.001 
+dtw negmargin              rec@1% 0.047  rec@5% 0.130  rec@10% 0.201  rec@20% 0.339  AUC 0.657  EER 0.396  acc 0.927  rec@dev 0.036  FAdev 0.009  thr 0.416  sat 0.001 
+dtw negratio               rec@1% 0.049  rec@5% 0.140  rec@10% 0.229  rec@20% 0.357  AUC 0.665  EER 0.384  acc 0.927  rec@dev 0.048  FAdev 0.010  thr 1.545  sat 0.001 
+dtw min(ref)               rec@1% 0.068  rec@5% 0.179  rec@10% 0.272  rec@20% 0.424  AUC 0.652  EER 0.380  acc 0.927  rec@dev 0.061  FAdev 0.010  thr -0.648  sat 0.001 
+dtw margin(ref)            rec@1% 0.136  rec@5% 0.352  rec@10% 0.446  rec@20% 0.571  AUC 0.747  EER 0.313  acc 0.927  rec@dev 0.163  FAdev 0.013  thr 0.541  sat 0.001 
+proto min(ref)             rec@1% 0.080  rec@5% 0.190  rec@10% 0.278  rec@20% 0.389  AUC 0.666  EER 0.379  acc 0.784  rec@dev 0.080  FAdev 0.010  thr -0.247  sat 0.001 
+mlp aug_neg E5             rec@1% 0.061  rec@5% 0.164  rec@10% 0.206  rec@20% 0.277  AUC 0.865  EER 0.188  acc 0.646  rec@dev 0.057  FAdev 0.008  thr 0.983  sat 0.004 | rows 774 (1s) epoch 5/5  train loss 0.0569  accuracy 763/774 = 98.6%
+mlp aug_neg E10            rec@1% 0.027  rec@5% 0.134  rec@10% 0.203  rec@20% 0.273  AUC 0.844  EER 0.209  acc 0.640  rec@dev 0.018  FAdev 0.002  thr 0.999  sat 0.012 | rows 774 (1s) epoch 10/10  train loss 0.0170  accuracy 771/774 = 99.6%
+mlp aug_neg E20            rec@1% 0.020  rec@5% 0.064  rec@10% 0.177  rec@20% 0.263  AUC 0.837  EER 0.227  acc 0.627  rec@dev 0.014  FAdev 0.002  thr 0.999  sat 0.033 | rows 774 (2s) epoch 20/20  train loss 0.0282  accuracy 768/774 = 99.2%
+mlp aug_neg E20 lr.01      rec@1% 0.049  rec@5% 0.147  rec@10% 0.199  rec@20% 0.282  AUC 0.862  EER 0.195  acc 0.654  rec@dev 0.057  FAdev 0.009  thr 0.987  sat 0.003 | rows 774 (2s) epoch 20/20  train loss 0.0504  accuracy 768/774 = 99.2%
+mlp aug_neg E60 lr.01      rec@1% 0.030  rec@5% 0.112  rec@10% 0.182  rec@20% 0.259  AUC 0.847  EER 0.210  acc 0.623  rec@dev 0.022  FAdev 0.002  thr 0.999  sat 0.017 | rows 774 (3s) epoch 60/60  train loss 0.0119  accuracy 773/774 = 99.9%
+mlp neg E100               rec@1% 0.034  rec@5% 0.134  rec@10% 0.191  rec@20% 0.292  AUC 0.822  EER 0.233  acc 0.680  rec@dev 0.046  FAdev 0.013  thr 0.992  sat 0.003 | rows 30 (1s) epoch 100/100  train loss 0.0109  accuracy 30/30 = 100.0%
+mlp neg E300 lr.01         rec@1% 0.037  rec@5% 0.139  rec@10% 0.194  rec@20% 0.290  AUC 0.821  EER 0.235  acc 0.688  rec@dev 0.043  FAdev 0.013  thr 0.987  sat 0.002 | rows 30 (1s) epoch 300/300  train loss 0.0151  accuracy 30/30 = 100.0%
+mlp aug E10                rec@1% 0.000  rec@5% 0.074  rec@10% 0.146  rec@20% 0.277  AUC 0.582  EER 0.451  acc 0.708  rec@dev 0.000  FAdev 0.000  thr 1.000  sat 0.082 | rows 465 (1s) epoch 10/10  train loss 0.0018  accuracy 465/465 = 100.0%
+mlp aug E5                 rec@1% 0.000  rec@5% 0.101  rec@10% 0.176  rec@20% 0.272  AUC 0.576  EER 0.454  acc 0.709  rec@dev 0.000  FAdev 0.000  thr 1.000  sat 0.046 | rows 465 (1s) epoch 5/5  train loss 0.0043  accuracy 465/465 = 100.0%

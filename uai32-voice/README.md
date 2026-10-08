@@ -13,7 +13,7 @@ source.
 | `frontend/` | audio front-end in C (biquad bank and FFT/mel), merged into a copy of `uai32.c`, with byte measurements, build scripts, binaries and hashes | measured |
 | `fewshot/` | few-example benchmark on real speech (Google mini Speech Commands): DTW, nearest-mean, 1-NN and the real `uai32` binary on identical features; code, manifests, raw per-draw results, logs | measured, speaker-independent only |
 | `protocol/` | statistical review of the proposed acceptance conditions and a corrected, numbered protocol | proposal |
-| `pilot/` | the enrolled-speaker, same-microphone pilot kit: complete DTW and network applications sharing one front-end, recorder, runner, size and RAM measurement, dry run | ready to record |
+| `pilot/` | the enrolled-speaker, same-microphone pilot kit: complete DTW and network applications sharing one front-end, recorder, runner, size and RAM measurement, dry run (`pilot/dryrun/`, stand-in data, not results) | ready to record |
 
 Every sub-directory has its own README with exact commands, and a FAILURES.md listing what did not work,
 what was abandoned, and what is estimated rather than measured.
@@ -50,8 +50,31 @@ formula `bytes = 8 + 8·NI + 2·(NH·(NI+1) + NO·(NH+1))` (float32 mean and sca
 | 144-16-5 | 5,970 | the same with 4 commands plus the "unknown" class: the pilot's declared capacity. |
 
 So the accurate statement is: the network that was measured on speech is about 6 KB, the executable that
-carries it is about 11.4 KB, and roughly 19 KB of budget could still be spent on a larger hidden layer if
-that ever proved useful. The pilot's `SIZES.md` measures the real files.
+carries it is about 11.5 KB, and roughly 15 KB of budget could still be spent on a larger hidden layer if
+that ever proved useful. Note also that two front-end recipes exist: `frontend/` measured the byte cost of a
+256-point FFT with 192 pooled log-energies, while the benchmark and the pilot applications use the recipe the
+accuracy numbers were produced with (512-point frames, 16 mel bands, 144 DCT values for the network, 61×16
+normalised frames for DTW). The pilot's `SIZES.md` measures the real files.
+
+## Complete applications, measured (pilot kit, same toolchain and flags as the release)
+
+| arm | application | state at capacity (4 commands × 5 examples) | total | spare |
+|---|---:|---:|---:|---:|
+| quantised-template DTW (`dtwapp`) | 7,416 B | 19,548 B (20 uint8 templates of 61×16, 977 B each) | 26,964 B | 5,804 B |
+| µAI-32 network (`netapp`) | 11,500 B | 5,970 B (144-16-5 model, synthetic "unknown" class) | 17,470 B | 15,298 B |
+
+Both executables rebuild byte-identically (`pilot/build.sh`, `pilot/SHA256SUMS`). `dtwapp` reproduces the
+benchmark's DTW decisions on 60 of 60 checked queries; `netapp` keeps µAI-32's train/test/predict and model
+format unchanged (models byte-identical to the frozen release's) and adds `feat` plus six-decimal
+probabilities and the logit margin.
+
+**Peak RAM.** Process peak RSS is not a usable number here: measured through a Python harness it reads
+about 11 MB for every verb and for an empty program; measured through `posix_spawn` it reads 2.2 to 2.4 MB
+with a 1.4 MB floor for `/bin/true`. Both are glibc and loader, not the application. The figure that matters
+for a microcontroller is the source-derived working set, listed buffer by buffer in `pilot/SIZES.md`: about
+10.4 KB for `dtwapp` score or enrol, 9.6 KB for `netapp feat`, 12.7 KB for `netapp predict`, and 24 to 36 KB
+for `netapp train` (plus a 147 KB initial row reservation inherited from `uai32.c` that an embedded port
+would size exactly). The protocol's board gate requires measuring this on the board with stack painting.
 
 ## Measured false-accept rates versus confidence-bound requirements
 
@@ -85,4 +108,15 @@ speaker, which the speaker-independent benchmark could not.
 Explicitly deferred until that trade-off is known: **segmentation** (finding the word in a longer stream;
 the pilot's recorder centres the utterance on the host, and says so) and **continual learning** (growing the
 example set after deployment, where the fixed-size network has its one structural advantage over
-templates).
+templates). In the pilot, the fourth command is added to the network by retraining from the retained
+enrolment audio, which is disclosed; µAI-32 cannot add an output class to a saved model.
+
+## Provenance and reproducibility
+
+Every binary in this tree has a SHA-256 in a `SHA256SUMS` file next to it and a script that rebuilds it;
+the rebuilds were repeated on 8 October 2026 and were byte-identical (`frontend/rebuild_check.log`,
+`pilot/build.sh`). The benchmark's 120 draws are regenerated exactly from the seeds
+(`fewshot/manifests/draws.json.gz`, verified against every stored split), a seed-1 rerun reproduced all nine
+methods' scores bit for bit, and the dataset archive is pinned by SHA-256 in `fewshot/manifests/dataset.txt`.
+What is estimated rather than measured, what failed, and what was abandoned is in each directory's
+`FAILURES.md`.

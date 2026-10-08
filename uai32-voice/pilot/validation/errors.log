@@ -1,0 +1,28 @@
+expected failure, exit 1: enrol label 16 -> dtwapp: invalid integer argument
+expected failure, exit 1: enrol label -1 -> dtwapp: invalid integer argument
+expected failure, exit 1: enrol label abc -> dtwapp: invalid integer argument
+expected failure, exit 1: enrol label 1.5 -> dtwapp: invalid integer argument
+expected failure, exit 1: enrol without label -> dtwapp: usage:
+expected failure, exit 1: unknown verb -> dtwapp: usage:
+expected failure, exit 1: empty clip (enrol) -> dtwapp: empty clip
+expected failure, exit 1: empty clip (score) -> dtwapp: empty clip
+expected failure, exit 1: odd byte count, 3 bytes -> dtwapp: odd number of bytes: not 16-bit PCM
+expected failure, exit 1: WAV instead of raw PCM -> dtwapp: WAV input: give raw PCM
+expected failure, exit 1: truncated state (1 byte short) -> dtwapp: wrong state file size
+expected failure, exit 1: truncated state (info) -> dtwapp: wrong state file size
+expected failure, exit 1: truncated state (enrol) -> dtwapp: wrong state file size
+expected failure, exit 1: wrong magic -> dtwapp: not a dtwapp state file
+expected failure, exit 1: label byte 16 in a record -> dtwapp: invalid label in state file
+expected failure, exit 1: state with T=60 geometry -> dtwapp: state file frame geometry differs from this build
+expected failure, exit 1: score with zero templates -> dtwapp: no templates enrolled
+expected failure, exit 1: missing state (score) -> dtwapp: cannot open state file
+expected failure, exit 1: missing state (info) -> dtwapp: cannot open state file
+expected failure, exit 1: netapp feat label abc -> netapp: invalid integer argument
+expected failure, exit 1: netapp feat label 65535 -> netapp: invalid integer argument
+expected failure, exit 1: netapp feat too many args -> netapp: usage:
+expected failure, exit 1: netapp feat empty clip -> netapp: empty clip
+expected failure, exit 1: netapp feat WAV -> netapp: WAV input: give raw PCM
+expected failure, exit 1: netapp feat odd bytes -> netapp: odd number of bytes: not 16-bit PCM
+expected failure, exit 1: netapp predict missing model -> netapp: cannot open model file
+expected failure, exit 1: netapp predict on a dtwapp state file -> netapp: not a uai32 model file
+expected failure, exit 1: dtwapp score on a netapp model -> dtwapp: not a dtwapp state file

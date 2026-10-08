@@ -1,0 +1,30 @@
+# validate.sh 2026-10-08T07:19:07Z; dtwapp c3cc4fc9a55f2591..., netapp 4e575f757b6f5683...
+reference: 80 clips, 20 templates, 60 queries (40 in-vocabulary, 20 unfamiliar)
+closed-set accuracy on the in-vocabulary queries: float32 templates 30/40, uint8 templates 30/40; decisions agree on 60/60 queries, max |distance diff| 0.008044
+dtwapp info: templates 20, file bytes 19548 = 8 + 977 * 20, per label: 0:5 1:5 2:5 3:5
+dtwapp info: template: 61 frames x 16 bands uint8, step 0.05, range -6.35..6.4, 977 bytes with its label
+dtwapp info: capacity: labels 0..15, up to 65535 templates; pilot capacity 4 x 5 = 20 templates = 19548 bytes
+data rows: train4 20 (4 commands x 5), train5 40 (+20 reversed clips, label 4), test4 40, queries 60 (40 in-vocabulary + 20 unfamiliar)
+model4.bin: 5936 bytes, byte-identical to the frozen uai32's model from the same command (new model: 144 inputs, 16 hidden, 4 classes, 2676 parameters; epoch 300/300  train loss 0.0075  accuracy 20/20 = 100.0%)
+netapp test  model4 (40 in-vocabulary queries, speaker-independent): test loss 1.4305  accuracy 21/40 = 52.5%
+uai32  test  model4: test loss 1.4305  accuracy 21/40 = 52.5%
+model5.bin: 5970 bytes, byte-identical to the frozen uai32's model from the same command (new model: 144 inputs, 16 hidden, 5 classes, 2693 parameters; epoch 300/300  train loss 0.0062  accuracy 40/40 = 100.0%)
+netapp test  model5 (40 in-vocabulary queries, speaker-independent): test loss 2.4575  accuracy 14/40 = 35.0%
+uai32  test  model5: test loss 2.4575  accuracy 14/40 = 35.0%
+one-sample clip accepted and padded (exit 0); templates 1, file bytes 985 = 8 + 977 * 1, per label: 3:1
+input validation: 28 error paths all exited non-zero (errors.log)
+fe_Os: filter bins equal to the benchmark on 80/80 clips; log-mel max |diff| vs features.py 0.000131 (mean 7.42e-07); worst clip query_stop_63996b7c_nohash_0
+fe_O0: filter bins equal to the benchmark on 80/80 clips; log-mel max |diff| vs features.py 0.000131 (mean 7.42e-07); worst clip query_stop_63996b7c_nohash_0
+fe_Os vs fe_O0 max |diff| 0
+netapp feat: 144 values on 80 clips; max |diff| vs the benchmark vectors 0.000505, mean 9.45e-06; clips with max |diff| > 0.01: 0; %.5g tokens identical to the benchmark text rows: 8153/11520 (70.8%)
+dtwapp state: 19548 bytes (expected 19548); header equal; label bytes equal
+  template bytes: 19520/19520 identical to the numpy quantisation, 0 differ by one step, 0 by more (max |diff| 0 steps of 0.05)
+dtwapp score on 60 queries (40 in-vocabulary, 20 unfamiliar):
+  decision agrees with the benchmark DTW on uint8 templates: 60/60; on float32 templates: 60/60; float32 vs uint8 (benchmark alone): 60/60
+  vs uint8 reference: max |best_dist diff| 0.000002, |runnerup diff| 0.000002, |margin diff| 0.000001
+  vs float32 reference: max |best_dist diff| 0.004620, |runnerup diff| 0.008044, |margin diff| 0.009764
+  closed-set accuracy on in-vocabulary queries: dtwapp 30/40, benchmark uint8 30/40, benchmark float32 30/40
+  margin (runnerup - best): in-vocabulary correct mean 0.243, in-vocabulary wrong mean 0.083, unfamiliar mean 0.102 (information only: 60 speaker-independent clips)
+netapp predict (NO=4): class equal to the frozen uai32 on 60/60 rows; max |p(6 dp) - p(3 dp)| 0.0005 (<= 0.0005 + rounding); |margin - ln(p_best/p_second)| max 1.69e-04 on 60 rows; rows printing max prob 1.000 under uai32: 0, printing 1.000000 under netapp: 0
+netapp predict (NO=5): class equal to the frozen uai32 on 60/60 rows; max |p(6 dp) - p(3 dp)| 0.0005 (<= 0.0005 + rounding); |margin - ln(p_best/p_second)| max 8.23e-03 on 60 rows; rows printing max prob 1.000 under uai32: 1, printing 1.000000 under netapp: 0
+# validate.sh done

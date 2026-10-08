@@ -1,0 +1,6 @@
+seed 101 done in 10s
+seed 102 done in 9s
+seed 103 done in 10s
+seed 104 done in 8s
+seed 105 done in 9s
+saved /tmp/claude-0/-home-user-aichat/809e473e-6ead-51f0-b725-4e01dff2b821/scratchpad/voice-fewshot-accuracy/results/full_yes_no_stop_go_dev.npz total 46s {"A_proto": 2304, "A_1nn": 11520, "B_dtw_float32": 78080, "B_dtw_uint8": 19520, "C0_mlp_plain": 5936, "C1_mlp_aug": 5936, "C2_mlp_neg": 5970, "C3_mlp_aug_neg": 5970}

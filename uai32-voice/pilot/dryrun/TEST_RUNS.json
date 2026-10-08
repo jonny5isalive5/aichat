@@ -1,0 +1,12 @@
+[
+ {
+  "started": "2026-10-08T07:52:36Z",
+  "argv": [
+   "all",
+   "/tmp/claude-0/-home-user-aichat/809e473e-6ead-51f0-b725-4e01dff2b821/scratchpad/pilot-dryrun3/data/manifest.json",
+   "/tmp/claude-0/-home-user-aichat/809e473e-6ead-51f0-b725-4e01dff2b821/scratchpad/pilot-dryrun3/run",
+   "--seed",
+   "1"
+  ]
+ }
+]

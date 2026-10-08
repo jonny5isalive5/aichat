@@ -1,0 +1,31 @@
+toolchain: cc (Ubuntu 13.3.0-6ubuntu2~24.04.1) 13.3.0; GNU ld (GNU Binutils for Ubuntu) 2.42; ldd (Ubuntu GLIBC 2.39-0ubuntu8.9) 2.39
+uai32.rebuilt: 9188 bytes (uai32.rebuilt.elf: 10992 bytes)
+baseline reproduced: 9188 bytes
+vfe_biquad               4688 bytes   (.elf with section headers: 6424)
+vfe_fft                  4896 bytes   (.elf with section headers: 6632)
+vfe_fft_sinonly          4840 bytes   (.elf with section headers: 6576)
+uai32_biquad            10892 bytes   (.elf with section headers: 12696)
+uai32_fft               11412 bytes   (.elf with section headers: 13216)
+uai32_fft_sinonly       11340 bytes   (.elf with section headers: 13144)
+uai32_fft_12x10         11412 bytes   (.elf with section headers: 13216)
+uai32_fft_16x16         11364 bytes   (.elf with section headers: 13168)
+uai32_biquad_12x10      10892 bytes   (.elf with section headers: 12696)
+uai32_biquad_16x16      10876 bytes   (.elf with section headers: 12680)
+deltas over 9188: biquad +1704  fft +2224  fft-sinonly +2152
+uai32_biquad imports added: sinf@GLIBC_2.2.5 
+uai32_fft imports added: sincosf@GLIBC_2.2.5 sinf@GLIBC_2.2.5 
+uai32_fft_sinonly imports added: sinf@GLIBC_2.2.5 
+uai32.rebuilt.elf .interp=28 .note.gnu.property=32 .note.ABI-tag=32 .gnu.hash=40 .dynsym=600 .dynstr=236 .gnu.version=50 .gnu.version_r=80 .rela.dyn=576 .init=27 .text=5147 .fini=13 .rodata=992 .eh_frame=68 .init_array=8 .fini_array=8 .dynamic=448 .got=176 .got.plt=24 .data=4 .bss=168 .comment=45 .shstrtab=219 
+uai32_biquad.elf  .interp=28 .note.gnu.property=32 .note.ABI-tag=32 .gnu.hash=40 .dynsym=624 .dynstr=241 .gnu.version=52 .gnu.version_r=96 .rela.dyn=600 .init=27 .text=6593 .fini=13 .rodata=1168 .eh_frame=68 .init_array=8 .fini_array=8 .dynamic=448 .got=184 .got.plt=24 .data=4 .bss=200 .comment=45 .shstrtab=219 
+uai32_fft.elf     .interp=28 .note.gnu.property=32 .note.ABI-tag=32 .gnu.hash=40 .dynsym=648 .dynstr=249 .gnu.version=54 .gnu.version_r=96 .rela.dyn=624 .init=27 .text=7041 .fini=13 .rodata=1168 .eh_frame=68 .init_array=8 .fini_array=8 .dynamic=448 .got=192 .got.plt=24 .data=4 .bss=240 .comment=45 .shstrtab=219 
+uai32_biquad  RE off=0x000000 filesz=0x0027e4 memsz=0x0027e4  RW0x1000 off=0x0027e8 filesz=0x0002a4 memsz=0x000380  
+uai32_fft     RE off=0x000000 filesz=0x0029e4 memsz=0x0029e4  RW0x1000 off=0x0029e8 filesz=0x0002ac memsz=0x0003a8  
+vfe_biquad_bench         4680 bytes   (.elf with section headers: 6416)
+vfe_fft_bench            4800 bytes   (.elf with section headers: 6536)
+ALL CHECKS PASSED
+bench biquad  200 runs: 1.117 ms per second of audio (check 0.216768)
+bench biquad  200 runs: 1.625 ms per second of audio (check 0.216768)
+bench biquad  200 runs: 1.095 ms per second of audio (check 0.216768)
+bench fft     200 runs: 1.265 ms per second of audio (check 0.25559)
+bench fft     200 runs: 1.417 ms per second of audio (check 0.25559)
+bench fft     200 runs: 1.434 ms per second of audio (check 0.25559)

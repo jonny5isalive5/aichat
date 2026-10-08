@@ -1,0 +1,18 @@
+Exact reproduction (all paths absolute; python3 -I; numpy 2.5.3; gcc 13.3; 4 cores):
+  data: curl -sS -L -o data_raw/mini_speech_commands.zip https://storage.googleapis.com/download.tensorflow.org/data/mini_speech_commands.zip
+        sha256 49650f2341b26d886b46b3f4fb8fed59e30300b17550f1ee4a768b3106cf93a0 ; python3 -I code/extract_zip.py data_raw/mini_speech_commands.zip data_raw/wav
+  cache: python3 -I code/features.py data_raw/wav cache          (waves.npy int16 8000x16000, logmel.npy float32 8000x61x16, meta.json)
+  binary: cp /home/user/aichat/uai32/uai32 bin/uai32 ; gcc -O2 -shared -fPIC -o bin/libdtw.so code/dtw.c -lm
+  pilots (seeds 901-905 only; never used for reported numbers): code/pilot.py, pilot_mlp.py, pilot2.py, pilot3.py, pilot_vec.py, diag.py, diag2.py  (logs in work/)
+  main runs: code/lane1.sh and code/lane2.sh (sequential), i.e.
+    run_main.py yes,no,stop 1-20 results/full_yes_no_stop_test.npz ; run_main.py yes,no,stop 101-110 results/full_yes_no_stop_dev.npz
+    run_main.py up,down,go 1-20 results/full_up_down_go_test.npz   ; run_main.py up,down,go 101-110 results/full_up_down_go_dev.npz
+    run_main.py yes,no,stop 1-10 results/control_shuffled_yes_no_stop.npz --shuffle_labels
+    run_main.py yes,no,stop,go 1-10 results/full_yes_no_stop_go_test.npz ; run_main.py yes,no,stop,go 101-105 results/full_yes_no_stop_go_dev.npz
+    run_main.py yes,no,stop 1-10 results/enrol{10,20,50}_yes_no_stop_test.npz --n_enrol {10,20,50} --mlp none
+    run_main.py yes,no,stop 1-10 results/enrol20mlp_yes_no_stop_test.npz --n_enrol 20 --aug 8
+    python3 -I code/control_untrained.py > results/control_untrained.txt
+  defaults inside run_main.py: H=16, lr=0.01, E_plain=300, E_aug=5, E_augneg=20, aug=30 copies/example, uai32 seed = draw seed, numpy rng = seed+7 (aug), seed+999 (label shuffle)
+  split per seed (fewshot.split): 5 enrolment per command; dev/test positives 100 per command each; dev/test negatives 200 per other word each (1000+1000); all from speakers absent from enrolment
+  analysis: python3 -I code/analyze.py results/full_X_test.npz --dev results/full_X_dev.npz ; python3 -I code/summarize.py ; python3 -I code/analyze_negsets.py
+  C front end: code/frontend.c (built in work/ with the uai32 Makefile flags; see summary.txt bytes table)

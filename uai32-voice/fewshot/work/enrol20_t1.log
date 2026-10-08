@@ -1,0 +1,11 @@
+seed 1 done in 10s
+seed 2 done in 10s
+seed 3 done in 9s
+seed 4 done in 10s
+seed 5 done in 11s
+seed 6 done in 10s
+seed 7 done in 10s
+seed 8 done in 10s
+seed 9 done in 10s
+seed 10 done in 11s
+saved /tmp/claude-0/-home-user-aichat/809e473e-6ead-51f0-b725-4e01dff2b821/scratchpad/voice-fewshot-accuracy/results/enrol20_yes_no_stop_test.npz total 100s {"A_proto": 1728, "A_1nn": 34560, "B_dtw_float32": 234240, "B_dtw_uint8": 58560}

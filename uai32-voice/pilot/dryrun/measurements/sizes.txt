@@ -1,0 +1,33 @@
+# measure.sh 2026-10-08T07:53:46Z, x86_64, cc (Ubuntu 13.3.0-6ubuntu2~24.04.1) 13.3.0, mode pilot
+# wc -c of every file that counts
+ 7416 dtwapp
+ 9152 dtwapp.elf
+11500 netapp
+13304 netapp.elf
+14663 stateA.dtw
+19548 stateB.dtw
+ 5936 modelA.bin
+ 5970 modelB.bin
+ 9188 ../../uai32/uai32
+96677 total
+# formulas
+dtw state = 8 + 977 * N: N = 20 -> 19548 (real file: 19548)
+model = 8 + 8*NI + 2*(NH*(NI+1) + NO*(NH+1)): NI=144 NH=16 NO=4 -> 5936 (real file, model A: 3 commands + unknown, NO=4: 5936); NO=5 -> 5970 (real file, model B: 4 commands + unknown, NO=5, declared capacity: 5970)
+# totals against 32768
+dtwapp + state(20) = 7416 + 19548 = 26964; spare 5804
+netapp + model(model A: 3 commands + unknown, NO=4) = 11500 + 5936 = 17436; spare 15332
+netapp + model(model B: 4 commands + unknown, NO=5, declared capacity) = 11500 + 5970 = 17470; spare 15298
+retained for retraining the network (host side, disclosed, not in the model): enrolment rows 24592 bytes as feat text, 11520 as float32
+# sections (readelf -S on the .elf twins)
+dtwapp: .init=0x00001b .text=0x000ccb .fini=0x00000d .rodata=0x0003c8 .eh_frame=0x000044 .init_array=0x000008 .fini_array=0x000008 .dynamic=0x0001c0 .got=0x0000c0 .got.plt=0x000018 .bss=0x000070 .comment=0x00002d .shstrtab=0x0000d5 
+netapp: .init=0x00001b .text=0x001b2b .fini=0x00000d .rodata=0x000510 .eh_frame=0x000044 .init_array=0x000008 .fini_array=0x000008 .dynamic=0x0001c0 .got=0x0000c8 .got.plt=0x000018 .data=0x000004 .bss=0x0000d8 .comment=0x00002d .shstrtab=0x0000db 
+# libc/libm imports (nm -D --undefined-only)
+dtwapp: __errno_location __gmon_start__ __libc_start_main calloc cosf exit expf fclose fflush fopen fprintf fread fseek ftell fwrite getc logf memmove printf putc rewind sincosf strcmp strtoul 
+netapp: __errno_location __gmon_start__ __libc_start_main calloc cosf exit expf fclose fopen fprintf fseek ftell getc getline logf memmove printf putc puts realloc sincosf strcmp strtod strtof strtoul 
+# sha256
+c3cc4fc9a55f259183072a09392c73b35efc36942d9e6978daacbf0317f1674d  dtwapp
+4e575f757b6f5683b24b7cef3db0bfdf2eabfeda64a2cc356b3e513cddaf50b5  netapp
+5c93f6a95f63b1f34c73c624d45fc925e44553dedacb9b3ca7cac40f065595ad  stateA.dtw
+359660e865ae02d59443e4c49f3ee5608a4ca67057d834f75fd06ec364717570  stateB.dtw
+4d83f381eb2c58d5459be1219e2899773a367ae7eb8ae0252e129e073750c941  modelA.bin
+329fd6bc8214c3aa296b544f945afc69eb7ba13edea5171fd40b63ec3442fb4a  modelB.bin

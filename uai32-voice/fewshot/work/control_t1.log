@@ -1,0 +1,11 @@
+seed 1 done in 8s
+seed 2 done in 7s
+seed 3 done in 7s
+seed 4 done in 7s
+seed 5 done in 9s
+seed 6 done in 7s
+seed 7 done in 9s
+seed 8 done in 7s
+seed 9 done in 8s
+seed 10 done in 7s
+saved /tmp/claude-0/-home-user-aichat/809e473e-6ead-51f0-b725-4e01dff2b821/scratchpad/voice-fewshot-accuracy/results/control_shuffled_yes_no_stop.npz total 77s {"A_proto": 1728, "A_1nn": 8640, "B_dtw_float32": 58560, "B_dtw_uint8": 14640, "C0_mlp_plain": 5902, "C1_mlp_aug": 5902, "C2_mlp_neg": 5936, "C3_mlp_aug_neg": 5936}

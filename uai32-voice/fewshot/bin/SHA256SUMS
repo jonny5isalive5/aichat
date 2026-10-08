@@ -1,0 +1,15 @@
+996d73cba9676e8932206b9c80493becde6d04b6a57b70839999b0824c0186cb  uai32
+0c61abbb8090d538535e1c3283ff6fa98c59cfe1305e2419f49fb5589845938e  libdtw.so
+512026204952127750b2e4a447c5e7d3d93108c5cdd6c72fc185d1912bb419a7  frontend
+# bin/uai32: 9,188 bytes.  Byte-identical (same SHA-256) to the frozen release /home/user/aichat/uai32/dist/uai32
+#   (listed in ../../uai32/dist/SHA256SUMS) and to the build-tree copy /home/user/aichat/uai32/uai32 that
+#   results/HOW_TO_RERUN.txt copied.  Not built here; never modified.
+# bin/libdtw.so: 15,648 bytes.  Built from code/dtw.c with exactly
+#   gcc -O2 -shared -fPIC -o bin/libdtw.so code/dtw.c -lm
+#   (gcc 13.3.0, binutils 2.42, glibc 2.39, x86-64).  Re-running this command on 2026-10-08 reproduced the hash.
+#   It is the ctypes helper loaded by code/dtw_c.py; it is not a size-measured artefact (the 546-byte DTW .text figure
+#   comes from compiling dtw.c with the uai32 Makefile CFLAGS, see code/build_bins.sh).
+# bin/frontend: 4,680 bytes.  The standalone front-end ELF quoted in results/summary.txt, rebuilt on 2026-10-08 from
+#   code/frontend.c with the uai32 Makefile CFLAGS/LDFLAGS minus -std=c99 (see code/build_bins.sh and FAILURES.md);
+#   byte-identical to the scratch-space work/frontend that the investigation measured.
+# Verify:  (cd bin && sha256sum -c SHA256SUMS)     Rebuild and verify:  sh code/build_bins.sh

@@ -1,0 +1,50 @@
+== -n code cost: merged builds from vfe_nonorm.c
+uai32_biquad_nonorm.c: In function 'pool':
+uai32_biquad_nonorm.c:168:22: warning: unused parameter 'norm' [-Wunused-parameter]
+  168 | static void pool(int norm) {           /* log, pool NF frames into NT segments, optional per-band mean removal */
+      |                  ~~~~^~~~
+uai32_biquad_nonorm.c: In function 'pool':
+uai32_biquad_nonorm.c:168:22: warning: unused parameter 'norm' [-Wunused-parameter]
+  168 | static void pool(int norm) {           /* log, pool NF frames into NT segments, optional per-band mean removal */
+      |                  ~~~~^~~~
+uai32_biquad_nonorm     10764 bytes   (.elf with section headers: 12568)
+uai32_fft_nonorm.c: In function 'pool':
+uai32_fft_nonorm.c:168:22: warning: unused parameter 'norm' [-Wunused-parameter]
+  168 | static void pool(int norm) {           /* log, pool NF frames into NT segments, optional per-band mean removal */
+      |                  ~~~~^~~~
+uai32_fft_nonorm.c: In function 'pool':
+uai32_fft_nonorm.c:168:22: warning: unused parameter 'norm' [-Wunused-parameter]
+  168 | static void pool(int norm) {           /* log, pool NF frames into NT segments, optional per-band mean removal */
+      |                  ~~~~^~~~
+uai32_fft_nonorm        11268 bytes   (.elf with section headers: 13072)
+uai32_biquad            10892 bytes   (.elf with section headers: 12696)
+uai32_fft               11412 bytes   (.elf with section headers: 13216)
+-n cost: biquad 128  fft 144 bytes
+== NB=8 x NT=12
+uai32_fft_8x12          11412 bytes   (.elf with section headers: 13216)
+uai32_biquad_8x12       10892 bytes   (.elf with section headers: 12696)
+== static arrays (vfe_static.c): NB=16 NT=12 (default) and NB=12 NT=10
+uai32_biquad_static     10796 bytes   (.elf with section headers: 12600)
+uai32_fft_static        11220 bytes   (.elf with section headers: 13024)
+uai32_biquad_static_12x10  12964 bytes   (.elf with section headers: 14768)
+uai32_fft_static_12x10  12972 bytes   (.elf with section headers: 14776)
+uai32_biquad_static        RE off=0x000000 filesz=0x002784 memsz=0x002784  RW0x1000 off=0x002788 filesz=0x0002a4 memsz=0x00a2d8  
+uai32_biquad_static_12x10  RE off=0x000000 filesz=0x002774 memsz=0x002774  RW0x1000 off=0x003000 filesz=0x0002a4 memsz=0x0099e0  
+uai32_fft_static           RE off=0x000000 filesz=0x002924 memsz=0x002924  RW0x1000 off=0x002928 filesz=0x0002ac memsz=0x00b2d8  
+uai32_fft_static_12x10     RE off=0x000000 filesz=0x002924 memsz=0x002924  RW0x1000 off=0x003000 filesz=0x0002ac memsz=0x00a9e0  
+uai32_biquad_static.elf.interp=28 .note.gnu.property=32 .note.ABI-tag=32 .gnu.hash=40 .dynsym=624 .dynstr=241 .gnu.version=52 .gnu.version_r=96 .rela.dyn=600 .init=27 .text=6497 .fini=13 .rodata=1168 .eh_frame=68 .init_array=8 .fini_array=8 .dynamic=448 .got=184 .got.plt=24 .data=4 .bss=40992 .comment=45 .shstrtab=219 
+uai32_biquad_static_12x10.elf.interp=28 .note.gnu.property=32 .note.ABI-tag=32 .gnu.hash=40 .dynsym=624 .dynstr=241 .gnu.version=52 .gnu.version_r=96 .rela.dyn=600 .init=27 .text=6481 .fini=13 .rodata=1168 .eh_frame=68 .init_array=8 .fini_array=8 .dynamic=448 .got=184 .got.plt=24 .data=4 .bss=38688 .comment=45 .shstrtab=219 
+uai32_fft_static.elf.interp=28 .note.gnu.property=32 .note.ABI-tag=32 .gnu.hash=40 .dynsym=648 .dynstr=249 .gnu.version=54 .gnu.version_r=96 .rela.dyn=624 .init=27 .text=6849 .fini=13 .rodata=1168 .eh_frame=68 .init_array=8 .fini_array=8 .dynamic=448 .got=192 .got.plt=24 .data=4 .bss=45088 .comment=45 .shstrtab=219 
+uai32_fft_static_12x10.elf.interp=28 .note.gnu.property=32 .note.ABI-tag=32 .gnu.hash=40 .dynsym=648 .dynstr=249 .gnu.version=54 .gnu.version_r=96 .rela.dyn=624 .init=27 .text=6849 .fini=13 .rodata=1168 .eh_frame=68 .init_array=8 .fini_array=8 .dynamic=448 .got=192 .got.plt=24 .data=4 .bss=42784 .comment=45 .shstrtab=219 
+padding: biquad_static_12x10 - biquad_static = 2168 bytes;  fft_static_12x10 - fft_static = 1752 bytes
+== calloc layout at the same NB/NT for comparison (no padding expected)
+uai32_biquad               RE off=0x000000 filesz=0x0027e4 memsz=0x0027e4  RW0x1000 off=0x0027e8 filesz=0x0002a4 memsz=0x000380  
+uai32_fft                  RE off=0x000000 filesz=0x0029e4 memsz=0x0029e4  RW0x1000 off=0x0029e8 filesz=0x0002ac memsz=0x0003a8  
+uai32_biquad_12x10         RE off=0x000000 filesz=0x0027e4 memsz=0x0027e4  RW0x1000 off=0x0027e8 filesz=0x0002a4 memsz=0x000380  
+uai32_fft_12x10            RE off=0x000000 filesz=0x0029e4 memsz=0x0029e4  RW0x1000 off=0x0029e8 filesz=0x0002ac memsz=0x0003a8  
+== standalone vfe_biquad: RX ends at 0xec4, RW placed at 0x1000 (316 bytes of padding); vfe_fft: none
+vfe_biquad                 RE off=0x000000 filesz=0x000ec4 memsz=0x000ec4  RW0x1000 off=0x001000 filesz=0x000250 memsz=0x0002b0  
+vfe_fft                    RE off=0x000000 filesz=0x0010c4 memsz=0x0010c4  RW0x1000 off=0x0010c8 filesz=0x000258 memsz=0x0002d0  
+== bench build warning that measure_all.sh silences
+/home/user/aichat/uai32-voice/frontend/vfe.c:179:12: warning: 'feat_main' defined but not used [-Wunused-function]
+vfe_fft_bench            4800 bytes   (.elf with section headers: 6536)

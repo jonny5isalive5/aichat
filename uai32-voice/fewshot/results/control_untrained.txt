@@ -1,0 +1,1 @@
+UNTRAINED CONTROL (0 epochs, seeds 1-10, yes/no/stop): closed-set acc 0.364±0.057  recall@per-draw-1%FA 0.004±0.003  test FA 0.0101  model bytes 5902  (new model: 144 inputs, 16 hidden, 3 classes, 2659 parameters)
