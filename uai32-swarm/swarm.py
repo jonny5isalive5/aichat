@@ -149,17 +149,20 @@ def rng_split(X, y, rng, hold=100):
     idx = rng.permutation(len(y)); return (X[idx[hold:]], y[idx[hold:]]), (X[idx[:hold]], y[idx[:hold]])
 
 # ---------------------------------------------------------------- router, arbitration, composition -----------
-def route(lib, X, k=3):
+def route(lib, X, k=3, chunk=256):
     """Familiarity routing.  For every specialist: standardised distance of x to its training centroid, divided by
     its radius (<= 1 means x looks like its training data), and a diagonal-Gaussian score that also charges for the
     specialist's training spread.  Candidates are ranked by that score among the specialists whose region contains
     x.  Cost: N x NI multiply-adds per row; no model file is touched."""
-    ids, C, S, R, A = lib.matrix()
-    z2 = np.mean(((X[:, None, :] - C[None]) / S[None]) ** 2, axis=2)                     # rows x specialists
-    rel = np.sqrt(z2) / R[None]                                                           # <= 1: inside the familiar region
-    nll = 0.5 * z2 + np.mean(np.log(S), axis=1)[None]                                     # diagonal-Gaussian score: a broad
-    order = np.argsort(nll + 1e6 * (rel > 1.0), axis=1)[:, :k]                            # training spread is penalised, so
-    return ids, order, np.take_along_axis(rel, order, axis=1)                             # "noisy" experts do not win by default
+    ids, C, S, R, A = lib.matrix(); logS = np.mean(np.log(S), axis=1)[None]
+    orders, rels = [], []
+    for i in range(0, len(X), chunk):                                                     # chunked: memory is chunk x N x NI, not rows x N x NI
+        z2 = np.mean(((X[i:i + chunk, None, :] - C[None]) / S[None]) ** 2, axis=2)        # chunk x specialists
+        rel = np.sqrt(z2) / R[None]                                                       # <= 1: inside the familiar region
+        nll = 0.5 * z2 + logS                                                             # diagonal-Gaussian score: a broad training
+        order = np.argsort(nll + 1e6 * (rel > 1.0), axis=1)[:, :k]                        # spread is penalised, so "noisy" experts
+        orders.append(order); rels.append(np.take_along_axis(rel, order, axis=1))         # do not win by default
+    return ids, np.vstack(orders), np.vstack(rels)
 
 def decide(lib, X, k=1, margin=0.75, log=None):
     """Full decision for a batch: route, invoke the top-k candidates inside their radius (k=1: single specialist;

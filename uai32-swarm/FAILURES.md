@@ -43,3 +43,14 @@ Things that did not work, were wrong on the first attempt, or are weaker than ho
    units (580 KB); training it with per-sample SGD on 400,000 rows was not feasible in the time available, so
    the comparison uses a 2,048-unit monolith (about 62 KB, roughly the storage of 107 specialists). The cap is
    reported in the table.
+10. **The router did not scale in memory (found at N = 1,000, Stage 6).** The vectorised familiarity computation
+    formed a rows × specialists × features tensor for the whole 50,000-row evaluation set: 50,000 × 1,000 × 10
+    doubles, several times over, and the orchestrator's peak RSS reached 7,896,960 KB (7.9 GB) while accuracy
+    was unaffected (84.3%, routing 98.7%). At N = 100 the same code needed 124 MB and at N = 10 42 MB, so the
+    flaw was invisible below 1,000. Fixed by routing in chunks of 256 rows (peak temporary memory
+    256 × N × 10 doubles). The unchunked run is preserved as `results/stage6_superseded_unchunked_router.json`
+    / `.log`; the reported Stage 6 numbers come from the rerun with the chunked router.
+11. **Orchestration overhead grows with N even after the fix.** Per-row Python work in `decide()` (building
+    provenance records, grouping rows per specialist) was 0.002 ms/row at N = 2 and 0.84 ms/row at N = 1,000
+    before the memory fix, more than ten times the specialist invocation itself (about 0.06 ms/row amortised in
+    batches). This is the coordination layer, not the specialists, and it is the first thing to rewrite in C.
