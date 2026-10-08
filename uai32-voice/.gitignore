@@ -1,0 +1,12 @@
+__pycache__/
+*.pyc
+/pilot/work/
+/pilot/clips/
+/pilot/data/
+/fewshot/data_raw/
+/fewshot/cache/
+/fewshot/work/*/
+/frontend/tests/*.raw
+/frontend/tests/*.wav
+/frontend/tests/*.txt
+/frontend/tests/*.model

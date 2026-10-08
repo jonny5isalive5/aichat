@@ -1,0 +1,223 @@
+==============================================================================
+A. FALSE-ACCEPT GATE: '<= 1% false accepts on 300 recordings'
+==============================================================================
+Observed k/300 -> two-sided 95% Clopper-Pearson, Wilson, and one-sided 95% upper bound
+  k=0: point  0.00%  CP95 [0.00%, 1.22%]  Wilson [0.00%, 1.26%]  one-sided upper95 0.99%
+  k=1: point  0.33%  CP95 [0.01%, 1.84%]  Wilson [0.06%, 1.86%]  one-sided upper95 1.57%
+  k=2: point  0.67%  CP95 [0.08%, 2.39%]  Wilson [0.18%, 2.40%]  one-sided upper95 2.08%
+  k=3: point  1.00%  CP95 [0.21%, 2.89%]  Wilson [0.34%, 2.90%]  one-sided upper95 2.56%
+  k=4: point  1.33%  CP95 [0.36%, 3.38%]  Wilson [0.52%, 3.38%]  one-sided upper95 3.03%
+  k=5: point  1.67%  CP95 [0.54%, 3.85%]  Wilson [0.71%, 3.84%]  one-sided upper95 3.47%
+Pooled over 3 speakers, k/900:
+  k= 0: point  0.00%  CP95 [0.00%, 0.41%]  one-sided upper95 0.33%
+  k= 1: point  0.11%  CP95 [0.00%, 0.62%]  one-sided upper95 0.53%
+  k= 2: point  0.22%  CP95 [0.03%, 0.80%]  one-sided upper95 0.70%
+  k= 3: point  0.33%  CP95 [0.07%, 0.97%]  one-sided upper95 0.86%
+  k= 5: point  0.56%  CP95 [0.18%, 1.29%]  one-sided upper95 1.16%
+  k= 9: point  1.00%  CP95 [0.46%, 1.89%]  one-sided upper95 1.74%
+  k=12: point  1.33%  CP95 [0.69%, 2.32%]  one-sided upper95 2.15%
+  k=18: point  2.00%  CP95 [1.19%, 3.14%]  one-sided upper95 2.95%
+
+Smallest n such that the one-sided 95% upper bound <= target, given k observed:
+  target 1.00%: k=0: n>=299, k=1: n>=473, k=2: n>=628, k=3: n>=773
+  target 2.00%: k=0: n>=149, k=1: n>=236, k=2: n>=313, k=3: n>=386
+  target 0.50%: k=0: n>=598, k=1: n>=947, k=2: n>=1258, k=3: n>=1549
+  (rule of three check: ln(0.05)/ln(0.99) = 298.1)
+
+Operating characteristic of the rule 'pass if k <= 3 of 300' at true FA rate p:
+  true p= 0.20%: P(pass) = 0.997
+  true p= 0.50%: P(pass) = 0.935
+  true p= 1.00%: P(pass) = 0.647
+  true p= 1.50%: P(pass) = 0.340
+  true p= 2.00%: P(pass) = 0.149
+  true p= 3.00%: P(pass) = 0.020
+Operating characteristic of 'pass if k <= 0 of 300':
+  true p= 0.20%: P(pass) = 0.548
+  true p= 0.50%: P(pass) = 0.222
+  true p= 1.00%: P(pass) = 0.049
+  true p= 2.00%: P(pass) = 0.002
+Pooled rule 'pass if k <= 9 of 900' (point estimate <= 1.0%):
+  true p= 0.50%: P(pass) = 0.983
+  true p= 0.75%: P(pass) = 0.856
+  true p= 1.00%: P(pass) = 0.587
+  true p= 1.50%: P(pass) = 0.133
+  true p= 2.00%: P(pass) = 0.015
+Pooled rule 'pass if k <= 4 of 900' (one-sided upper bound ~1.0%):
+  true p= 0.20%: P(pass) = 0.964
+  true p= 0.30%: P(pass) = 0.863
+  true p= 0.50%: P(pass) = 0.532
+  true p= 1.00%: P(pass) = 0.054
+  true p= 2.00%: P(pass) = 0.000
+
+Sample size to REJECT H0: p >= 2% at alpha=0.05 while accepting c false accepts:
+  c=0: n >= 149   (power at true p=0.5%: 0.474; at 1%: 0.224)
+  c=1: n >= 236   (power at true p=0.5%: 0.670; at 1%: 0.316)
+  c=2: n >= 313   (power at true p=0.5%: 0.793; at 1%: 0.393)
+  c=3: n >= 386   (power at true p=0.5%: 0.870; at 1%: 0.460)
+  c=5: n >= 523   (power at true p=0.5%: 0.950; at 1%: 0.575)
+Sample size to REJECT H0: p >= 1% at alpha=0.05 (i.e. 'convincingly below 1%'):
+  c=0: n >= 299   (power at true p=0.25%: 0.473; at 0.5%: 0.223)
+  c=1: n >= 473   (power at true p=0.25%: 0.669; at 0.5%: 0.315)
+  c=2: n >= 628   (power at true p=0.25%: 0.791; at 0.5%: 0.392)
+  c=3: n >= 773   (power at true p=0.25%: 0.869; at 0.5%: 0.460)
+  c=5: n >= 1049   (power at true p=0.25%: 0.950; at 0.5%: 0.573)
+  c=10: n >= 1693   (power at true p=0.25%: 0.996; at 0.5%: 0.768)
+
+==============================================================================
+B. ACCURACY GATE: '>= 90% per command on 30 fresh recordings' (27/30)
+==============================================================================
+  30/30 = 100.00%  CP95 [88.43%, 100.00%]  Wilson [88.65%, 100.00%]  one-sided lower95 90.50%
+  29/30 =  96.67%  CP95 [82.78%, 99.92%]  Wilson [83.33%, 99.41%]  one-sided lower95 85.14%
+  28/30 =  93.33%  CP95 [77.93%, 99.18%]  Wilson [78.68%, 98.15%]  one-sided lower95 80.47%
+  27/30 =  90.00%  CP95 [73.47%, 97.89%]  Wilson [74.38%, 96.54%]  one-sided lower95 76.14%
+  26/30 =  86.67%  CP95 [69.28%, 96.24%]  Wilson [70.32%, 94.69%]  one-sided lower95 72.04%
+  25/30 =  83.33%  CP95 [65.28%, 94.36%]  Wilson [66.44%, 92.66%]  one-sided lower95 68.10%
+  24/30 =  80.00%  CP95 [61.43%, 92.29%]  Wilson [62.69%, 90.49%]  one-sided lower95 64.30%
+  21/30 =  70.00%  CP95 [50.60%, 85.27%]  Wilson [52.12%, 83.34%]  one-sided lower95 53.49%
+Pooled per speaker (3 commands x 30 = 90) and over speakers (9 cells x 30 = 270):
+  81/90 =  90.00%  CP95 [81.86%, 95.32%]  one-sided lower95 83.20%
+  85/90 =  94.44%  CP95 [87.51%, 98.17%]  one-sided lower95 88.67%
+  243/270 =  90.00%  CP95 [85.78%, 93.31%]  one-sided lower95 86.47%
+  250/270 =  92.59%  CP95 [88.79%, 95.42%]  one-sided lower95 89.42%
+  256/270 =  94.81%  CP95 [91.45%, 97.14%]  one-sided lower95 92.01%
+  260/270 =  96.30%  CP95 [93.29%, 98.21%]  one-sided lower95 93.80%
+  90/90 = 100.00%  CP95 [95.98%, 100.00%]  one-sided lower95 96.73%
+  270/270 = 100.00%  CP95 [98.64%, 100.00%]  one-sided lower95 98.90%
+Smallest n with zero errors whose one-sided 95% lower bound is >= 90%: 29
+Smallest n with 10% errors (k = 0.9 n) whose lower bound is >= 85%: 150 (135/150)
+
+Per-cell rule P(cell passes 27/30) and P(all 9 or 12 cells pass) at true per-utterance accuracy p:
+  p=85.00%: P(cell >=27/30) = 0.322   all 9 cells: 0.000   all 12 cells: 0.000
+  p=90.00%: P(cell >=27/30) = 0.647   all 9 cells: 0.020   all 12 cells: 0.005
+  p=93.00%: P(cell >=27/30) = 0.845   all 9 cells: 0.220   all 12 cells: 0.133
+  p=95.00%: P(cell >=27/30) = 0.939   all 9 cells: 0.569   all 12 cells: 0.471
+  p=97.00%: P(cell >=27/30) = 0.988   all 9 cells: 0.898   all 12 cells: 0.866
+  p=98.00%: P(cell >=27/30) = 0.997   all 9 cells: 0.974   all 12 cells: 0.966
+  p=99.00%: P(cell >=27/30) = 1.000   all 9 cells: 0.998   all 12 cells: 0.997
+Floor rule P(cell >= 24/30) and P(all cells) at true p:
+  p=85.00%: P(cell >=24/30) = 0.847   all 9: 0.225   all 12: 0.137
+  p=90.00%: P(cell >=24/30) = 0.974   all 9: 0.790   all 12: 0.731
+  p=93.00%: P(cell >=24/30) = 0.996   all 9: 0.965   all 12: 0.953
+  p=95.00%: P(cell >=24/30) = 0.999   all 9: 0.995   all 12: 0.993
+  p=97.00%: P(cell >=24/30) = 1.000   all 9: 1.000   all 12: 1.000
+Pooled rule P(>= 243/270) at true p:
+  p=85.00%: P(pooled >= 243/270) = 0.010
+  p=88.00%: P(pooled >= 243/270) = 0.180
+  p=90.00%: P(pooled >= 243/270) = 0.551
+  p=92.00%: P(pooled >= 243/270) = 0.904
+  p=93.00%: P(pooled >= 243/270) = 0.975
+  p=95.00%: P(pooled >= 243/270) = 1.000
+
+Monte Carlo: combined rule (pooled >= 243/270 AND every cell >= 24/30), iid utterances:
+  p=88.00%: P(pass) = 0.162
+  p=90.00%: P(pass) = 0.502
+  p=92.00%: P(pass) = 0.860
+  p=93.00%: P(pass) = 0.947
+  p=95.00%: P(pass) = 0.994
+  p=97.00%: P(pass) = 1.000
+
+Same rule but with session clustering (3 sessions x 10 per cell; per-session accuracy drawn
+from Beta with mean p and sd 0.05 to mimic day-to-day drift):
+  p=90.00%: P(pass) = 0.467
+  p=93.00%: P(pass) = 0.868
+  p=95.00%: P(pass) = 0.949
+  p=97.00%: P(pass) = 0.974
+
+==============================================================================
+C. CONTROLS
+==============================================================================
+Chance level for 3 classes on 270 test utterances (no rejection): 95% range of k/270 at p=1/3:
+  central 95%: [75/270 = 27.78%, 105/270 = 38.89%]; 99.9th percentile: 114/270 = 42.22%
+Chance level with 4 classes on 360 utterances (p=1/4): 99.9th percentile 116/360 = 32.22%
+
+Example-level shuffled-label control, exact enumeration: 3 words x 5 enrolment examples,
+labels permuted uniformly at random; assume a PERFECT word recogniser that predicts the
+majority shuffled label of each word (ties -> uniformly random among tied labels).
+Expected test accuracy under the permuted labels (what a 'good' learner can still score):
+  3 words x 5: expected accuracy = 33.33%  (chance 33.3%)
+  4 words x 5: expected accuracy = 25.00%  (chance 25.0%)
+  -> the MEAN over permutations is chance, but a single permuted run is NOT expected to sit at chance; use >= 20 permutations and a
+     permutation p-value, or report the max over permutations.
+  3x5 ideal-recogniser accuracy under permutation: median 33.33%, 95th pct 83.33%, max 100.00%, P(acc >= 2/3) = 0.168
+
+==============================================================================
+D. DTW vs NN paired comparison on the same 270 (or 360) utterances
+==============================================================================
+McNemar exact test: discordant pairs b (NN right, DTW wrong) vs c (NN wrong, DTW right).
+Two-sided p = 2*min tail of Bin(b+c, 1/2). Smallest (b, c=0) that reaches p < 0.05: 6 discordant all one way (p = 0.0313)
+If both systems are ~93% and discordance is 8% of 270 (~22 pairs), detectable split (one-sided p<0.05): 16 vs 6  -> a difference of ~3.70% in accuracy
+
+==============================================================================
+E. RECORDING TIME BUDGET PER SPEAKER (prompted, 2.5 s clip + 2.5 s gap = 5 s per item)
+==============================================================================
+    20  enrolment (4 commands x 5)
+    12  developer/pipeline sanity clips, session 1 only (4 x 3)
+   120  fresh test utterances (4 commands x 30)
+   120  own-voice negatives: confusable words (3 x 4 commands x 10)
+    60  own-voice negatives: unrelated words/short phrases
+    20  own-voice negatives: non-speech (cough, laugh, hum, silence w/ room noise)
+   352  total prompted items -> 29 min of prompting, spread over 4 sessions on 4 days
+  plus ~5 min setup/consent per session: ~49 min per speaker, ~3.3 h for 4 recruited speakers (1 spare)
+  public negatives (GSC v0.02 + background noise crops): 0 recording minutes, selected by seeded script
+
+==============================================================================
+F. EXTRA: rules actually recommended in the protocol
+==============================================================================
+Exact distribution of ideal-recogniser accuracy under example-level label permutation (3 words x 5):
+  acc = 0.000: P = 0.3333
+  acc = 0.333: P = 0.4138
+  acc = 0.667: P = 0.1724
+  acc = 1.000: P = 0.0804
+  P(acc >= 2/3) = 0.2529; P(acc = 1) = 0.0804
+  With R=20 permutations: P(at least one permuted run scores 100%) = 0.813
+  P(at most 1 of 20 permuted runs >= 90%) = 0.514  (so 'trained beats >=19 of 20' is NOT a safe rule at n=15)
+  4 words x 5: P(acc >= 1/2) = 0.2671; P(acc = 1) = 0.0124; P(acc >= 3/4) = 0.0662
+
+Recommended negative-set gate: 600 per speaker, 1,800 pooled; pass if pooled k <= 18 (1.0%)
+  18/1800: point  1.00%  CP95 [0.59%, 1.58%]  one-sided upper95 1.48%
+   9/1800: point  0.50%  CP95 [0.23%, 0.95%]  one-sided upper95 0.87%
+   4/1800: point  0.22%  CP95 [0.06%, 0.57%]  one-sided upper95 0.51%
+   0/1800: point  0.00%  CP95 [0.00%, 0.20%]  one-sided upper95 0.17%
+  12/600: point  2.00%  CP95 [1.04%, 3.47%]  one-sided upper95 3.22%
+   6/600: point  1.00%  CP95 [0.37%, 2.16%]  one-sided upper95 1.96%
+   3/600: point  0.50%  CP95 [0.10%, 1.45%]  one-sided upper95 1.29%
+   0/600: point  0.00%  CP95 [0.00%, 0.61%]  one-sided upper95 0.50%
+   6/200: point  3.00%  CP95 [1.11%, 6.42%]  one-sided upper95 5.83%
+   4/200: point  2.00%  CP95 [0.55%, 5.04%]  one-sided upper95 4.52%
+   2/200: point  1.00%  CP95 [0.12%, 3.57%]  one-sided upper95 3.11%
+   0/200: point  0.00%  CP95 [0.00%, 1.83%]  one-sided upper95 1.49%
+   3/120: point  2.50%  CP95 [0.52%, 7.13%]  one-sided upper95 6.33%
+   6/120: point  5.00%  CP95 [1.86%, 10.57%]  one-sided upper95 9.63%
+   0/120: point  0.00%  CP95 [0.00%, 3.03%]  one-sided upper95 2.47%
+Operating characteristic of 'pooled k <= 18 of 1800':
+  true p= 0.30%: P(pass) = 1.000
+  true p= 0.50%: P(pass) = 0.998
+  true p= 0.75%: P(pass) = 0.909
+  true p= 1.00%: P(pass) = 0.562
+  true p= 1.50%: P(pass) = 0.043
+  true p= 2.00%: P(pass) = 0.001
+Operating characteristic of per-speaker floor 'k <= 12 of 600' (all three speakers must satisfy it):
+  true p= 0.50%: P(one speaker ok) = 1.000; all three = 1.000
+  true p= 1.00%: P(one speaker ok) = 0.992; all three = 0.975
+  true p= 1.50%: P(one speaker ok) = 0.877; all three = 0.676
+  true p= 2.00%: P(one speaker ok) = 0.576; all three = 0.191
+  true p= 3.00%: P(one speaker ok) = 0.088; all three = 0.001
+
+n for 80% power to show p < 1% (alpha 0.05, one-sided) when the true rate is 0.5% / 0.25%:
+  true p=0.50%: n = 1950, pass if k <= 12
+  true p=0.25%: n = 780, pass if k <= 3
+
+12-cell retest after the 4th command (360 utterances): pooled >= 324/360 AND every cell >= 24/30
+  p=90.00%: P(pass) = 0.471
+  p=92.00%: P(pass) = 0.861
+  p=93.00%: P(pass) = 0.946
+  p=95.00%: P(pass) = 0.993
+  p=97.00%: P(pass) = 1.000
+  324/360 = 90.0%: CP95 [86.43%, 92.90%], one-sided lower95 87.01%
+  4th command alone, 81/90 = 90.0%: CP95 [81.86%, 95.32%]
+
+Forgetting check: original 9 cells before vs after adding command 4 (paired, same 270 clips):
+  McNemar; a drop is 'material' if >= 6 more errors than fixes among discordant clips (p<0.05 one-way), i.e. ~2.2 points of accuracy.
+
+Dev-set size for choosing the threshold (developer + 1 dev speaker): 2 x (10/command x 3 + 200 own-voice negatives + 400 public)
+  = 60 positives, 1,200 negatives: at a dev FA of 1% the expected count is 12 (CP95 [0.52%, 1.74%]) - adequate to place a threshold to within ~+-0.5 points.
